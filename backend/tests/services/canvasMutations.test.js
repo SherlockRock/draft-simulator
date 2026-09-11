@@ -363,17 +363,18 @@ describe("applyDraftPicks — persistence and broadcast", () => {
     mockPermissions({ "c-1": "edit", "c-2": "view" });
     const { gate, to, emit } = buildGate();
     const picks = picksWith({ 10: "Ahri" });
+    Draft.update.mockResolvedValue([1, [{ picksVersion: 5 }]]);
 
     await gate.applyDraftPicks({ actor: ACTOR, draftId: "d-1", picks });
 
     expect(Draft.update).toHaveBeenCalledWith(
-      { picks },
-      { where: { id: "d-1" } },
+      { picks, picksVersion: sequelize.literal('"picksVersion" + 1'), lastPickMutationId: null },
+      { where: { id: "d-1" }, returning: true },
     );
     expect(to).toHaveBeenCalledWith("d-1");
     expect(to).toHaveBeenCalledWith("c-1");
     expect(to).toHaveBeenCalledWith("c-2");
-    expect(emit).toHaveBeenCalledWith("draftUpdate", { id: "d-1", picks }, "d-1");
+    expect(emit).toHaveBeenCalledWith("draftUpdate", { id: "d-1", picks, picksVersion: 5 }, "d-1");
   });
 });
 

@@ -64,6 +64,16 @@ const Draft = sequelize.define("Draft", {
       "",
     ],
   },
+  picksVersion: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
+  lastPickMutationId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    defaultValue: null,
+  },
   versus_draft_id: {
     type: DataTypes.UUID,
     allowNull: true,

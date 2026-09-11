@@ -30,7 +30,7 @@ const DraftDetailView: Component = () => {
                 ...prev,
                 drafts: prev.drafts.map((cd: CanvasDraft) =>
                     cd.Draft.id === draftId
-                        ? { ...cd, Draft: { ...cd.Draft, picks } }
+                        ? { ...cd, Draft: { ...cd.Draft, picks, picksVersion: d.picksVersion } }
                         : cd
                 )
             };

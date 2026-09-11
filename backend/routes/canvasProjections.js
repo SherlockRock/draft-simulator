@@ -35,6 +35,7 @@ const CANVAS_DRAFT_ATTRIBUTES = [
 ];
 
 const DRAFT_ATTRIBUTES = [
+  "picksVersion",
   "name",
   "id",
   "picks",

@@ -5,7 +5,8 @@ import {
     createEffect,
     onCleanup,
     JSX,
-    createMemo
+    createMemo,
+    Show
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { useNavigate, useParams } from "@solidjs/router";
@@ -30,8 +31,12 @@ import {
 } from "../utils/presence";
 import { RemoteViewport, createRemoteViewportTracker } from "../utils/remoteViewports";
 import { createAnnotationLockTracker } from "../utils/annotationLocks";
+import { CanvasDraftUpdateSchema, DraftPickAckSchema } from "@draft-sim/shared-types";
+import { createDraftPickSync, type DraftPickSync } from "../utils/draftPickSync";
 
 export type CanvasSocketContextValue = SocketContextValue & {
+    pickSync: DraftPickSync;
+    pickSyncVersion: () => number;
     presenceUsers: () => PresenceUser[];
     // Last-known viewport of another present user, undefined when they have
     // no live canvas viewport (never broadcast, in a draft view, or cleared).
@@ -60,6 +65,35 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         createSignal<ConnectionStatus>("connecting");
     const [reconnectAttempts, setReconnectAttempts] = createSignal(0);
     const [justReconnected, setJustReconnected] = createSignal(false);
+    const [pickSyncVersion, setPickSyncVersion] = createSignal(0);
+    const pickSync = createDraftPickSync({
+        changed: () => setPickSyncVersion((version) => version + 1),
+        send: (request, reply) => {
+            const sock = socket();
+            if (!sock?.connected) {
+                reply();
+                return;
+            }
+            sock.timeout(5000).emit(
+                "updateDraftPicks",
+                request,
+                (error: Error | null, raw: unknown) => {
+                    const result = DraftPickAckSchema.safeParse(raw);
+                    reply(!error && result.success ? result.data : undefined);
+                }
+            );
+        }
+    });
+    const pendingPicks = createMemo(() => {
+        pickSyncVersion();
+        return pickSync.pendingCount();
+    });
+    const pickSaveError = createMemo(() => {
+        pickSyncVersion();
+        return pickSync.error();
+    });
+    let socketOwnerId: string | undefined;
+    onCleanup(() => pickSync.reset());
 
     const clearReconnected = () => setJustReconnected(false);
 
@@ -81,6 +115,10 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     // Anonymous users use local canvases which don't need real-time sync
     createEffect(() => {
         const currentUser = user();
+        if (socketOwnerId !== currentUser?.id) {
+            pickSync.reset();
+            socketOwnerId = currentUser?.id;
+        }
         if (!currentUser) {
             // No socket for anonymous users - they use local mode
             setSocket(undefined);
@@ -93,30 +131,47 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         // Track if we've had a successful connection before
         // so we can distinguish reconnects from initial connect
         let hasConnectedBefore = false;
+        // Set by reconnect_attempt: a first connection that only succeeded
+        // after retries also needs a resync, because broadcasts sent between
+        // the REST load and this late room join were never received.
+        let connectRetried = false;
 
         newSocket.on("connect", () => {
             setConnectionStatus("connected");
             setReconnectAttempts(0);
-            // Set justReconnected if this is a reconnect (not initial connection)
-            if (hasConnectedBefore) {
+            pickSync.setConnected(true);
+            if (hasConnectedBefore || connectRetried) {
                 setJustReconnected(true);
             }
             hasConnectedBefore = true;
+            connectRetried = false;
         });
 
         newSocket.on("disconnect", () => {
+            pickSync.setConnected(false);
             setConnectionStatus("disconnected");
         });
 
-        newSocket.io.on("reconnect", () => {
-            // This fires for auto-reconnects by the Manager
-            // The connect handler above also handles manual reconnects
-            setConnectionStatus("connected");
-            setReconnectAttempts(0);
-            setJustReconnected(true);
+        // The namespace refused us (auth rejected) after the transport came
+        // up. The Manager will not retry on its own here, so the status must
+        // leave "connecting" or the banner and the pick pill stay stuck.
+        newSocket.on("connect_error", () => {
+            if (!newSocket.active) setConnectionStatus("error");
         });
 
+        // Only namespace connect marks us connected and requests a resync.
+        // Manager reconnect fires earlier, before authentication, and caused
+        // a second canvas fetch that could overwrite an in-flight pick.
+
+        const onDraftUpdate = (raw: unknown) => {
+            const data = CanvasDraftUpdateSchema.safeParse(raw);
+            if (data.success && data.data.picksVersion !== undefined)
+                pickSync.receive(data.data);
+        };
+        newSocket.on("draftUpdate", onDraftUpdate);
+
         newSocket.io.on("reconnect_attempt", (attemptNumber) => {
+            connectRetried = true;
             setConnectionStatus("connecting");
             setReconnectAttempts(attemptNumber);
         });
@@ -128,10 +183,12 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
         setSocket(newSocket);
 
         onCleanup(() => {
+            pickSync.setConnected(false);
             newSocket.disconnect();
             newSocket.off("connect");
             newSocket.off("disconnect");
-            newSocket.io.off("reconnect");
+            newSocket.off("connect_error");
+            newSocket.off("draftUpdate", onDraftUpdate);
             newSocket.io.off("reconnect_attempt");
             newSocket.io.off("reconnect_failed");
         });
@@ -276,6 +333,8 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     });
 
     const contextValue: CanvasSocketContextValue = {
+        pickSync,
+        pickSyncVersion,
         socket,
         connectionStatus,
         connectionInfo,
@@ -294,6 +353,37 @@ export function CanvasSocketProvider(props: { children: JSX.Element }) {
     return (
         <CanvasSocketContext.Provider value={contextValue}>
             <div class="flex flex-1 flex-col overflow-hidden">
+                <Show when={pendingPicks() > 0}>
+                    <div
+                        class="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded border border-purple-500/30 bg-slate-800 px-3 py-2 text-sm text-slate-200 shadow-lg"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <span>
+                            {pickSaveError() ??
+                                (connectionStatus() === "connected"
+                                    ? "Saving pick changes…"
+                                    : "Pick changes will save when reconnected.")}
+                        </span>
+                        <Show when={pickSaveError()}>
+                            <button
+                                type="button"
+                                class="rounded px-2 py-1 text-purple-400 hover:bg-slate-700 disabled:opacity-50"
+                                disabled={connectionStatus() !== "connected"}
+                                onClick={() => pickSync.retry()}
+                            >
+                                Retry save
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded px-2 py-1 hover:bg-slate-700"
+                                onClick={() => pickSync.discardFailed()}
+                            >
+                                Discard unsaved changes
+                            </button>
+                        </Show>
+                    </div>
+                </Show>
                 {!isLocalMode() && (
                     <ConnectionBanner
                         connectionStatus={connectionStatus}

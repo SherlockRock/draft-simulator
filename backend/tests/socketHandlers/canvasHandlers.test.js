@@ -24,6 +24,7 @@ function buildFakeSocket(overrides = {}) {
 
 function buildFakeGate() {
   return {
+    applyDraftPickMutation: vi.fn().mockResolvedValue(undefined),
     applyDraftPicks: vi.fn().mockResolvedValue(undefined),
     relayObjectMove: vi.fn().mockResolvedValue(undefined),
     relayAnnotationMove: vi.fn().mockResolvedValue(undefined),
@@ -55,7 +56,7 @@ afterEach(() => {
 });
 
 describe("setupCanvasHandlers", () => {
-  it("registers the twelve canvas mutation events", () => {
+  it("registers the canvas mutation events", () => {
     const { handlers } = installHandlers();
     expect([...handlers.keys()].sort()).toEqual([
       "annotationMove",
@@ -69,8 +70,37 @@ describe("setupCanvasHandlers", () => {
       "poolRemoveChampion",
       "poolReorderRole",
       "poolReplace",
+      "updateDraftPicks",
       "vertexMove",
     ]);
+  });
+
+  it("acknowledges a pick save only after the gate resolves", async () => {
+    const { handlers, gate } = installHandlers();
+    const draft = { id: "d-1", picks: Array(20).fill(""), picksVersion: 1 };
+    let complete;
+    gate.applyDraftPickMutation.mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+    const acknowledge = vi.fn();
+    const promise = handlers.get("updateDraftPicks")({ id: "d-1", mutationId: "op" }, acknowledge);
+    expect(acknowledge).not.toHaveBeenCalled();
+    complete(draft);
+    await promise;
+    expect(acknowledge).toHaveBeenCalledWith({ ok: true, mutationId: "op", draft });
+    expect(gate.applyDraftPickMutation).toHaveBeenCalledWith({
+      id: "d-1", mutationId: "op", actor: { userId: "user-1", socketId: "sock-1" },
+    });
+  });
+
+  it("acknowledges a rejected or failed pick save instead of leaving it silently optimistic", async () => {
+    const { handlers, gate } = installHandlers();
+    const acknowledge = vi.fn();
+    gate.applyDraftPickMutation.mockRejectedValue(new DraftLockedError());
+    await handlers.get("updateDraftPicks")({ mutationId: "op" }, acknowledge);
+    expect(acknowledge).toHaveBeenCalledWith({ ok: false, mutationId: "op", code: "DRAFT_LOCKED", message: "Draft is locked" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    gate.applyDraftPickMutation.mockRejectedValue(new Error("database offline"));
+    await handlers.get("updateDraftPicks")({ mutationId: "op" }, acknowledge);
+    expect(acknowledge).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, code: "SAVE_FAILED" }));
   });
 
   it("newDraft calls applyDraftPicks with the socket actor and mapped payload", async () => {

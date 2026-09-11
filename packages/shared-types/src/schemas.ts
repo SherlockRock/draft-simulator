@@ -35,6 +35,7 @@ export const DraftSchema = z.object({
   name: z.string(),
   public: z.boolean(),
   picks: z.array(z.string()),
+  picksVersion: z.number().int().nonnegative().optional(),
   owner_id: z.string().nullable(),
   type: z.enum(["canvas", "versus"]),
   versus_draft_id: z.string().nullable().optional(),
@@ -55,6 +56,7 @@ export const CanvasDraftInnerSchema = z.object({
   name: z.string(),
   id: z.string(),
   picks: z.array(z.string()),
+  picksVersion: z.number().int().nonnegative().optional(),
   type: z.enum(["canvas", "versus"]),
   versus_draft_id: z.string().nullable().optional(),
   seriesIndex: z.number().nullable().optional(),
@@ -1090,7 +1092,40 @@ export const DraftUpdateSchema = z.object({
 export const CanvasDraftUpdateSchema = z.object({
   id: z.string(),
   picks: z.array(z.string()),
+  picksVersion: z.number().int().nonnegative().optional(),
 });
+
+// Revision-checked canvas edits. A retry keeps its mutationId and baseVersion;
+// it must never turn into an unconditional overwrite of a newer draft.
+export const DraftPickStateSchema = z.object({
+  id: z.string(),
+  picks: z.array(z.string()).length(20),
+  picksVersion: z.number().int().nonnegative(),
+});
+export const DraftPickChangeSchema = z.object({
+  index: z.number().int().min(0).max(19),
+  championId: z.string(),
+});
+export const DraftPickMutationSchema = z.object({
+  id: z.string().uuid(),
+  mutationId: z.string().uuid(),
+  baseVersion: z.number().int().nonnegative(),
+  changes: z.array(DraftPickChangeSchema).min(1).max(20).refine(
+    (changes) => new Set(changes.map((change) => change.index)).size === changes.length,
+    "A pick slot may only appear once",
+  ),
+});
+export const DraftPickAckSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), mutationId: z.string(), draft: DraftPickStateSchema }),
+  z.object({
+    ok: z.literal(false), mutationId: z.string(), code: z.string(), message: z.string(),
+    draft: DraftPickStateSchema.optional(),
+  }),
+]);
+export type DraftPickState = z.infer<typeof DraftPickStateSchema>;
+export type DraftPickChange = z.infer<typeof DraftPickChangeSchema>;
+export type DraftPickMutation = z.infer<typeof DraftPickMutationSchema>;
+export type DraftPickAck = z.infer<typeof DraftPickAckSchema>;
 
 export const DraftStartedSchema = z.object({
   draftId: z.string(),

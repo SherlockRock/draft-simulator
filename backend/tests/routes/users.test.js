@@ -151,6 +151,57 @@ describe("user import route canvas access", () => {
   });
 });
 
+describe("imported draft pick revisions", () => {
+  it.each(["account export", "canvas JSON"])(
+    "%s overwrite invalidates pending pick mutations",
+    async (format) => {
+      const transaction = makeTransaction();
+      vi.spyOn(sequelize, "transaction").mockResolvedValue(transaction);
+      vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "admin" });
+      vi.spyOn(Canvas, "findByPk").mockResolvedValue({
+        id: "destination-canvas",
+        changed: vi.fn(),
+        save: vi.fn(),
+      });
+      const update = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(CanvasDraft, "findOne").mockResolvedValue({
+        Draft: { id: "existing-draft", firstPick: "blue", blueSideTeam: 1, update },
+        update: vi.fn().mockResolvedValue(undefined),
+      });
+      const picks = Array(20).fill("");
+      picks[10] = "Orianna";
+      const imported = {
+        id: "export-draft",
+        name: "Imported Draft",
+        picks,
+        positionX: 0,
+        positionY: 0,
+      };
+      const res =
+        format === "account export"
+          ? await importCanvasWith({ drafts: [imported] })
+          : await request(buildApp())
+              .post("/api/users/me/import/canvas/destination-canvas")
+              .send({
+                data: { drafts: [imported], versusSeries: [] },
+                options: { dedupeStrategy: "overwrite" },
+              });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.summary.draftsUpdated).toBe(1);
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          picks,
+          picksVersion: sequelize.literal('"picksVersion" + 1'),
+          lastPickMutationId: null,
+        }),
+        { transaction },
+      );
+      expect(transaction.commit).toHaveBeenCalled();
+    },
+  );
+});
+
 describe("annotation deletion cleanup", () => {
   it("new_canvases overwrite clears annotations from an existing same-name canvas", async () => {
     const transaction = {

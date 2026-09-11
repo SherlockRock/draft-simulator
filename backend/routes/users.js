@@ -822,6 +822,8 @@ router.post("/me/import", protect, async (req, res) => {
         await existingCanvasDraft.Draft.update(
           {
             picks: importedDraft.picks,
+            picksVersion: sequelize.literal('"picksVersion" + 1'),
+            lastPickMutationId: null,
           },
           { transaction },
         );
@@ -1237,6 +1239,8 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
       await existingCanvasDraft.Draft.update(
         {
           picks: importedDraft.picks,
+          picksVersion: sequelize.literal('"picksVersion" + 1'),
+          lastPickMutationId: null,
           firstPick:
             importedDraft.firstPick || existingCanvasDraft.Draft.firstPick,
           blueSideTeam:

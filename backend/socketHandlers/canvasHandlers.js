@@ -12,6 +12,32 @@ function getSocketActor(socket) {
 // canvasMutationError event. All authorization, validation, persistence and
 // broadcasting lives in the gate — adapters deliberately get no `io`.
 function setupCanvasHandlers(socket, gate, wrapSocketHandler) {
+  wrapSocketHandler(socket, "updateDraftPicks", async (data, acknowledge) => {
+    // This protocol requires a callback: never save a mutation whose caller
+    // cannot receive its outcome. Legacy newDraft remains available below.
+    if (typeof acknowledge !== "function") return;
+    try {
+      const draft = await gate.applyDraftPickMutation({
+        ...data,
+        actor: getSocketActor(socket),
+      });
+      acknowledge({ ok: true, mutationId: data.mutationId, draft });
+    } catch (error) {
+      const expected = error instanceof CanvasMutationError;
+      if (!expected)
+        console.error("Unexpected error in updateDraftPicks handler:", error);
+      acknowledge({
+        ok: false,
+        mutationId: data?.mutationId ?? "",
+        code: expected ? error.code : "SAVE_FAILED",
+        message: expected
+          ? error.message
+          : "Could not save pick changes. Please retry.",
+        ...(error.draft ? { draft: error.draft } : {}),
+      });
+    }
+  });
+
   const handle = (event, run) => {
     wrapSocketHandler(socket, event, async (data) => {
       try {

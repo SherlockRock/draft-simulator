@@ -347,7 +347,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         justReconnected,
         clearReconnected,
         presenceUsers,
-        annotationLockOf
+        annotationLockOf,
+        pickSync,
+        pickSyncVersion
     } = useCanvasSocket();
     const canvasContext = useCanvasContext();
 
@@ -390,6 +392,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     };
 
     const [canvasDrafts, setCanvasDrafts] = createStore<CanvasDraft[]>([]);
+    createEffect(() => {
+        pickSyncVersion();
+        untrack(() => {
+            if (isLocalMode()) return;
+            setCanvasDrafts(
+                (cd) => cd.Draft.type === "canvas",
+                "Draft",
+                (draft) => pickSync.merge(draft)
+            );
+        });
+    });
     const [connections, setConnections] = createStore<Connection[]>([]);
     const [canvasGroups, setCanvasGroups] = createStore<CanvasGroup[]>([]);
     const [annotations, setAnnotations] = createStore<CanvasAnnotation[]>([]);
@@ -2912,17 +2925,25 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     createEffect(() => {
         const currentId = canvasId();
         const data = props.canvasData;
-        if (!data || props.isLoading || currentId === loadedCanvasId()) return;
+        if (!data || props.isLoading || props.isFetching || currentId === loadedCanvasId())
+            return;
 
         // Reset stores with new canvas data
-        setCanvasDrafts(data.drafts ?? []);
+        setCanvasDrafts(
+            (data.drafts ?? []).map((cd) => ({
+                ...cd,
+                Draft: cd.Draft.type === "canvas" && !isLocalMode()
+                    ? pickSync.merge(cd.Draft)
+                    : cd.Draft
+            }))
+        );
         setConnections(data.connections ?? []);
         setCanvasGroups(data.groups ?? []);
         setAnnotations(data.annotations ?? []);
         setCanvasPools(data.pools ?? []);
         // A fresh authoritative fetch supersedes anything still in flight. A
-        // never-committed optimistic op is legitimately dropped on
-        // reload/switch, matching how optimistic draft picks behave.
+        // never-committed pool op is dropped on reload/switch. Draft picks
+        // have their own acknowledged queue and are preserved above.
         pendingPoolOps.clear();
 
         // Reset viewport for the new canvas
@@ -2956,9 +2977,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         if (isLocalMode()) return;
         if (justReconnected()) {
             // Reset loadedCanvasId so the data-loading effect will re-apply the fresh data
-            setLoadedCanvasId(null);
-            canvasContext.refetchCanvas();
-            clearReconnected();
+            batch(() => {
+                canvasContext.refetchCanvas();
+                setLoadedCanvasId(null);
+                clearReconnected();
+            });
         }
     });
 
@@ -3077,7 +3100,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // Cards positionally used to bind the wrong Card to retained DOM
                 // whenever the server returned them in a different order — the
                 // payload has no ORDER BY, so any drag's UPDATE can reorder it.
-                setCanvasDrafts(reconcile(data.drafts, { key: "draft_id" }));
+                const drafts = data.drafts.map((cd) => ({
+                    ...cd,
+                    Draft: cd.Draft.type === "canvas" ? pickSync.merge(cd.Draft) : cd.Draft
+                }));
+                setCanvasDrafts(reconcile(drafts, { key: "draft_id" }));
                 setConnections(data.connections);
                 setCanvasGroups(reconcile(data.groups ?? [], { key: "id" }));
                 // Reconcile, never a wholesale replace — a wholesale replace
@@ -3114,7 +3141,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         description: data.canvas.description ?? prev.description,
                         icon: data.canvas.icon ?? prev.icon,
                         cardLayout: data.canvas.cardLayout ?? prev.cardLayout,
-                        drafts: data.drafts,
+                        drafts,
                         connections: data.connections,
                         groups: data.groups ?? prev.groups,
                         annotations: data.annotations ?? prev.annotations,
@@ -3153,17 +3180,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 };
             });
         });
-        socket.on("draftUpdate", (rawData: unknown) => {
+        const onDraftUpdate = (rawData: unknown) => {
             const data = validateSocketEvent(
                 "draftUpdate",
                 rawData,
                 CanvasDraftUpdateSchema
             );
             if (!data) return;
-            setCanvasDrafts((cd) => cd.Draft.id === data.id, "Draft", "picks", [
-                ...data.picks
-            ]);
-        });
+            setCanvasDrafts(
+                (cd) => cd.Draft.id === data.id,
+                "Draft",
+                (draft) => draft.type === "canvas"
+                    ? pickSync.merge({ ...draft, ...data })
+                    : { ...draft, ...data }
+            );
+        };
+        socket.on("draftUpdate", onDraftUpdate);
         socket.on("canvasObjectMoved", (rawData: unknown) => {
             const data = validateSocketEvent(
                 "canvasObjectMoved",
@@ -3485,7 +3517,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         onCleanup(() => {
             socket.off("canvasUpdate");
             socket.off("draftNameUpdated");
-            socket.off("draftUpdate");
+            socket.off("draftUpdate", onDraftUpdate);
             socket.off("canvasObjectMoved");
             socket.off("annotationMoved");
             socket.off("annotationResized");
@@ -3521,6 +3553,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const handlePickChange = (draftId: string, pickIndex: number, championId: string) => {
         if (!canEdit()) return;
+        if (!isLocalMode()) {
+            const draft = canvasDrafts.find((cd) => cd.Draft.id === draftId)?.Draft;
+            if (!draft) return;
+            // An optimistic temp card (createDraftMutation.onMutate) has no
+            // server identity yet, so it keeps the legacy path rather than
+            // queueing a mutation under an id the server can never accept.
+            if (draft.type === "canvas" && !draftId.startsWith("temp-")) {
+                // A no-op re-select must not bump the server revision and
+                // conflict every other client's in-flight edit.
+                if (draft.picks[pickIndex] === championId) return;
+                pickSync.edit(draft, [{ index: pickIndex, championId }]);
+                return;
+            }
+        }
         setCanvasDrafts(
             (cd) => cd.Draft.id === draftId,
             "Draft",
@@ -3528,10 +3574,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 const holdPicks = [...Draft.picks];
                 holdPicks[pickIndex] = championId;
                 if (!isLocalMode()) {
-                    socketAccessor()?.emit("newDraft", {
-                        picks: holdPicks,
-                        id: draftId
-                    });
+                    socketAccessor()?.emit("newDraft", { picks: holdPicks, id: draftId });
                 }
                 return { ...Draft, picks: holdPicks };
             }

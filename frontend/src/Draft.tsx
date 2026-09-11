@@ -11,7 +11,8 @@ import {
     Switch,
     Match,
     JSX,
-    Show
+    Show,
+    untrack
 } from "solid-js";
 import {
     championCategories,
@@ -31,7 +32,8 @@ import {
     DragEventHandler,
     DragOverlay
 } from "@thisbeyond/solid-dnd";
-import type { Draft as DraftType, draft } from "./utils/schemas";
+import type { Draft as DraftType } from "./utils/schemas";
+import { CanvasDraftUpdateSchema, DraftSchema } from "./utils/schemas";
 import BlankSquare from "/src/assets/BlankSquare.webp";
 import { SelectTheme } from "./utils/selectTheme";
 import { useMultiFilterableItems } from "./hooks/useFilterableItems";
@@ -84,7 +86,22 @@ type props = {
 function Draft(props: props) {
     const params = useParams();
     const navigate = useNavigate();
-    const { socket: socketAccessor } = useCanvasSocket();
+    const {
+        socket: socketAccessor, connectionStatus, pickSync, pickSyncVersion
+    } = useCanvasSocket();
+    const displayedDraft = createMemo(() => {
+        pickSyncVersion();
+        const draft = props.draft();
+        return draft?.type === "canvas" ? pickSync.merge(draft) : draft;
+    });
+    createEffect(() => {
+        pickSyncVersion();
+        untrack(() => {
+            const draft = props.draft();
+            if (draft?.type === "canvas") props.mutate(pickSync.merge(draft));
+        });
+    });
+    const activeDraftId = createMemo(() => props.draft()?.id);
     const [selectedChampion, setSelectedChampion] = createSignal("");
     const [currentDragged, setCurrentDragged] = createSignal("");
     const [anonDraft, setAnonDraft] = createSignal<boolean>(true);
@@ -142,38 +159,45 @@ function Draft(props: props) {
     onCleanup(() => window.removeEventListener("keydown", handleFilterKeyDown));
 
     createEffect(() => {
-        const holdDraft = props.draft();
+        const holdDraft = displayedDraft();
         if (holdDraft && anonDraft()) {
             setAnonDraft(false);
             navigate(`/canvas/${params.id}/draft/${holdDraft.id}`, { replace: true });
-            socketAccessor()?.emit("joinRoom", holdDraft.id);
         }
+    });
+
+    // The provider receives draft updates and keys them by draft ID. This
+    // view's memo overlays pending edits on that confirmed state.
+    createEffect(() => {
+        const socket = socketAccessor();
+        if (!socket) return;
+        const onDraftUpdate = (raw: unknown) => {
+            const current = props.draft();
+            const update = CanvasDraftUpdateSchema.safeParse(raw);
+            if (!current || !update.success || update.data.id !== current.id) return;
+            // Full responses also carry renamed metadata. Versus drafts keep
+            // their existing live updates and do not use the canvas edit queue.
+            const full = DraftSchema.safeParse(raw);
+            const incoming = full.success ? full.data : { ...current, ...update.data };
+            props.mutate(incoming.type === "canvas" ? pickSync.merge(incoming) : incoming);
+        };
+        socket.on("draftUpdate", onDraftUpdate);
+        onCleanup(() => socket.off("draftUpdate", onDraftUpdate));
     });
 
     createEffect(() => {
         const socket = socketAccessor();
-        if (!socket) return;
-        socket.on("draftUpdate", (data: { picks: string[]; id: string } | draft) => {
-            if ("owner_id" in data) {
-                props.mutate(() => ({
-                    ...data,
-                    picks: [...data.picks]
-                }));
-            } else {
-                props.mutate((old) => ({
-                    ...old,
-                    picks: [...data.picks]
-                }));
-            }
-        });
+        const draftId = activeDraftId();
+        if (!socket || !draftId || connectionStatus() !== "connected") return;
+        socket.emit("joinRoom", draftId);
         onCleanup(() => {
-            socket.off("draftUpdate");
+            if (socket.connected) socket.emit("leaveRoom", draftId);
         });
     });
 
     const handlePick = (index: number, championId: string) => {
         if (props.isLocked) return;
-        const currentDraft = props.draft();
+        const currentDraft = displayedDraft();
         if (!currentDraft) return;
         const holdPicks = [
             ...currentDraft.picks.map((pick: string) =>
@@ -183,20 +207,21 @@ function Draft(props: props) {
         if (index !== -1) {
             holdPicks[index] = championId;
         }
-        props.mutate((old) => ({
-            ...old,
-            picks: [...holdPicks]
-        }));
-        socketAccessor()?.emit("newDraft", {
-            picks: holdPicks,
-            id: params.draftId
-        });
+        const changes = holdPicks.flatMap((championId, index) =>
+            championId === currentDraft.picks[index] ? [] : [{ index, championId }]
+        );
+        if (currentDraft.type === "canvas") {
+            pickSync.edit(currentDraft, changes);
+        } else {
+            props.mutate({ ...currentDraft, picks: holdPicks });
+            socketAccessor()?.emit("newDraft", { picks: holdPicks, id: currentDraft.id });
+        }
         setSelectedChampion("");
         setCurrentDragged("");
     };
 
     const handleSelect = (index: number) => {
-        const currentDraft = props.draft();
+        const currentDraft = displayedDraft();
         if (!currentDraft) return;
         if (selectedChampion() !== "" || currentDraft.picks[index] !== "") {
             handlePick(index, selectedChampion());
@@ -231,7 +256,7 @@ function Draft(props: props) {
         }
         if (selectedChampion() === champId) {
             return "block w-full border-2 border-darius-purple-bright hover:cursor-move";
-        } else if (props.draft()?.picks.map(resolveChampionId).includes(champId)) {
+        } else if (displayedDraft()?.picks.map(resolveChampionId).includes(champId)) {
             return "block w-full border-2 border-gray-950 brightness-[30%]";
         }
         return "block w-full border-2 border-black hover:cursor-move";
@@ -255,7 +280,7 @@ function Draft(props: props) {
     const handleSelectedChamp = (champ: string) => {
         if (props.isLocked) return;
         if (unavailableSet().has(champ)) return;
-        if (!props.draft()?.picks.map(resolveChampionId).includes(champ)) {
+        if (!displayedDraft()?.picks.map(resolveChampionId).includes(champ)) {
             setSelectedChampion(champ);
         }
     };
@@ -269,7 +294,7 @@ function Draft(props: props) {
 
     const getChampionOverlayLabel = (champId: string): string | null => {
         const currentPickIndex =
-            props.draft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
+            displayedDraft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
         if (currentPickIndex >= 0) {
             return getDraftPositionText(currentPickIndex);
         }
@@ -288,7 +313,7 @@ function Draft(props: props) {
 
     const championTileTitle = (champName: string, champId: string): string => {
         const currentPickIndex =
-            props.draft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
+            displayedDraft()?.picks.map(resolveChampionId).indexOf(champId) ?? -1;
         if (currentPickIndex >= 0) {
             return `${champName} - ${getDraftPositionText(currentPickIndex)}`;
         }
@@ -365,7 +390,7 @@ function Draft(props: props) {
                         <Match when={props.draft.error}>
                             <span>Error: {props.draft.error.message}</span>
                         </Match>
-                        <Match when={props.draft()}>
+                        <Match when={displayedDraft()}>
                             <div class="mb-2 flex items-center justify-between rounded bg-darius-card-hover/50 px-4 py-2">
                                 <span class="text-lg font-semibold text-darius-crimson">
                                     {props.blueTeamName ?? "Team 1"}
@@ -389,7 +414,7 @@ function Draft(props: props) {
                                 >
                                     {/* All 10 bans */}
                                     <Index
-                                        each={(props.draft()?.picks ?? []).slice(0, 10)}
+                                        each={(displayedDraft()?.picks ?? []).slice(0, 10)}
                                     >
                                         {(each, index) => {
                                             const side = index < 5 ? "team1" : "team2";
@@ -459,7 +484,7 @@ function Draft(props: props) {
                                 >
                                     {/* Blue Side Champions */}
                                     <Index
-                                        each={(props.draft()?.picks ?? []).slice(10, 15)}
+                                        each={(displayedDraft()?.picks ?? []).slice(10, 15)}
                                     >
                                         {(each, index) => (
                                             <Droppable id={index + 10}>
@@ -567,7 +592,7 @@ function Draft(props: props) {
                                 >
                                     {/* Red Side Champions */}
                                     <Index
-                                        each={(props.draft()?.picks ?? []).slice(15, 20)}
+                                        each={(displayedDraft()?.picks ?? []).slice(15, 20)}
                                     >
                                         {(each, index) => (
                                             <Droppable id={index + 15}>

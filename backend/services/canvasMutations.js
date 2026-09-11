@@ -15,6 +15,7 @@ const {
   applyPoolRoleOrder,
   RolePoolMapSchema,
   RoleSchema,
+  DraftPickMutationSchema,
 } = require("@draft-sim/shared-types");
 
 // Canvas Mutation Gate (see CONTEXT.md): the single seam for "may this actor
@@ -116,12 +117,20 @@ function createCanvasMutationGate({ io }) {
     }
   }
 
-  async function assertGroupRestrictions({ draftId, picks, canvasDrafts }) {
+  // `transaction` is forwarded to every query so a caller that already holds a
+  // transaction (and a row lock) never needs a second pool connection here.
+  async function assertGroupRestrictions({
+    draftId,
+    picks,
+    canvasDrafts,
+    transaction,
+  }) {
     const groupId = canvasDrafts.find((cd) => cd.group_id)?.group_id ?? null;
     if (!groupId) return;
 
     const group = await CanvasGroup.findByPk(groupId, {
       attributes: ["type", "metadata"],
+      transaction,
     });
     if (!group) return;
 
@@ -141,6 +150,7 @@ function createCanvasMutationGate({ io }) {
     // block a save (e.g. a champion disabled after it was picked).
     const currentDraft = await Draft.findByPk(draftId, {
       attributes: ["picks"],
+      transaction,
     });
     const currentPicks = currentDraft?.picks || [];
     const changedIndices = [];
@@ -173,6 +183,7 @@ function createCanvasMutationGate({ io }) {
             attributes: ["id", "picks", "seriesIndex"],
           },
         ],
+        transaction,
       });
 
       const draftsForRestriction = siblingDrafts
@@ -210,13 +221,7 @@ function createCanvasMutationGate({ io }) {
     }
   }
 
-  async function applyDraftPicks({ actor, draftId, picks }) {
-    if (!draftId || !Array.isArray(picks) || picks.length !== 20) {
-      throw new InvalidMutationError(
-        "Draft pick payload must have a draftId and 20 pick slots",
-      );
-    }
-
+  async function editableDraftCanvases({ actor, draftId }) {
     const canvasDrafts = await CanvasDraft.findAll({
       where: { draft_id: draftId },
       attributes: ["canvas_id", "is_locked", "group_id"],
@@ -238,15 +243,91 @@ function createCanvasMutationGate({ io }) {
       }
     }
 
+    return canvasDrafts;
+  }
+
+  async function applyDraftPicks({ actor, draftId, picks }) {
+    if (!draftId || !Array.isArray(picks) || picks.length !== 20) {
+      throw new InvalidMutationError(
+        "Draft pick payload must have a draftId and 20 pick slots",
+      );
+    }
+    const canvasDrafts = await editableDraftCanvases({ actor, draftId });
     await assertGroupRestrictions({ draftId, picks, canvasDrafts });
 
-    await Draft.update({ picks }, { where: { id: draftId } });
+    // Older clients can still use newDraft. Their writes must invalidate any
+    // revision-checked edits already in flight from a newer client.
+    const [, rows] = await Draft.update(
+      {
+        picks,
+        picksVersion: sequelize.literal('"picksVersion" + 1'),
+        lastPickMutationId: null,
+      },
+      { where: { id: draftId }, returning: true },
+    );
 
-    const payload = { id: draftId, picks };
+    const payload = {
+      id: draftId,
+      picks,
+      ...(rows?.[0] ? { picksVersion: rows[0].picksVersion } : {}),
+    };
     io.to(draftId).emit("draftUpdate", payload, draftId);
     for (const cd of canvasDrafts) {
       io.to(cd.canvas_id).emit("draftUpdate", payload, draftId);
     }
+  }
+
+  async function applyDraftPickMutation({ actor, ...input }) {
+    const parsed = DraftPickMutationSchema.safeParse(input);
+    if (!parsed.success)
+      throw new InvalidMutationError("Invalid draft pick mutation");
+    const { id, mutationId, baseVersion, changes } = parsed.data;
+    const canvasDrafts = await editableDraftCanvases({ actor, draftId: id });
+    const payload = await sequelize.transaction(async (transaction) => {
+      const draft = await Draft.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!draft) throw new NotAuthorizedError("Draft not found");
+      // Rows created by older import/create paths are not guaranteed to hold
+      // exactly 20 slots; the ack contract is. Normalise before reading or
+      // writing so a short or padded row cannot produce an unparseable ack.
+      const normalise = (picks) =>
+        Array.from({ length: 20 }, (_, index) => picks?.[index] ?? "");
+      const state = () => ({
+        id,
+        picks: normalise(draft.picks),
+        picksVersion: draft.picksVersion,
+      });
+      // Persisted on the row, so an acknowledgement lost across a restart is
+      // still safe to retry. A later writer invalidates the old base version.
+      if (draft.lastPickMutationId === mutationId) return state();
+      if (draft.picksVersion !== baseVersion) {
+        const error = new CanvasMutationError(
+          "This draft changed while saving. Retry to apply your unsaved picks, or discard them to use the saved picks.",
+          "PICK_CONFLICT",
+        );
+        error.draft = state();
+        throw error;
+      }
+      const picks = normalise(draft.picks);
+      for (const change of changes) picks[change.index] = change.championId;
+      await assertGroupRestrictions({
+        draftId: id,
+        picks,
+        canvasDrafts,
+        transaction,
+      });
+      draft.picks = picks;
+      draft.picksVersion += 1;
+      draft.lastPickMutationId = mutationId;
+      await draft.save({ transaction });
+      return state();
+    });
+    io.to(id).emit("draftUpdate", payload, id);
+    for (const cd of canvasDrafts)
+      io.to(cd.canvas_id).emit("draftUpdate", payload, id);
+    return payload;
   }
 
   // Ephemeral relays: authorize → broadcast only. These are live drag
@@ -478,6 +559,7 @@ function createCanvasMutationGate({ io }) {
   return {
     assertCanvasAccess,
     applyDraftPicks,
+    applyDraftPickMutation,
     relayObjectMove,
     relayAnnotationMove,
     relayAnnotationResize,
