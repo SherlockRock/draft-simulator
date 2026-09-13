@@ -108,3 +108,120 @@ fn turn_kind_deserialises_lowercase() {
         "kinds are lowercase"
     );
 }
+
+use engine_core::pools::Role;
+use engine_core::reference::universe::{
+    ChampionIdx, ChampionSet, Universe, UniverseError, UniverseSpec,
+};
+
+// ------------------------------------------------------------------ universe
+
+fn spec(json: &str) -> UniverseSpec {
+    serde_json::from_str(json).expect("universe spec parses")
+}
+
+const TINY: &str = r#"{
+  "champions": [
+    {"id": "A", "positions": ["Top"], "linear": 2},
+    {"id": "B", "positions": ["Jungle", "Top"], "linear": 1},
+    {"id": "C", "positions": ["Support"], "linear": 0.5}
+  ],
+  "synergy": [{"pair": ["A", "B"], "value": 3}],
+  "counter": [{"of": "C", "over": "A", "value": 4}]
+}"#;
+
+#[test]
+fn universe_interns_ids_and_stores_symmetric_and_antisymmetric_tables() {
+    let u = Universe::new(spec(TINY)).expect("valid");
+    let (a, b, c) = (
+        u.index("A").unwrap(),
+        u.index("B").unwrap(),
+        u.index("C").unwrap(),
+    );
+    assert_eq!((a, b, c), (ChampionIdx(0), ChampionIdx(1), ChampionIdx(2)));
+    assert_eq!(u.index("Z"), None);
+    assert_eq!(u.id(b), "B");
+    assert_eq!(u.linear(c), 0.5);
+    assert_eq!(u.synergy(a, b), 3.0);
+    assert_eq!(u.synergy(b, a), 3.0);
+    assert_eq!(u.synergy(a, c), 0.0);
+    assert_eq!(
+        u.counter(c, a),
+        4.0,
+        "C over A: +4 when C is Blue and A is Red"
+    );
+    assert_eq!(
+        u.counter(a, c),
+        -4.0,
+        "the reverse direction is the negation"
+    );
+    assert_eq!(u.counter(a, a), 0.0);
+    // L = 1 + Σ|lin| + Σ|syn| + Σ|ctr| = 1 + 3.5 + 3 + 4
+    assert_eq!(u.loss(), 11.5);
+    assert_eq!(u.all().len(), 3);
+    let meta = u.champion_meta();
+    assert_eq!(meta["B"].positions, vec![Role::Jungle, Role::Top]);
+    assert_eq!(meta["B"].id, "B");
+    assert_eq!(u.names(&[c, a]), vec!["C".to_string(), "A".to_string()]);
+}
+
+#[test]
+fn universe_rejects_bad_tables() {
+    let dup = TINY.replace(
+        r#"{"id": "C", "positions": ["Support"], "linear": 0.5}"#,
+        r#"{"id": "A", "positions": ["Support"], "linear": 0.5}"#,
+    );
+    assert!(
+        matches!(Universe::new(spec(&dup)), Err(UniverseError::DuplicateChampion(id)) if id == "A")
+    );
+    let unknown = TINY.replace(r#"["A", "B"]"#, r#"["A", "Q"]"#);
+    assert!(
+        matches!(Universe::new(spec(&unknown)), Err(UniverseError::UnknownChampion(id)) if id == "Q")
+    );
+    let self_pair = TINY.replace(r#"["A", "B"]"#, r#"["A", "A"]"#);
+    assert!(
+        matches!(Universe::new(spec(&self_pair)), Err(UniverseError::SelfPair(id)) if id == "A")
+    );
+    let dup_syn = TINY.replace(
+        r#"[{"pair": ["A", "B"], "value": 3}]"#,
+        r#"[{"pair": ["A", "B"], "value": 3}, {"pair": ["B", "A"], "value": 1}]"#,
+    );
+    assert!(matches!(
+        Universe::new(spec(&dup_syn)),
+        Err(UniverseError::DuplicateEntry(_, _))
+    ));
+    let dup_ctr = TINY.replace(
+        r#"[{"of": "C", "over": "A", "value": 4}]"#,
+        r#"[{"of": "C", "over": "A", "value": 4}, {"of": "A", "over": "C", "value": -4}]"#,
+    );
+    assert!(
+        matches!(
+            Universe::new(spec(&dup_ctr)),
+            Err(UniverseError::DuplicateEntry(_, _))
+        ),
+        "both directions listed is a duplicate even when consistent"
+    );
+    let no_pos = TINY.replace(r#""positions": ["Support"]"#, r#""positions": []"#);
+    assert!(
+        matches!(Universe::new(spec(&no_pos)), Err(UniverseError::NoPositions(id)) if id == "C")
+    );
+}
+
+#[test]
+fn champion_set_is_a_bitmask() {
+    let (a, b, c) = (ChampionIdx(0), ChampionIdx(5), ChampionIdx(31));
+    let s = ChampionSet::EMPTY.with(a).with(c);
+    assert!(s.contains(a) && s.contains(c) && !s.contains(b));
+    assert_eq!(s.len(), 2);
+    assert_eq!(s.without(a).len(), 1);
+    assert_eq!(
+        s.iter().collect::<Vec<_>>(),
+        vec![a, c],
+        "iterates in index order"
+    );
+    let t: ChampionSet = [b, c].into_iter().collect();
+    assert_eq!(s.union(t).len(), 3);
+    assert_eq!(s.intersect(t), ChampionSet::EMPTY.with(c));
+    assert_eq!(s.minus(t), ChampionSet::EMPTY.with(a));
+    assert!(ChampionSet::EMPTY.is_empty());
+}
