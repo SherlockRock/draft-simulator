@@ -828,3 +828,489 @@ fn loader_rejects_mis_authored_fixtures_naming_the_field() {
         vec![Action::Pick(fx.universe.index("B").unwrap())]
     );
 }
+
+use engine_core::reference::oracle::{
+    evaluate, Evaluation, OracleError, OracleInput, MAX_AVAILABLE, MAX_TURNS,
+};
+
+// ------------------------------------------------------------------ oracle: probes (design § 7)
+
+fn probe(name: &str) -> Fixture {
+    Fixture::load_file(&probes_dir().join(format!("{name}.json"))).unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn assert_dry_run(fx: &Fixture, eval: &Evaluation) {
+    assert_eq!(eval.value, fx.dry_run.value, "{}: value", fx.id);
+    assert_eq!(eval.leaves, fx.dry_run.leaves, "{}: leaves", fx.id);
+    assert_eq!(eval.nodes, fx.dry_run.nodes, "{}: nodes", fx.id);
+}
+
+/// A strictly increasing map over the leaf value, applied after the terminal rule (D3 ii).
+struct Transformed<'a, F: Fn(f64) -> f64>(&'a Universe, F);
+
+impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
+    fn value(&self, leaf: &Leaf<'_>) -> f64 {
+        (self.1)(self.0.value(leaf))
+    }
+}
+
+#[test]
+fn red_double_turn_is_two_consecutive_min_nodes() {
+    // explicit R pick, R ban, B pick. Mover-explicit: Red picks X (5), bans B1 (6), Blue takes B2 (2) → −3.
+    // A per-ply sign flip treats the Red ban as a max node, keeps B1 (which also counters X by 4) and answers Y at +3.
+    let fx = probe("probe-red-double-turn");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(eval.mover, Side::Red);
+    assert_eq!(
+        eval.top_set,
+        vec![Action::Pick(fx.universe.index("X").unwrap())]
+    );
+    assert_eq!(eval.value, -3.0);
+    assert_dry_run(&fx, &eval);
+    let y = eval
+        .ranked
+        .iter()
+        .find(|av| av.action == Action::Pick(fx.universe.index("Y").unwrap()))
+        .expect("Y ranked");
+    assert_eq!(
+        y.value, -1.0,
+        "Red picks Y (3), bans B1, Blue takes B2: −3 + 2"
+    );
+}
+
+#[test]
+fn red_double_turn_on_the_standard_sequence_slots_11_and_12() {
+    // D3 i / D9: Red owns slot 11 (pick) AND slot 12 (ban). Standard format, horizon 6 through Red's pick at 16.
+    // M2 (7) is the unique prize Blue would ban at 13, so Red takes it first and still ends on one of three equal
+    // 6-Adcs after Blue's two bans: 3 − (2 + 7 + 6) = −12. An Adc first lets Blue ban M2: −11.
+    // STRUCTURAL coverage of the real sequence's double turn only: a per-ply sign flip gives the same answer here
+    // (Blue picks nothing inside the horizon, so the flipped Red-ban and Blue-ban errors cancel — measured).
+    // The discriminating test of the mover-explicit convention is red_double_turn_is_two_consecutive_min_nodes.
+    let fx = probe("probe-red-double-turn-standard");
+    assert_eq!(fx.position().slot_index(), 11);
+    assert_eq!(fx.position().mover(), Some(Side::Red));
+    assert_eq!(
+        fx.format.slot(12).map(|s| (s.side, s.action)),
+        Some((Side::Red, ActionType::Ban))
+    );
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        eval.top_set,
+        vec![Action::Pick(fx.universe.index("M2").unwrap())]
+    );
+    assert_eq!(eval.value, -12.0);
+    let a2 = eval
+        .ranked
+        .iter()
+        .find(|av| av.action == Action::Pick(fx.universe.index("A2").unwrap()))
+        .expect("A2 ranked");
+    assert_eq!(a2.value, -11.0, "an Adc first lets Blue ban M2");
+    assert_dry_run(&fx, &eval);
+}
+
+#[test]
+fn immediate_strength_beats_delayed_synergy_until_the_horizon_reaches_the_partner() {
+    // D3 v: A2 (7 now) vs A3 (1 now, +9 with S2 at slot 19)
+    for (name, expect) in [
+        ("probe-immediate-vs-delayed-h1", "A2"),
+        ("probe-immediate-vs-delayed-h2", "A2"),
+        ("probe-immediate-vs-delayed-h3", "A3"),
+    ] {
+        let fx = probe(name);
+        let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            eval.top_set,
+            vec![Action::Pick(fx.universe.index(expect).unwrap())],
+            "{name}"
+        );
+        assert_dry_run(&fx, &eval);
+    }
+    assert_eq!(
+        probe("probe-immediate-vs-delayed-h3").mode,
+        Mode::FullRemainder
+    );
+}
+
+#[test]
+fn ban_only_horizon_ties_every_ban_and_a_pick_inside_the_horizon_breaks_the_tie() {
+    // D3 iii: no picks inside the horizon → every leaf 0 → every ban ties. Feasibility is off so roles play no part.
+    // The file's expected_top lists all eight bans by name — an answer stated independently of legal_actions().
+    for name in ["probe-ban-only-tie-h3", "probe-ban-only-tie-h6"] {
+        let fx = probe(name);
+        let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            fx.expected_top.len(),
+            8,
+            "{name}: the file names all eight bans"
+        );
+        assert_eq!(
+            eval.top_set, fx.expected_top,
+            "{name}: every ban is in the top set"
+        );
+        assert_eq!(eval.ranked.len(), 8, "{name}: eight legal bans");
+        assert!(
+            eval.ranked.iter().all(|av| av.value == 0.0),
+            "{name}: every ban is worth exactly 0"
+        );
+        assert_dry_run(&fx, &eval);
+    }
+    let fx = probe("probe-ban-only-tie-h7");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    let first = eval.ranked[0].value;
+    assert!(
+        eval.ranked.iter().any(|av| av.value != first),
+        "h = 7 reaches Blue's pick: values are not all equal"
+    );
+    assert_eq!(
+        eval.top_set, fx.expected_top,
+        "{{C1..C4}} at 5; C5..C8 at 4"
+    );
+    assert_eq!(eval.top_set.len(), 4);
+    assert_dry_run(&fx, &eval);
+}
+
+#[test]
+fn a_ban_that_removes_the_last_champion_for_a_role_is_worth_l() {
+    let fx = probe("probe-ban-breaks-role");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        eval.top_set,
+        vec![Action::Ban(fx.universe.index("S1").unwrap())]
+    );
+    assert_eq!(eval.value, fx.universe.loss());
+    assert_dry_run(&fx, &eval);
+}
+
+#[test]
+fn mutual_infeasibility_ties_the_honest_line_at_zero() {
+    // design S11: both pools cover the universe and each role has two champions; Red at 0 can also
+    // reach 0 by taking both Middles or both Adcs (both sides infeasible → 0).
+    let fx = probe("probe-mutual-infeasibility");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    let idx = |n: &str| fx.universe.index(n).unwrap();
+    let mut expected = vec![
+        Action::pair(idx("A2"), idx("A3")),
+        Action::pair(idx("J1"), idx("S1")),
+        Action::pair(idx("M2"), idx("M3")),
+    ];
+    expected.sort();
+    assert_eq!(eval.top_set, expected);
+    assert_eq!(eval.value, 0.0);
+    assert_dry_run(&fx, &eval);
+}
+
+#[test]
+fn ranking_is_invariant_under_a_strictly_increasing_transform_including_terminals() {
+    // D3 ii: any transform applied to U must preserve terminal ordering. Fixture 05 has a −L branch.
+    for name in ["02-profitable-denial", "05-comp-breaking-pair"] {
+        let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let base = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+        let order = |e: &Evaluation| e.ranked.iter().map(|av| av.action).collect::<Vec<_>>();
+        let affine = fx
+            .evaluate_with(&Transformed(&fx.universe, |x| 3.0 * x + 1.0), fx.mode)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let cubic = fx
+            .evaluate_with(&Transformed(&fx.universe, |x| x * x * x + x), fx.mode)
+            .unwrap_or_else(|e| panic!("{e}"));
+        // The hazard D3 ii names: a saturating map narrowing gaps toward an artificial tie. ε (1e-9) lives in the
+        // objective's output scale; x/(1+|x|) keeps every gap above 1e-4 at |x| ≤ 60, so ties stay exact and distinct stay distinct.
+        let saturating = fx
+            .evaluate_with(&Transformed(&fx.universe, |x| x / (1.0 + x.abs())), fx.mode)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            order(&affine),
+            order(&base),
+            "{name}: 3x+1 keeps the ranking"
+        );
+        assert_eq!(
+            order(&cubic),
+            order(&base),
+            "{name}: x³+x keeps the ranking"
+        );
+        assert_eq!(
+            order(&saturating),
+            order(&base),
+            "{name}: x/(1+|x|) keeps the ranking"
+        );
+        assert_eq!(affine.top_set, base.top_set);
+        assert_eq!(cubic.top_set, base.top_set);
+        assert_eq!(saturating.top_set, base.top_set);
+        assert_eq!(affine.value, 3.0 * base.value + 1.0);
+    }
+}
+
+#[test]
+fn hand_derived_root_values_independent_of_both_oracles() {
+    // Derived from the JSON by hand (design § 7): a shared misreading of D3 by the author of both oracles would not survive these.
+    let load = |name: &str| {
+        Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"))
+    };
+    let value_of =
+        |e: &Evaluation, a: Action| e.ranked.iter().find(|av| av.action == a).map(|av| av.value);
+    // 01: Blue T1 J1 M1 A1 (2 each) + S1 (1) + syn(A1,S1) 6 = 15; Red T2 J2 M2 A2 (2 each) + S3 (1) = 9 → +6
+    let fx = load("01-pair-completion");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(eval.value, 6.0);
+    assert_eq!(
+        value_of(&eval, Action::Pick(fx.universe.index("S2").unwrap())),
+        Some(2.0),
+        "S2: 8 + 3 = 11 vs 9"
+    );
+    assert_eq!(
+        value_of(&eval, Action::Pick(fx.universe.index("T3").unwrap())),
+        Some(-fx.universe.loss()),
+        "a fourth Top: Blue infeasible"
+    );
+    // 02: ban S1 → boards tie at 0; any other ban → Red completes J1+S1 for +8 → −8
+    let fx = load("02-profitable-denial");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    let s1 = Action::Ban(fx.universe.index("S1").unwrap());
+    assert_eq!(value_of(&eval, s1), Some(0.0));
+    assert!(
+        eval.ranked
+            .iter()
+            .filter(|av| av.action != s1)
+            .all(|av| av.value == -8.0),
+        "every other ban is worth −8"
+    );
+    // 05: (A1, S1) → Blue 2+2+2+2+1 = 9 vs Red 2+2+2+2+1 = 9 → 0; (M3, M4) → three Middles → −L
+    let fx = load("05-comp-breaking-pair");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    let idx = |n: &str| fx.universe.index(n).unwrap();
+    assert_eq!(
+        value_of(&eval, Action::pair(idx("A1"), idx("S1"))),
+        Some(0.0)
+    );
+    assert_eq!(
+        value_of(&eval, Action::pair(idx("M3"), idx("M4"))),
+        Some(-fx.universe.loss())
+    );
+}
+
+#[test]
+fn oracle_bounds_are_asserted_at_the_root() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let input = |position: &Position<'_>, mode| -> Result<Evaluation, OracleError> {
+        evaluate(&OracleInput {
+            position,
+            universe: &u,
+            pools: &pools,
+            objective: &u,
+            feasibility: FeasibilityRule::Off,
+            mode,
+            epsilon: 1e-9,
+        })
+    };
+    let root = Position::new(&f, &[], &pools, &u).expect("empty");
+    assert_eq!(
+        input(&root, Mode::FullRemainder).err(),
+        Some(OracleError::TurnsExceedBound {
+            explored: 17,
+            max: MAX_TURNS
+        })
+    );
+    assert_eq!(
+        input(&root, Mode::Horizon(8)).err(),
+        Some(OracleError::TurnsExceedBound {
+            explored: 8,
+            max: MAX_TURNS
+        })
+    );
+    // seven explored turns being inside the bound is proved by probe-ban-only-tie-h7 (explored 7, passes)
+    // thirteen available
+    let mut champs: Vec<String> = (0..13)
+        .map(|i| format!(r#"{{"id": "C{i}", "positions": ["Top"], "linear": 1}}"#))
+        .collect();
+    champs.sort();
+    let wide =
+        Universe::new(spec(&format!(r#"{{"champions": [{}]}}"#, champs.join(",")))).expect("valid");
+    let wide_pools = Pools {
+        blue: wide.all(),
+        red: wide.all(),
+    };
+    let wide_root = Position::new(&f, &[], &wide_pools, &wide).expect("empty");
+    let err = evaluate(&OracleInput {
+        position: &wide_root,
+        universe: &wide,
+        pools: &wide_pools,
+        objective: &wide,
+        feasibility: FeasibilityRule::Off,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+    })
+    .err();
+    assert_eq!(
+        err,
+        Some(OracleError::AvailableExceedsBound {
+            available: 13,
+            max: MAX_AVAILABLE
+        })
+    );
+    // a complete draft: a two-ban format with both bans recorded as skips
+    let two_bans = Format::explicit(vec![
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Ban,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Ban,
+        },
+    ]);
+    let done =
+        Position::new(&two_bans, &[Entry::Skip, Entry::Skip], &pools, &u).expect("two skips");
+    assert!(done.is_complete());
+    let err = evaluate(&OracleInput {
+        position: &done,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::Off,
+        mode: Mode::FullRemainder,
+        epsilon: 1e-9,
+    })
+    .err();
+    assert_eq!(err, Some(OracleError::DraftComplete));
+    // a pool exhausted with feasibility off: Blue's pool is one champion, Blue must pick twice
+    let two = Format::explicit(vec![
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+    ]);
+    let t1 = u.index("T1").unwrap();
+    let tiny_pools = Pools {
+        blue: ChampionSet::EMPTY.with(t1),
+        red: u.all(),
+    };
+    let start = Position::new(&two, &[], &tiny_pools, &u).expect("empty");
+    let err = evaluate(&OracleInput {
+        position: &start,
+        universe: &u,
+        pools: &tiny_pools,
+        objective: &u,
+        feasibility: FeasibilityRule::Off,
+        mode: Mode::FullRemainder,
+        epsilon: 1e-9,
+    })
+    .err();
+    assert_eq!(err, Some(OracleError::NoLegalAction { slot: 1 }));
+    // Horizon(0) at the root decides nothing
+    assert_eq!(
+        input(&root, Mode::Horizon(0)).err(),
+        Some(OracleError::HorizonZero)
+    );
+    // an already-infeasible root is terminal, not a decision: fixture 02 with Blue's supports removed from its pool
+    let fx = Fixture::load_file(&fixtures_dir().join("02-profitable-denial.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    let (s4, s5) = (
+        fx.universe.index("S4").unwrap(),
+        fx.universe.index("S5").unwrap(),
+    );
+    let starved = Pools {
+        blue: fx.pools.blue.without(s4).without(s5),
+        red: fx.pools.red,
+    };
+    let root02 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe).expect("position");
+    let err = evaluate(&OracleInput {
+        position: &root02,
+        universe: &fx.universe,
+        pools: &starved,
+        objective: &fx.universe,
+        feasibility: FeasibilityRule::On,
+        mode: Mode::FullRemainder,
+        epsilon: 1e-9,
+    })
+    .err();
+    assert_eq!(
+        err,
+        Some(OracleError::RootTerminal {
+            blue_feasible: false,
+            red_feasible: true
+        })
+    );
+    // the terminal check precedes action generation at the root too: fixture 01's mid-pair root with Blue's
+    // remaining options (S1, S2, T3) removed from its pool has no legal action AND is infeasible — infeasible wins
+    let fx = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    let gone = ["S1", "S2", "T3"].map(|n| fx.universe.index(n).unwrap());
+    let starved = Pools {
+        blue: gone.iter().fold(fx.pools.blue, |p, c| p.without(*c)),
+        red: fx.pools.red,
+    };
+    let root01 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe)
+        .expect("board picks are still in the pool");
+    let err = evaluate(&OracleInput {
+        position: &root01,
+        universe: &fx.universe,
+        pools: &starved,
+        objective: &fx.universe,
+        feasibility: FeasibilityRule::On,
+        mode: Mode::FullRemainder,
+        epsilon: 1e-9,
+    })
+    .err();
+    assert_eq!(
+        err,
+        Some(OracleError::RootTerminal {
+            blue_feasible: false,
+            red_feasible: true
+        }),
+        "not NoLegalAction"
+    );
+}
+
+#[test]
+fn swapping_both_completed_pairs_at_once_changes_nothing() {
+    // design § 7: independently AND together; tier_a.rs covers one at a time
+    let fx = Fixture::load_file(&fixtures_dir().join("04-partner-protection.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    let base = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    let mut entries = fx.entries.clone();
+    for (slot, _) in fx.swapped_pairs() {
+        entries.swap(slot, slot + 1);
+    }
+    assert_ne!(entries, fx.entries);
+    let both = Position::new(&fx.format, &entries, &fx.pools, &fx.universe).expect("position");
+    let again = evaluate(&OracleInput {
+        position: &both,
+        universe: &fx.universe,
+        pools: &fx.pools,
+        objective: &fx.universe,
+        feasibility: fx.feasibility,
+        mode: fx.mode,
+        epsilon: fx.epsilon,
+    })
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (again.value, again.top_set, again.leaves, again.nodes),
+        (base.value, base.top_set, base.leaves, base.nodes)
+    );
+}
+
+#[test]
+fn evaluation_ranks_best_first_for_the_mover_and_reports_counts() {
+    let fx = probe("probe-red-double-turn");
+    let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(eval.ranked.len(), 2);
+    assert!(
+        eval.ranked[0].value <= eval.ranked[1].value,
+        "Red: ascending"
+    );
+    assert_eq!(eval.ranked[0].value, eval.value);
+    assert!(eval.leaves > 0 && eval.nodes >= eval.leaves);
+    // 2 Red picks + 2×3 Red bans + 8 Blue picks (banning the other Red champion leaves two Blue choices, banning B1 or B2 leaves one) = 16
+    assert_eq!(eval.nodes, 16);
+    assert_eq!(eval.leaves, 8);
+}

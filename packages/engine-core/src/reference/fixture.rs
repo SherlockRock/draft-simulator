@@ -3,6 +3,8 @@
 
 use super::feasibility::FeasibilityRule;
 use super::format::{Format, Turn};
+use super::objective::Objective;
+use super::oracle::{evaluate, Evaluation, OracleError, OracleInput};
 use super::state::{Action, Entry, Pools, Position, PositionError};
 use super::universe::{ChampionSet, Universe, UniverseSpec};
 use crate::draft_state::{ActionType, Side};
@@ -10,11 +12,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// Which oracle a fixture asks for (design § 4). Depth is counted in turns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-    FullRemainder,
-    Horizon(usize),
-}
+pub use super::oracle::Mode;
 
 /// Written by the Python prototype (`--write-stats`), asserted exactly by the harness.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -358,5 +356,28 @@ impl Fixture {
 
     pub fn available(&self) -> ChampionSet {
         self.position().available(&self.universe)
+    }
+
+    /// The fixture's declared oracle on its own universe.
+    pub fn evaluate(&self) -> Result<Evaluation, OracleError> {
+        self.evaluate_with(&self.universe, self.mode)
+    }
+
+    /// Any objective, any mode — the invariant tests wrap the objective or vary the horizon.
+    pub fn evaluate_with(
+        &self,
+        objective: &dyn Objective,
+        mode: Mode,
+    ) -> Result<Evaluation, OracleError> {
+        let position = self.position();
+        evaluate(&OracleInput {
+            position: &position,
+            universe: &self.universe,
+            pools: &self.pools,
+            objective,
+            feasibility: self.feasibility,
+            mode,
+            epsilon: self.epsilon,
+        })
     }
 }

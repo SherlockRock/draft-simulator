@@ -21,5 +21,6 @@ pub mod feasibility;
 pub mod fixture;
 pub mod format;
 pub mod objective;
+pub mod oracle;
 pub mod state;
 pub mod universe;
