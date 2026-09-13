@@ -13,6 +13,7 @@ pub mod pair_filter;
 pub mod pools;
 pub mod protocol_types;
 pub mod rayon_pool;
+pub mod reference;
 pub mod role_solver;
 pub mod scenarios;
 pub mod search;
