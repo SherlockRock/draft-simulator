@@ -1,0 +1,197 @@
+{
+  "id": "probe-red-double-turn-standard",
+  "tactic": 0,
+  "notes": "Standard format, root slot 11 (Red pick), horizon 6 (R pick 11, R ban 12, B ban 13, R ban 14, B ban 15, R pick 16), feasibility off. M2 (7) is the unique prize and Blue would ban it at 13, so Red must take it NOW: M2 first, Blue bans two of the three equal 6-Adcs, Red still ends on a 6 -> value 3 - (2 + 7 + 6) = -12. An Adc first lets Blue ban M2 -> -11. This probe covers the standard sequence's Red double turn STRUCTURALLY (the search traverses slot 11 then slot 12, both Red). It does NOT discriminate a per-ply sign flip: Blue makes no pick inside the horizon, so flipping Red's bans to max and Blue's bans to min cancels exactly (measured: the flip also gives -12, {M2}). The discriminating test of the mover-explicit convention is probe-red-double-turn (explicit format, Blue picks last).",
+  "format": "standard",
+  "feasibility": "off",
+  "universe": {
+    "champions": [
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "M1",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 7
+      },
+      {
+        "id": "M3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 6
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 6
+      },
+      {
+        "id": "A4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 6
+      },
+      {
+        "id": "A5",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "B1",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "J1",
+      "M1",
+      "B1",
+      "B2"
+    ],
+    "red": [
+      "T2",
+      "J2",
+      "M2",
+      "M3",
+      "A2",
+      "A3",
+      "A4",
+      "A5"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "T2"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "J2"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "J1"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "M1"
+    }
+  ],
+  "oracle": {
+    "horizon": 6
+  },
+  "expected_top": [
+    "M2"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": -12.0,
+    "leaves": 10800,
+    "nodes": 17400
+  }
+}

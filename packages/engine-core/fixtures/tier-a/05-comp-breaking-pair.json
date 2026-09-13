@@ -1,0 +1,246 @@
+{
+  "id": "05-comp-breaking-pair",
+  "tactic": 5,
+  "notes": "Blue holds Top/Jungle/Middle and picks its last pair. M3+M4 synergise +10 but leave Adc and Support unfillable (-L). A1+S1 is the feasible pair; A3 is a weaker Adc so the top set is exactly one pair.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M1",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M4",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A1",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S1",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S3",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "M3",
+          "M4"
+        ],
+        "value": 10
+      }
+    ],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "J1",
+      "M1",
+      "M3",
+      "M4",
+      "A1",
+      "A3",
+      "S1"
+    ],
+    "red": [
+      "T2",
+      "J2",
+      "M2",
+      "A2",
+      "S2",
+      "S3"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "T2"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "J2"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "J1"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "M1"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "M2"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 15,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 16,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "A2"
+    }
+  ],
+  "oracle": "full_remainder",
+  "expected_top": [
+    [
+      "A1",
+      "S1"
+    ]
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": 0.0,
+    "leaves": 12,
+    "nodes": 14
+  }
+}

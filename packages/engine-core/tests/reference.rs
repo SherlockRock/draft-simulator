@@ -580,3 +580,251 @@ fn feasibility_rule_deserialises_lowercase() {
     );
     assert!(serde_json::from_str::<FeasibilityRule>(r#""On""#).is_err());
 }
+
+use engine_core::reference::fixture::{DryRun, Fixture, FixtureError, Mode};
+use std::path::PathBuf;
+
+// ------------------------------------------------------------------ fixture loader
+
+fn fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/tier-a")
+}
+
+fn probes_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/reference-probes")
+}
+
+#[test]
+fn load_dir_reads_the_eight_fixtures_in_name_order() {
+    let all = Fixture::load_dir(&fixtures_dir()).unwrap_or_else(|e| panic!("{e}"));
+    let ids: Vec<&str> = all.iter().map(|f| f.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "01-pair-completion",
+            "02-profitable-denial",
+            "03-declining-denial",
+            "04-partner-protection",
+            "05-comp-breaking-pair",
+            "06a-ban-truncated",
+            "06b-ban-horizon",
+            "07-slot6-bound",
+        ]
+    );
+    assert_eq!(
+        Fixture::load_dir(&probes_dir())
+            .unwrap_or_else(|e| panic!("{e}"))
+            .len(),
+        10
+    );
+}
+
+#[test]
+fn fixture_06b_loads_with_skips_horizon_and_ban_expectations() {
+    let fx = Fixture::load_file(&fixtures_dir().join("06b-ban-horizon.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(fx.tactic, 6);
+    assert_eq!(fx.format, Format::standard());
+    assert_eq!(fx.feasibility, FeasibilityRule::Off);
+    assert_eq!(fx.mode, Mode::Horizon(4));
+    assert_eq!(fx.entries, vec![Entry::Skip; 4]);
+    let (p1, p2) = (
+        fx.universe.index("P1").unwrap(),
+        fx.universe.index("P2").unwrap(),
+    );
+    assert_eq!(fx.expected_top, vec![Action::Ban(p1), Action::Ban(p2)]);
+    assert_eq!(fx.epsilon, 1e-9);
+    assert_eq!(
+        fx.dry_run,
+        DryRun {
+            value: -1.0,
+            leaves: 2100,
+            nodes: 2560
+        }
+    );
+    assert_eq!(fx.pools.blue.len(), 5);
+    assert!(!fx.pools.blue.contains(p1) && fx.pools.red.contains(p1));
+    let pos = fx.position();
+    assert_eq!(pos.slot_index(), 4);
+    assert_eq!(pos.mover(), Some(Side::Blue));
+}
+
+#[test]
+fn fixture_04_has_explicit_format_and_two_swappable_pairs() {
+    let fx = Fixture::load_file(&fixtures_dir().join("04-partner-protection.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(fx.format.turns().len(), 9);
+    assert_eq!(fx.format.picks_per_side(Side::Blue), 5);
+    assert_eq!(fx.mode, Mode::FullRemainder);
+    let swaps = fx.swapped_pairs();
+    assert_eq!(
+        swaps.iter().map(|(slot, _)| *slot).collect::<Vec<_>>(),
+        vec![1, 3]
+    );
+    let (slot, entries) = &swaps[0];
+    assert_eq!(entries[*slot], fx.entries[slot + 1]);
+    assert_eq!(entries[slot + 1], fx.entries[*slot]);
+    assert_eq!(entries.len(), fx.entries.len());
+    // fixture 05 has a pair expectation
+    let fx5 = Fixture::load_file(&fixtures_dir().join("05-comp-breaking-pair.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    let (a1, s1) = (
+        fx5.universe.index("A1").unwrap(),
+        fx5.universe.index("S1").unwrap(),
+    );
+    assert_eq!(fx5.expected_top, vec![Action::pair(a1, s1)]);
+    // fixture 01 is a mid-pair root
+    let fx1 = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(fx1.position().is_mid_pair());
+    assert_eq!(
+        fx1.swapped_pairs().len(),
+        2,
+        "the two completed pairs at slots 7 and 9; the half-filled pair at 17 is not swappable"
+    );
+}
+
+const MINIMAL: &str = r#"{
+  "id": "minimal", "tactic": 0, "notes": "",
+  "format": {"turns": [{"side": "Blue", "kind": "ban"}, {"side": "Red", "kind": "pick"}]},
+  "feasibility": "off",
+  "universe": {"champions": [{"id": "A", "positions": ["Top"], "linear": 1}, {"id": "B", "positions": ["Top"], "linear": 2}]},
+  "pools": {"blue": ["A"], "red": ["B"]},
+  "position": [],
+  "oracle": "full_remainder",
+  "expected_top": ["B"],
+  "dry_run": {"value": 0, "leaves": 0, "nodes": 0}
+}"#;
+
+fn invalid(json: &str) -> (String, String) {
+    match Fixture::from_json(json, "inline") {
+        Err(FixtureError::Invalid { field, reason, .. }) => (field, reason),
+        other => panic!("expected Invalid, got {other:?}"),
+    }
+}
+
+#[test]
+fn loader_rejects_mis_authored_fixtures_naming_the_field() {
+    assert!(
+        Fixture::from_json(MINIMAL, "inline").is_ok(),
+        "the minimal fixture is valid"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(r#""feasibility": "off""#, r#""feasibility": "on""#)).0,
+        "feasibility"
+    );
+    assert_eq!(invalid(&MINIMAL.replace(r#""format": {"turns": [{"side": "Blue", "kind": "ban"}, {"side": "Red", "kind": "pick"}]}"#, r#""format": "custom""#)).0, "format");
+    assert_eq!(
+        invalid(&MINIMAL.replace(r#""oracle": "full_remainder""#, r#""oracle": "exhaustive""#)).0,
+        "oracle"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""pools": {"blue": ["A"], "red": ["B"]}"#,
+            r#""pools": {"blue": ["A"], "red": ["Q"]}"#
+        ))
+        .0,
+        "pools.red"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""position": []"#,
+            r#""position": [{"slot": 1, "side": "Blue", "kind": "ban", "champion": "A"}]"#
+        ))
+        .0,
+        "position[0].slot"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""position": []"#,
+            r#""position": [{"slot": 0, "side": "Red", "kind": "ban", "champion": "A"}]"#
+        ))
+        .0,
+        "position[0].side"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""position": []"#,
+            r#""position": [{"slot": 0, "side": "Blue", "kind": "pick", "champion": "A"}]"#
+        ))
+        .0,
+        "position[0].kind"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""position": []"#,
+            r#""position": [{"slot": 0, "side": "Blue", "kind": "ban"}]"#
+        ))
+        .0,
+        "position[0].champion"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""position": []"#,
+            r#""position": [{"slot": 0, "side": "Blue", "kind": "ban", "champion": "Q"}]"#
+        ))
+        .0,
+        "position[0].champion"
+    );
+    // a pick outside the mover's pool: Blue ban A, then Red picks A (Red's pool is {B})
+    assert_eq!(invalid(&MINIMAL.replace(r#""position": []"#, r#""position": [{"slot": 0, "side": "Blue", "kind": "skip"}, {"slot": 1, "side": "Red", "kind": "pick", "champion": "A"}]"#)).0, "position");
+    assert_eq!(
+        invalid(&MINIMAL.replace(r#""expected_top": ["B"]"#, r#""expected_top": ["Q"]"#)).0,
+        "expected_top[0]"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""expected_top": ["B"]"#,
+            r#""expected_top": [["A", "B"]]"#
+        ))
+        .0,
+        "expected_top[0]"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(r#""expected_top": ["B"]"#, r#""expected_top": ["B", "B"]"#)).0,
+        "expected_top[1]"
+    );
+    assert_eq!(
+        invalid(&MINIMAL.replace(r#""expected_top": ["B"]"#, r#""expected_top": []"#)).0,
+        "expected_top"
+    );
+    // draft complete: two entries fill the two-slot format
+    assert_eq!(invalid(&MINIMAL.replace(r#""position": []"#, r#""position": [{"slot": 0, "side": "Blue", "kind": "skip"}, {"slot": 1, "side": "Red", "kind": "pick", "champion": "B"}]"#)).0, "position");
+    // missing dry_run or missing feasibility is a JSON (schema) error, not a silent default
+    assert!(matches!(
+        Fixture::from_json(
+            &MINIMAL.replace(
+                r#""dry_run": {"value": 0, "leaves": 0, "nodes": 0}"#,
+                r#""unused": 0"#
+            ),
+            "inline"
+        ),
+        Err(FixtureError::Json { .. })
+    ));
+    match Fixture::from_json(&MINIMAL.replace(r#""feasibility": "off","#, ""), "inline") {
+        Err(FixtureError::Json { source, .. }) => assert!(
+            source.to_string().contains("feasibility"),
+            "serde names the missing field: {source}"
+        ),
+        other => panic!("expected a Json error naming feasibility, got {other:?}"),
+    }
+    // a zero horizon has nothing to decide
+    assert_eq!(
+        invalid(&MINIMAL.replace(
+            r#""oracle": "full_remainder""#,
+            r#""oracle": {"horizon": 0}"#
+        ))
+        .0,
+        "oracle"
+    );
+    // expected ban vs pick follows the root slot: at a pick root a plain id is a Pick
+    let pick_root = MINIMAL.replace(
+        r#""position": []"#,
+        r#""position": [{"slot": 0, "side": "Blue", "kind": "skip"}]"#,
+    );
+    let fx = Fixture::from_json(&pick_root, "inline").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        fx.expected_top,
+        vec![Action::Pick(fx.universe.index("B").unwrap())]
+    );
+}

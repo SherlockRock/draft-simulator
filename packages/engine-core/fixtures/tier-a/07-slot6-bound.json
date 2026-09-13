@@ -1,0 +1,234 @@
+{
+  "id": "07-slot6-bound",
+  "tactic": 7,
+  "notes": "Six real bans, Blue's T1 at slot 6, Red's pair at 7-8 is the root, Blue's pair answers (horizon 2). J1+S1 synergise +8 on linear 1 each (10 together) and are in both pools; Blue's best solos M2+A2 sum to 8. Each side has one private champion per role so no pair can exhaust a role for the other side (otherwise the side behind at the horizon forces 0 through mutual infeasibility). Red takes J1+S1: Blue answers M2+A2, value -1. This is the pair-then-pair CORRECTNESS case (21 root pairs). It is not a budget stress: slice 4 adds a sibling 07b with the mover's pool = all 12 available (66 root pairs), feasibility off (a full-fan pool lets a pair exhaust the other side's role), plus an unbudgeted control run, and puts the candidate's depth-2 budget assertion there.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "X1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X6",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "S2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "T3",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J3",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "M3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "S3",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S1",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "J1",
+          "S1"
+        ],
+        "value": 8
+      }
+    ],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "T2",
+      "J2",
+      "M2",
+      "A2",
+      "S2",
+      "J1",
+      "S1"
+    ],
+    "red": [
+      "T3",
+      "J3",
+      "M3",
+      "A3",
+      "S3",
+      "J1",
+      "S1"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X1"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X2"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X3"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X4"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X5"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X6"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    }
+  ],
+  "oracle": {
+    "horizon": 2
+  },
+  "expected_top": [
+    [
+      "J1",
+      "S1"
+    ]
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": -1.0,
+    "leaves": 342,
+    "nodes": 361
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "id": "probe-ban-only-tie-h3",
+  "tactic": 0,
+  "notes": "No picks inside the horizon -> every leaf is 0 -> every ban ties (D3 iii). At h = 7 Blue's pick is inside: Red's three bans remove C8, C7, C6, Blue gets C5 unless it banned one of C5..C8 itself; the Rust test asserts 'values not all equal', the set here is what the dry run computed.",
+  "format": "standard",
+  "feasibility": "off",
+  "universe": {
+    "champions": [
+      {
+        "id": "C1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "C2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "C3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "C4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "C5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 5
+      },
+      {
+        "id": "C6",
+        "positions": [
+          "Top"
+        ],
+        "linear": 6
+      },
+      {
+        "id": "C7",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 7
+      },
+      {
+        "id": "C8",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 8
+      }
+    ],
+    "synergy": [],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8"
+    ],
+    "red": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8"
+    ]
+  },
+  "position": [],
+  "oracle": {
+    "horizon": 3
+  },
+  "expected_top": [
+    "C1",
+    "C2",
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C7",
+    "C8"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": 0,
+    "leaves": 336,
+    "nodes": 400
+  }
+}

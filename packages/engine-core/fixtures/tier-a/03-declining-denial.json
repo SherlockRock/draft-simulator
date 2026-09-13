@@ -1,0 +1,269 @@
+{
+  "id": "03-declining-denial",
+  "tactic": 3,
+  "notes": "As 02 but S1 and S1b both complete Red's pair (+8) \u2014 banning one leaves the other. A5 counters Blue's M1 by 5 and Red has equal Adc substitutes otherwise. Ban A5; S1 is not in the top set.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M1",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A1",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "S4",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A5",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "S1",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S1b",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S3",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "J1",
+          "S1"
+        ],
+        "value": 8
+      },
+      {
+        "pair": [
+          "J1",
+          "S1b"
+        ],
+        "value": 8
+      }
+    ],
+    "counter": [
+      {
+        "of": "A5",
+        "over": "M1",
+        "value": 5
+      }
+    ]
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "J2",
+      "M1",
+      "A1",
+      "A4",
+      "S4",
+      "S5"
+    ],
+    "red": [
+      "T2",
+      "J1",
+      "M2",
+      "A2",
+      "A3",
+      "A5",
+      "S1",
+      "S1b",
+      "S2",
+      "S3"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "T2"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "J1"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "J2"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "M1"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "M2"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "skip"
+    }
+  ],
+  "oracle": "full_remainder",
+  "expected_top": [
+    "A5"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": -8.0,
+    "leaves": 1288,
+    "nodes": 1593
+  }
+}

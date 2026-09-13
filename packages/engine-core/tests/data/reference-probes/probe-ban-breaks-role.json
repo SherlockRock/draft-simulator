@@ -1,0 +1,216 @@
+{
+  "id": "probe-ban-breaks-role",
+  "tactic": 0,
+  "notes": "As 02 but S1 is Red's only remaining Support: banning it makes Red infeasible -> +L, and that outranks the +8 pair.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M1",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A1",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "S4",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "S1",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "J2",
+      "M1",
+      "A1",
+      "A4",
+      "S4",
+      "S5"
+    ],
+    "red": [
+      "T2",
+      "J1",
+      "M2",
+      "A2",
+      "A3",
+      "S1"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "T2"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "J1"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "J2"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "M1"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "M2"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "skip"
+    }
+  ],
+  "oracle": "full_remainder",
+  "expected_top": [
+    "S1"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": 24.0,
+    "leaves": 85,
+    "nodes": 147
+  }
+}

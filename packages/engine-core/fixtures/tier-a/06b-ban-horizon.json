@@ -1,0 +1,142 @@
+{
+  "id": "06b-ban-horizon",
+  "tactic": 6,
+  "notes": "Standard format, no picks on the board, root at Blue's third ban (slots 0-3 are recorded skips), horizon 4 through Red's first pair. Red's P1+P2 synergise +10; pools are disjoint so Blue cannot deny by picking. Feasibility off: inside the twelve-available bound a five-pick draft cannot stay feasible past the bans. At the true slot 0 no posing inside the bound discriminates (both pools must cover the universe for legality, and then Blue denies by picking): h=8 ties all nine bans, h=7 ties five.",
+  "format": "standard",
+  "feasibility": "off",
+  "universe": {
+    "champions": [
+      {
+        "id": "B1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "P1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "P2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R3",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R4",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R5",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "P1",
+          "P2"
+        ],
+        "value": 10
+      }
+    ],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "red": [
+      "P1",
+      "P2",
+      "R3",
+      "R4",
+      "R5"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "skip"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "skip"
+    }
+  ],
+  "oracle": {
+    "horizon": 4
+  },
+  "expected_top": [
+    "P1",
+    "P2"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": -1.0,
+    "leaves": 2100,
+    "nodes": 2560
+  }
+}
