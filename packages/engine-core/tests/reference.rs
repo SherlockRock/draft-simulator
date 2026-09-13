@@ -271,3 +271,154 @@ fn terminal_rule_orders_infeasibility_above_any_logit() {
     assert_eq!(u.value(&leaf(false, false)), 0.0, "neither can → 0");
     assert!(u.loss() > u.board_value(&[a, b], &[]).abs());
 }
+
+use engine_core::reference::state::{Action, Entry, Pools, Position, PositionError};
+
+// ------------------------------------------------------------------ state
+
+/// Ten single-role champions in index order T1 T2 J1 J2 M1 M2 A1 A2 S1 S2, all linear 1.
+fn ten() -> Universe {
+    let mut champs = Vec::new();
+    for (i, role) in ["Top", "Jungle", "Middle", "Adc", "Support"]
+        .iter()
+        .enumerate()
+    {
+        for n in 1..=2 {
+            let letter = ["T", "J", "M", "A", "S"][i];
+            champs.push(format!(
+                r#"{{"id": "{letter}{n}", "positions": ["{role}"], "linear": 1}}"#
+            ));
+        }
+    }
+    let json = format!(r#"{{"champions": [{}]}}"#, champs.join(","));
+    Universe::new(spec(&json)).expect("valid")
+}
+
+fn ids(u: &Universe, names: &[&str]) -> ChampionSet {
+    names
+        .iter()
+        .map(|n| u.index(n).unwrap_or_else(|| panic!("no champion {n}")))
+        .collect()
+}
+
+#[test]
+fn action_pair_is_canonical_and_ordered() {
+    let (a, b) = (ChampionIdx(3), ChampionIdx(1));
+    assert_eq!(Action::pair(a, b), Action::Pair(b, a));
+    assert_eq!(Action::pair(b, a), Action::Pair(b, a));
+    assert!(Action::Ban(ChampionIdx(9)) < Action::Pick(ChampionIdx(0)));
+    assert!(Action::Pick(ChampionIdx(9)) < Action::Pair(ChampionIdx(0), ChampionIdx(1)));
+    assert_eq!(
+        Action::pair(a, b).champions().collect::<Vec<_>>(),
+        vec![b, a]
+    );
+}
+
+#[test]
+fn legal_actions_follow_d4_d5_d8() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
+        red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+    };
+    let t1 = u.index("T1").unwrap();
+
+    // slot 0, Blue ban: every available champion, pools ignored; Skip never generated (D4, D5)
+    let root = Position::new(&f, &[], &pools, &u).expect("empty position");
+    let bans = root.legal_actions(&u, &pools);
+    assert_eq!(bans.len(), 10);
+    assert!(bans.iter().all(|a| matches!(a, Action::Ban(_))));
+
+    // after one ban, Red bans from nine
+    let after = root.apply(Action::Ban(t1));
+    assert_eq!(after.slot_index(), 1);
+    assert_eq!(after.mover(), Some(Side::Red));
+    assert_eq!(after.legal_actions(&u, &pools).len(), 9);
+    assert!(after.taken().contains(t1));
+
+    // slot 7, Red pair: C(5,2) = 10 canonical pairs from Red's pool only (D8 1)
+    let mut entries = vec![Entry::Skip; 6];
+    entries.push(Entry::Pick(t1));
+    let pos = Position::new(&f, &entries, &pools, &u).expect("blue picked T1");
+    assert_eq!(pos.next_slot().map(|s| s.pair_start), Some(true));
+    let pairs = pos.legal_actions(&u, &pools);
+    assert_eq!(pairs.len(), 10);
+    assert!(pairs.iter().all(|a| matches!(a, Action::Pair(x, y) if x < y && pools.red.contains(*x) && pools.red.contains(*y))));
+
+    // apply a pair: two Pick entries, slot index advances by two, both in Red's picks
+    let (j2, s2) = (u.index("J2").unwrap(), u.index("S2").unwrap());
+    let next = pos.apply(Action::pair(s2, j2));
+    assert_eq!(next.slot_index(), 9);
+    assert_eq!(next.entries()[7..9], [Entry::Pick(j2), Entry::Pick(s2)]);
+    assert_eq!(next.picks(Side::Red), &[j2, s2]);
+    assert_eq!(next.picks(Side::Blue), &[t1]);
+    assert_eq!(next.available(&u).len(), 7);
+
+    // mid-pair root (D8 2): slot 8 with slot 7 filled → single completing picks, four Red champions left
+    let mut mid = entries.clone();
+    mid.push(Entry::Pick(j2));
+    let mid = Position::new(&f, &mid, &pools, &u).expect("mid-pair");
+    assert!(mid.is_mid_pair());
+    let singles = mid.legal_actions(&u, &pools);
+    assert_eq!(singles.len(), 4);
+    assert!(singles.iter().all(|a| matches!(a, Action::Pick(_))));
+    assert_eq!(mid.apply(Action::Pick(s2)).slot_index(), 9);
+
+    // a pick outside the mover's pool is never offered
+    assert!(!pos
+        .legal_actions(&u, &pools)
+        .iter()
+        .any(|a| a.champions().any(|c| pools.blue.contains(c))));
+}
+
+#[test]
+fn position_validation_names_the_slot() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
+        red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+    };
+    let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
+    let mut six = vec![Entry::Skip; 6];
+    six.push(Entry::Skip);
+    assert_eq!(
+        Position::new(&f, &six, &pools, &u).err(),
+        Some(PositionError::SkipOnPickSlot { slot: 6 })
+    );
+    let mut six = vec![Entry::Skip; 6];
+    six.push(Entry::Ban(t1));
+    assert_eq!(
+        Position::new(&f, &six, &pools, &u).err(),
+        Some(PositionError::KindMismatch { slot: 6 })
+    );
+    let mut six = vec![Entry::Skip; 6];
+    six.push(Entry::Pick(t2));
+    assert_eq!(
+        Position::new(&f, &six, &pools, &u).err(),
+        Some(PositionError::PickOutsidePool {
+            slot: 6,
+            id: "T2".into()
+        })
+    );
+    let dup = [Entry::Ban(t1), Entry::Ban(t1)];
+    assert_eq!(
+        Position::new(&f, &dup, &pools, &u).err(),
+        Some(PositionError::DuplicateChampion {
+            slot: 1,
+            id: "T1".into()
+        })
+    );
+    let one = Format::explicit(vec![Turn {
+        side: Side::Blue,
+        kind: Kind::Ban,
+    }]);
+    assert_eq!(
+        Position::new(&one, &[Entry::Skip, Entry::Skip], &pools, &u).err(),
+        Some(PositionError::SlotOutOfRange { slot: 1, len: 1 })
+    );
+    let full = Position::new(&f, &[Entry::Skip; 6], &pools, &u).expect("six skips");
+    assert!(!full.is_complete());
+    assert_eq!(full.mover(), Some(Side::Blue));
+}
