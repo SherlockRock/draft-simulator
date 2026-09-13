@@ -225,3 +225,49 @@ fn champion_set_is_a_bitmask() {
     assert_eq!(s.minus(t), ChampionSet::EMPTY.with(a));
     assert!(ChampionSet::EMPTY.is_empty());
 }
+
+use engine_core::reference::objective::{Leaf, Objective};
+
+// ------------------------------------------------------------------ objective
+
+#[test]
+fn board_value_is_the_d3_formula() {
+    // A (lin 2, Top), B (lin 1), C (lin 0.5); syn(A,B)=3; ctr(C over A)=4
+    let u = Universe::new(spec(TINY)).expect("valid");
+    let (a, b, c) = (
+        u.index("A").unwrap(),
+        u.index("B").unwrap(),
+        u.index("C").unwrap(),
+    );
+    // Blue {A,B}, Red {C}: 2 + 1 + 3 − 0.5 + ctr(A,C) + ctr(B,C) = 5.5 − 4 + 0 = 1.5
+    assert_eq!(u.board_value(&[a, b], &[c]), 1.5);
+    // Red {A,B}, Blue {C}: −(2+1+3) + 0.5 + ctr(C,A) + ctr(C,B) = −5.5 + 4 = −1.5 (antisymmetric)
+    assert_eq!(u.board_value(&[c], &[a, b]), -1.5);
+    assert_eq!(u.board_value(&[], &[]), 0.0);
+}
+
+#[test]
+fn terminal_rule_orders_infeasibility_above_any_logit() {
+    let u = Universe::new(spec(TINY)).expect("valid");
+    let (a, b) = (u.index("A").unwrap(), u.index("B").unwrap());
+    let (blue, red) = ([a], [b]);
+    let leaf = |bf, rf| Leaf {
+        blue: &blue,
+        red: &red,
+        blue_feasible: bf,
+        red_feasible: rf,
+    };
+    assert_eq!(u.value(&leaf(true, true)), u.board_value(&[a], &[b]));
+    assert_eq!(
+        u.value(&leaf(true, false)),
+        u.loss(),
+        "Red cannot complete → +L"
+    );
+    assert_eq!(
+        u.value(&leaf(false, true)),
+        -u.loss(),
+        "Blue cannot complete → −L"
+    );
+    assert_eq!(u.value(&leaf(false, false)), 0.0, "neither can → 0");
+    assert!(u.loss() > u.board_value(&[a, b], &[]).abs());
+}
