@@ -17,7 +17,9 @@ pub enum FeasibilityRule {
 }
 
 /// Memo keyed on `(side, locked bitmask, pool-net bitmask)`. Both sets are monotone along any
-/// line of play, so the key identifies the predicate's inputs exactly.
+/// line of play, so the key identifies the predicate's inputs exactly — but only for a fixed
+/// universe and a fixed format: the key carries no identity for either, so a memo must never be
+/// shared across a different universe or a different format.
 #[derive(Debug, Default)]
 pub struct FeasibilityMemo {
     memo: HashMap<(Side, u32, u32), bool>,

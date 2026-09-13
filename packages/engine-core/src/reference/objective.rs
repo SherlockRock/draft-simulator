@@ -13,7 +13,9 @@ pub struct Leaf<'a> {
 }
 
 pub trait Objective {
-    /// Blue-perspective value: Blue maximises, Red minimises (D3).
+    /// Blue-perspective value: Blue maximises, Red minimises (D3). Implementations must return a
+    /// finite value — the oracle sorts root values with `partial_cmp` and panics on a non-finite
+    /// one.
     fn value(&self, leaf: &Leaf<'_>) -> f64;
 }
 

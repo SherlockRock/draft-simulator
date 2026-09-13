@@ -26,13 +26,16 @@ pub enum Mode {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ActionValue {
     pub action: Action,
+    /// Blue-perspective, as `Evaluation::value`: Blue maximises, Red minimises, so Red's best
+    /// action carries the most negative value.
     pub value: f64,
 }
 
 #[derive(Clone, Debug)]
 pub struct Evaluation {
     pub mover: Side,
-    /// The root's minimax value.
+    /// The root's minimax value, Blue-perspective: Blue maximises, Red minimises, so Red's best
+    /// action carries the most negative value.
     pub value: f64,
     /// Every legal root action, best-first for the mover; ties in canonical action order.
     pub ranked: Vec<ActionValue>,

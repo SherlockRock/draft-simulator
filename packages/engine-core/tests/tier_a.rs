@@ -193,6 +193,16 @@ fn every_fixture_file_has_a_test() {
         FIXTURES.len(),
         "one `fn fixture_*` test per listed fixture"
     );
+    let lines: Vec<&str> = source.lines().collect();
+    let attributed = lines
+        .windows(2)
+        .filter(|w| w[1].starts_with("fn fixture_") && w[0] == "#[test]")
+        .count();
+    assert_eq!(
+        attributed,
+        FIXTURES.len(),
+        "every `fn fixture_*` must be preceded by #[test]"
+    );
     for name in FIXTURES {
         let call = format!("run(\"{name}\")");
         assert_eq!(

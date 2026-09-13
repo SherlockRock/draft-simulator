@@ -158,7 +158,10 @@ impl Universe {
                 return Err(UniverseError::SelfPair(e.pair[0].clone()));
             }
             if !e.value.is_finite() {
-                return Err(UniverseError::NonFinite(e.pair[0].clone()));
+                return Err(UniverseError::NonFinite(format!(
+                    "syn({}, {})",
+                    e.pair[0], e.pair[1]
+                )));
             }
             if !seen.insert((a.min(b), a.max(b))) {
                 return Err(UniverseError::DuplicateEntry(
@@ -178,7 +181,10 @@ impl Universe {
                 return Err(UniverseError::SelfPair(e.of.clone()));
             }
             if !e.value.is_finite() {
-                return Err(UniverseError::NonFinite(e.of.clone()));
+                return Err(UniverseError::NonFinite(format!(
+                    "ctr({} over {})",
+                    e.of, e.over
+                )));
             }
             if !seen.insert((of.min(over), of.max(over))) {
                 return Err(UniverseError::DuplicateEntry(e.of.clone(), e.over.clone()));
