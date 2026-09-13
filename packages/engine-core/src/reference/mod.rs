@@ -17,6 +17,7 @@
 //!
 //! This module sits beside the incumbent search and removes nothing from it.
 
+pub mod feasibility;
 pub mod format;
 pub mod objective;
 pub mod state;

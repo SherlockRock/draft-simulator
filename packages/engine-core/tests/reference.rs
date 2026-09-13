@@ -422,3 +422,161 @@ fn position_validation_names_the_slot() {
     assert!(!full.is_complete());
     assert_eq!(full.mover(), Some(Side::Blue));
 }
+
+use engine_core::reference::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+
+// ------------------------------------------------------------------ feasibility
+
+#[test]
+fn two_locked_top_only_champions_are_infeasible_even_with_a_full_pool() {
+    // D3 ii invariant: locked picks must first form a perfect matching among themselves.
+    let json = r#"{"champions": [
+      {"id": "T1", "positions": ["Top"], "linear": 1}, {"id": "T2", "positions": ["Top"], "linear": 1},
+      {"id": "J", "positions": ["Jungle"], "linear": 1}, {"id": "M", "positions": ["Middle"], "linear": 1},
+      {"id": "A", "positions": ["Adc"], "linear": 1}, {"id": "S", "positions": ["Support"], "linear": 1},
+      {"id": "T3", "positions": ["Top"], "linear": 1}
+    ]}"#;
+    let u = Universe::new(spec(json)).expect("valid");
+    let all = u.all();
+    let pools = Pools {
+        blue: all,
+        red: all,
+    };
+    // explicit format: Blue picks twice, then three more Blue picks (five per side is what the predicate needs)
+    let f = Format::explicit(vec![
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pair,
+        },
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Pair,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Pair,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Pick,
+        },
+    ]);
+    let (t1, t2, j) = (
+        u.index("T1").unwrap(),
+        u.index("T2").unwrap(),
+        u.index("J").unwrap(),
+    );
+    let mut memo = FeasibilityMemo::default();
+
+    let two_tops =
+        Position::new(&f, &[Entry::Pick(t1), Entry::Pick(t2)], &pools, &u).expect("position");
+    assert!(
+        !side_feasible(
+            &mut memo,
+            FeasibilityRule::On,
+            Side::Blue,
+            &two_tops,
+            &pools,
+            &u
+        ),
+        "two locked Tops cannot both play"
+    );
+    assert!(
+        side_feasible(
+            &mut memo,
+            FeasibilityRule::On,
+            Side::Red,
+            &two_tops,
+            &pools,
+            &u
+        ),
+        "Red still has a full pool net of the two Tops"
+    );
+
+    let top_jungle =
+        Position::new(&f, &[Entry::Pick(t1), Entry::Pick(j)], &pools, &u).expect("position");
+    assert!(side_feasible(
+        &mut memo,
+        FeasibilityRule::On,
+        Side::Blue,
+        &top_jungle,
+        &pools,
+        &u
+    ));
+
+    // Off: always feasible, and the predicate is never consulted
+    let before = memo.calls;
+    assert!(side_feasible(
+        &mut memo,
+        FeasibilityRule::Off,
+        Side::Blue,
+        &two_tops,
+        &pools,
+        &u
+    ));
+    assert_eq!(memo.calls, before);
+}
+
+#[test]
+fn feasibility_memo_hits_on_repeated_keys() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let pos = Position::new(&f, &[], &pools, &u).expect("empty");
+    let mut memo = FeasibilityMemo::default();
+    assert!(side_feasible(
+        &mut memo,
+        FeasibilityRule::On,
+        Side::Blue,
+        &pos,
+        &pools,
+        &u
+    ));
+    assert!(side_feasible(
+        &mut memo,
+        FeasibilityRule::On,
+        Side::Blue,
+        &pos,
+        &pools,
+        &u
+    ));
+    assert_eq!((memo.calls, memo.misses), (2, 1));
+    // a different side is a different key
+    assert!(side_feasible(
+        &mut memo,
+        FeasibilityRule::On,
+        Side::Red,
+        &pos,
+        &pools,
+        &u
+    ));
+    assert_eq!((memo.calls, memo.misses), (3, 2));
+}
+
+#[test]
+fn feasibility_rule_deserialises_lowercase() {
+    assert_eq!(
+        serde_json::from_str::<FeasibilityRule>(r#""on""#).expect("on"),
+        FeasibilityRule::On
+    );
+    assert_eq!(
+        serde_json::from_str::<FeasibilityRule>(r#""off""#).expect("off"),
+        FeasibilityRule::Off
+    );
+    assert!(serde_json::from_str::<FeasibilityRule>(r#""On""#).is_err());
+}
