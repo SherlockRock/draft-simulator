@@ -1,0 +1,146 @@
+{
+  "id": "06a-ban-truncated",
+  "tactic": 6,
+  "notes": "No picks on the board. Red's P1+P2 synergise +10; every champion is worth 1 alone; pools are disjoint so Blue cannot deny by picking. Banning either half is worth 10; every other ban is worth 0. Authored exact tie {P1, P2}. Three picks a side: the feasibility predicate is defined only at five, so it is off (design S4).",
+  "format": {
+    "turns": [
+      {
+        "side": "Blue",
+        "kind": "ban"
+      },
+      {
+        "side": "Red",
+        "kind": "ban"
+      },
+      {
+        "side": "Blue",
+        "kind": "pick"
+      },
+      {
+        "side": "Red",
+        "kind": "pair"
+      },
+      {
+        "side": "Blue",
+        "kind": "pair"
+      },
+      {
+        "side": "Red",
+        "kind": "pick"
+      }
+    ]
+  },
+  "feasibility": "off",
+  "universe": {
+    "champions": [
+      {
+        "id": "B1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "P1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "P2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R3",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R4",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R5",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "P1",
+          "P2"
+        ],
+        "value": 10
+      }
+    ],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "red": [
+      "P1",
+      "P2",
+      "R3",
+      "R4",
+      "R5"
+    ]
+  },
+  "position": [],
+  "oracle": "full_remainder",
+  "expected_top": [
+    "P1",
+    "P2"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": 0.0,
+    "leaves": 10800,
+    "nodes": 19360
+  }
+}

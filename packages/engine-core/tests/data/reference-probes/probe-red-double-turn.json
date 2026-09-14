@@ -1,0 +1,83 @@
+{
+  "id": "probe-red-double-turn",
+  "tactic": 0,
+  "notes": "Correct top {X}, value -3. A per-ply sign flip yields top {Y}, value +3.",
+  "format": {
+    "turns": [
+      {
+        "side": "Red",
+        "kind": "pick"
+      },
+      {
+        "side": "Red",
+        "kind": "ban"
+      },
+      {
+        "side": "Blue",
+        "kind": "pick"
+      }
+    ]
+  },
+  "feasibility": "off",
+  "universe": {
+    "champions": [
+      {
+        "id": "X",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 5
+      },
+      {
+        "id": "Y",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "B1",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 6
+      },
+      {
+        "id": "B2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 2
+      }
+    ],
+    "synergy": [],
+    "counter": [
+      {
+        "of": "B1",
+        "over": "X",
+        "value": 4
+      }
+    ]
+  },
+  "pools": {
+    "blue": [
+      "B1",
+      "B2"
+    ],
+    "red": [
+      "X",
+      "Y"
+    ]
+  },
+  "position": [],
+  "oracle": "full_remainder",
+  "expected_top": [
+    "X"
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": -3.0,
+    "leaves": 8,
+    "nodes": 16
+  }
+}

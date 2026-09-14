@@ -1,0 +1,253 @@
+{
+  "id": "probe-mutual-infeasibility",
+  "tactic": 0,
+  "notes": "Red pair root, horizon 2, both pools cover the universe, two champions per role. Red's honest pair J1+S1 is worth exactly 0 against Blue's M2+A2 answer, and taking both Middles or both Adcs also yields 0 (both sides infeasible). Top set = {J1+S1, M2+M3, A2+A3}, value 0.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "X1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X6",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "T1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "T2",
+        "positions": [
+          "Top"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "T3",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J1",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "J2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 2
+      },
+      {
+        "id": "J3",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "M2",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "M3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "A2",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "A3",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "S1",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S2",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "S3",
+        "positions": [
+          "Support"
+        ],
+        "linear": 2
+      }
+    ],
+    "synergy": [
+      {
+        "pair": [
+          "J1",
+          "S1"
+        ],
+        "value": 8
+      }
+    ],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "T1",
+      "T2",
+      "T3",
+      "J1",
+      "J2",
+      "J3",
+      "M2",
+      "M3",
+      "A2",
+      "A3",
+      "S1",
+      "S2",
+      "S3"
+    ],
+    "red": [
+      "T1",
+      "T2",
+      "T3",
+      "J1",
+      "J2",
+      "J3",
+      "M2",
+      "M3",
+      "A2",
+      "A3",
+      "S1",
+      "S2",
+      "S3"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X1"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X2"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X3"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X4"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X5"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X6"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "T1"
+    }
+  ],
+  "oracle": {
+    "horizon": 2
+  },
+  "expected_top": [
+    [
+      "A2",
+      "A3"
+    ],
+    [
+      "J1",
+      "S1"
+    ],
+    [
+      "M2",
+      "M3"
+    ]
+  ],
+  "epsilon": 1e-09,
+  "dry_run": {
+    "value": 0.0,
+    "leaves": 2574,
+    "nodes": 2631
+  }
+}
