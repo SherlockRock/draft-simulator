@@ -293,8 +293,8 @@ fn run(name: &str) {
 
     // S11 guard — (1) no top-set continuation ends with the MOVER's own side broken; (2) whether a top line
     // breaks the opponent (a denial) must match what the fixture DECLARES (`top_line_denies`), so a pool edit
-    // that silently turns a tactic into an L-sized denial goes red; (3) a non-denying fixture's root value is
-    // below L — the same collapse, caught even without the declaration.
+    // that silently turns a tactic into an L-sized denial goes red; (3) the oracle's root value sits in the
+    // band the declaration names (|U| > L/2 iff a denial), independent of the search's `ends`.
     for r in cand
         .ranked
         .iter()
@@ -318,11 +318,18 @@ fn run(name: &str) {
             r.ends
         );
     }
-    assert!(
-        eval.value.abs() < fx.universe.loss() || fx.top_line_denies,
-        "{name}: root value {} is L-sized (L = {}) — the tactic has collapsed into a feasibility denial",
+    // (3) the oracle's own root value must sit in the band the declaration names: the feasible band and a
+    // both-broken leaf have |U| ≤ Σ = (L − 1)/2 < L/2; a one-side denial has |U| ≥ L − Σ = (L + 1)/2 > L/2.
+    // Independent of the search's `ends`, so it is a second witness to (2), and it fails both ways.
+    let half_l = fx.universe.loss() / 2.0;
+    assert_eq!(
+        eval.value.abs() > half_l,
+        fx.top_line_denies,
+        "{name}: root value {} is {} L/2 = {} but the fixture declares top_line_denies={} — the tactic and its declaration disagree",
         eval.value,
-        fx.universe.loss()
+        if eval.value.abs() > half_l { "above" } else { "within" },
+        half_l,
+        fx.top_line_denies
     );
 
     eprintln!(
