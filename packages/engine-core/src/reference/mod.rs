@@ -14,7 +14,7 @@
 //!
 //! Two checks per Tier A fixture (D6): (1) the oracle's top set equals the author's intended
 //! set — proves the fixture; (2) a candidate engine's top action is in the oracle's top set —
-//! proves the engine. Check 2 has no candidate until slice 4 and is a stub in `tests/tier_a.rs`.
+//! proves the engine. Check 2 runs the reference search (`search`) against the oracle's top set in `tests/tier_a.rs`.
 //!
 //! This module sits beside the incumbent search and removes nothing from it.
 
@@ -24,6 +24,7 @@ pub mod format;
 pub mod node;
 pub mod objective;
 pub mod oracle;
+pub mod search;
 pub mod state;
 pub mod transposition;
 pub mod universe;
