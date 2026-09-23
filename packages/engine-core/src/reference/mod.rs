@@ -25,4 +25,5 @@ pub mod node;
 pub mod objective;
 pub mod oracle;
 pub mod state;
+pub mod transposition;
 pub mod universe;

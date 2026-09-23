@@ -1579,3 +1579,86 @@ fn fixture_file_rejects_unknown_fields() {
     assert!(probe("probe-dry-pool").top_line_denies);
     assert!(probe("probe-ban-breaks-role").top_line_denies);
 }
+
+// `Entry` is already the state's entry type in this file (line 275); the table's entry gets an alias.
+use engine_core::reference::transposition::{Entry as TableEntry, Key, TranspositionTable};
+
+// ------------------------------------------------------------------ transposition table (slice 4, R5)
+
+#[test]
+fn transposition_key_is_the_board_and_the_remaining_horizon() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let idx = |n: &str| u.index(n).unwrap();
+    // Blue bans T1 then Red bans J1 — and the other order: same slot, same sets → same key.
+    let a = Position::new(
+        &f,
+        &[Entry::Ban(idx("T1")), Entry::Ban(idx("J1"))],
+        &pools,
+        &u,
+    )
+    .unwrap();
+    let b = Position::new(
+        &f,
+        &[Entry::Ban(idx("J1")), Entry::Ban(idx("T1"))],
+        &pools,
+        &u,
+    )
+    .unwrap();
+    assert_eq!(Key::of(&a, 3), Key::of(&b, 3));
+    assert_ne!(
+        Key::of(&a, 3),
+        Key::of(&a, 2),
+        "a different remaining horizon is a different subgame"
+    );
+    // a pick and a ban of the same champion differ (the pick is on a side's set)
+    let skips = [Entry::Skip; 6];
+    let mut e1 = skips.to_vec();
+    e1.push(Entry::Pick(idx("T1")));
+    let picked = Position::new(&f, &e1, &pools, &u).unwrap();
+    let mut e2 = skips.to_vec();
+    e2.push(Entry::Pick(idx("T2")));
+    let other = Position::new(&f, &e2, &pools, &u).unwrap();
+    assert_ne!(Key::of(&picked, 1), Key::of(&other, 1));
+}
+
+#[test]
+fn transposition_table_stores_only_exact_values() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let pos = Position::new(&f, &[], &pools, &u).unwrap();
+    let key = Key::of(&pos, 4);
+    let entry = || TableEntry {
+        value: 3.0,
+        continuation: vec![Action::Ban(u.index("T1").unwrap())],
+    };
+    let mut t = TranspositionTable::default();
+    // value equal to alpha0: a bound, not stored
+    assert!(!t.store_if_exact(key.clone(), entry(), 3.0, 10.0));
+    assert!(!t.store_if_exact(key.clone(), entry(), -10.0, 3.0));
+    assert_eq!(t.len(), 0);
+    assert!(t.get(&key).is_none());
+    assert_eq!(t.hits(), 0);
+    // strictly inside: stored
+    assert!(t.store_if_exact(key.clone(), entry(), 2.0, 4.0));
+    assert_eq!(t.len(), 1);
+    assert_eq!(t.get(&key).map(|e| e.value), Some(3.0));
+    assert_eq!(t.hits(), 1);
+    // a full window: a finite value is strictly inside (−∞, +∞), so the same rule stores it
+    let key2 = Key::of(&pos, 5);
+    assert!(t.store_if_exact(key2.clone(), entry(), f64::NEG_INFINITY, f64::INFINITY));
+    assert_eq!(t.len(), 2);
+    assert_eq!(t.get(&key2).map(|e| e.continuation.len()), Some(1));
+    assert_eq!(t.hits(), 2);
+    // a miss is not a hit
+    assert!(t.get(&Key::of(&pos, 6)).is_none());
+    assert_eq!(t.hits(), 2);
+}
