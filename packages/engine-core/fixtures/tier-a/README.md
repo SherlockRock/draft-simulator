@@ -6,8 +6,9 @@ spec: Obsidian `draft-simulator-engine-target` § 6. One JSON per fixture, all w
 `tests/tier_a.rs`, which needs one named test per file.
 
 Two checks per fixture: (1) the oracle's top set equals `expected_top` — proves the numbers
-exhibit the tactic; (2) a candidate engine's top action is in the oracle's top set — proves
-the engine (stub until slice 4).
+exhibit the tactic; (2) the reference search's top action is in the oracle's top set — proves
+the engine (live since slice 4; `tests/tier_a.rs` also asserts the whole ranked list, every
+horizon, the pruning/table switches, the budget property and the S11 guard).
 
 ## Fields
 

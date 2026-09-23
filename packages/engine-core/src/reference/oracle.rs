@@ -3,7 +3,8 @@
 //! of the draft or to a fixed number of turns with the static utility at the horizon. No
 //! pruning, no shortlists, no memoisation of the search (S6); node classification is shared with
 //! the reference search (`node::classify`); feasibility is a leaf input, never a terminal
-//! (slice-4 R1).
+//! (slice-4 R1). The reference search (`super::search`) is compared against
+//! `evaluate(.., Horizon(h))` at every h.
 
 use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
 use super::node::{classify, ClassifyError, LeafEnd, NodeKind};
