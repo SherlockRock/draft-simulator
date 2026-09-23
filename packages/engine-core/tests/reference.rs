@@ -640,7 +640,7 @@ fn probes_dir() -> PathBuf {
 }
 
 #[test]
-fn load_dir_reads_the_eight_fixtures_in_name_order() {
+fn load_dir_reads_the_nine_fixtures_in_name_order() {
     let all = Fixture::load_dir(&fixtures_dir()).unwrap_or_else(|e| panic!("{e}"));
     let ids: Vec<&str> = all.iter().map(|f| f.id.as_str()).collect();
     assert_eq!(
@@ -654,6 +654,7 @@ fn load_dir_reads_the_eight_fixtures_in_name_order() {
             "06a-ban-truncated",
             "06b-ban-horizon",
             "07-slot6-bound",
+            "07b-slot6-full-fan",
         ]
     );
     assert_eq!(

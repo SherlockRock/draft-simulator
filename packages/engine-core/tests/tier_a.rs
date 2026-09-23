@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// One entry per file in fixtures/tier-a/. `every_fixture_file_has_a_test` keeps this honest.
-const FIXTURES: [&str; 8] = [
+const FIXTURES: [&str; 9] = [
     "01-pair-completion",
     "02-profitable-denial",
     "03-declining-denial",
@@ -25,6 +25,7 @@ const FIXTURES: [&str; 8] = [
     "06a-ban-truncated",
     "06b-ban-horizon",
     "07-slot6-bound",
+    "07b-slot6-full-fan",
 ];
 
 fn fixtures_dir() -> PathBuf {
@@ -164,6 +165,11 @@ fn fixture_06b_ban_horizon() {
 #[test]
 fn fixture_07_slot6_bound() {
     run("07-slot6-bound");
+}
+
+#[test]
+fn fixture_07b_slot6_full_fan() {
+    run("07b-slot6-full-fan");
 }
 
 /// Three-way: the files on disk == the `FIXTURES` list == the `fixture_*` test functions in this

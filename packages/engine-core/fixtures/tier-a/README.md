@@ -19,7 +19,7 @@ the engine (stub until slice 4).
 | `universe.champions[]` | `{id, positions: ["Top"\|"Jungle"\|"Middle"\|"Adc"\|"Support", …], linear}` — every listed position is playable |
 | `universe.synergy[]` | `{pair: [a, b], value}` — unordered, no duplicates, no self-pairs |
 | `universe.counter[]` | `{of, over, value}` — `of` counters `over`; the reverse is `-value`; list each unordered pair once |
-| `pools.blue`, `pools.red` | sets of ids; picks are gated by them, bans are not |
+| `pools.blue`, `pools.red` | sets of ids; picks are gated by them, bans are not; 07b puts every available champion in both pools (66 root pairs) — the widest fan the suite has |
 | `position[]` | one entry per filled slot: `{slot, side, kind: "ban"\|"pick"\|"skip", champion?}`; `slot` equals the index; `skip` only on ban slots |
 | `oracle` | `"full_remainder"` or `{"horizon": h}`; explored depth ≤ 7 turns, ≤ 12 champions available |
 | `expected_top` | ids for bans/picks, `[a, b]` for a pair; the author's intended top set (ties are exact) |
