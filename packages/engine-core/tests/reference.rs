@@ -4,6 +4,7 @@
 
 use engine_core::draft_state::{ActionType, Side, TURN_SEQUENCE};
 use engine_core::reference::format::{Format, Kind, Turn, STANDARD_TURNS};
+use engine_core::reference::node::{classify, ClassifyError, LeafKind, NodeKind};
 
 // ------------------------------------------------------------------ format
 
@@ -1313,4 +1314,200 @@ fn evaluation_ranks_best_first_for_the_mover_and_reports_counts() {
     // 2 Red picks + 2×3 Red bans + 8 Blue picks (banning the other Red champion leaves two Blue choices, banning B1 or B2 leaves one) = 16
     assert_eq!(eval.nodes, 16);
     assert_eq!(eval.leaves, 8);
+}
+
+// ------------------------------------------------------------------ node classification (slice 4, R2)
+
+/// Explicit `B pick, R pick`, feasibility off: two slots, so `turns_used`/`horizon` and draft completion are
+/// both reachable in a hand-built position.
+fn two_picks() -> Format {
+    Format::explicit(vec![
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Pick,
+        },
+    ])
+}
+
+#[test]
+fn classify_orders_complete_before_horizon_before_dry_pool_before_interior() {
+    let u = ten();
+    let f = two_picks();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let mut memo = FeasibilityMemo::default();
+    let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
+
+    // interior: the empty position, horizon not reached
+    let root = Position::new(&f, &[], &pools, &u).expect("empty");
+    match classify(
+        &root,
+        0,
+        Some(2),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Interior { slot, actions } => {
+            assert_eq!(slot.side, Side::Blue);
+            assert_eq!(actions.len(), 10);
+        }
+        NodeKind::Leaf(_) => panic!("the root is interior"),
+    }
+    // horizon reached: same position, turns_used == horizon
+    match classify(
+        &root,
+        2,
+        Some(2),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::Horizon);
+            assert!(
+                end.blue_feasible && end.red_feasible,
+                "feasibility off → both true"
+            );
+        }
+        NodeKind::Interior { .. } => panic!("turns_used == horizon is a leaf"),
+    }
+    // complete wins over horizon: both picks filled, turns_used past any horizon
+    let done =
+        Position::new(&f, &[Entry::Pick(t1), Entry::Pick(t2)], &pools, &u).expect("complete");
+    match classify(
+        &done,
+        5,
+        Some(1),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Leaf(end) => assert_eq!(end.kind, LeafKind::Complete),
+        NodeKind::Interior { .. } => panic!("a complete draft is a leaf"),
+    }
+    // full remainder (no horizon) at a position with turns left is interior
+    let one = Position::new(&f, &[Entry::Pick(t1)], &pools, &u).expect("one pick");
+    assert!(matches!(
+        classify(&one, 7, None, &u, &pools, FeasibilityRule::Off, &mut memo).unwrap(),
+        NodeKind::Interior { .. }
+    ));
+}
+
+#[test]
+fn classify_dry_pool_is_a_leaf_with_feasibility_on_and_an_error_with_it_off() {
+    let u = ten();
+    let f = Format::standard();
+    // Red's pool is only T1, which Blue takes at slot 6; at slot 7 (Red pair start) Red has nothing.
+    let t1 = u.index("T1").unwrap();
+    let pools = Pools {
+        blue: u.all(),
+        red: ChampionSet::EMPTY.with(t1),
+    };
+    let entries = [
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Pick(t1),
+    ];
+    let pos = Position::new(&f, &entries, &pools, &u).expect("position");
+    let mut memo = FeasibilityMemo::default();
+    match classify(&pos, 1, None, &u, &pools, FeasibilityRule::On, &mut memo).unwrap() {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::DryPool);
+            assert!(
+                !end.red_feasible,
+                "Red's pool net of the board is empty → count-infeasible"
+            );
+            assert!(end.blue_feasible);
+        }
+        NodeKind::Interior { .. } => {
+            panic!("an empty action list is a leaf when feasibility is on")
+        }
+    }
+    assert_eq!(
+        classify(&pos, 1, None, &u, &pools, FeasibilityRule::Off, &mut memo).err(),
+        Some(ClassifyError::NoLegalAction { slot: 7 })
+    );
+}
+
+#[test]
+fn classify_reads_feasibility_only_at_leaves() {
+    // Two top-only champions locked for Blue → Blue infeasible; the node is still INTERIOR (R1: never terminal).
+    let u = ten();
+    let f = Format::standard();
+    let (t1, t2, j1) = (
+        u.index("T1").unwrap(),
+        u.index("T2").unwrap(),
+        u.index("J1").unwrap(),
+    );
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    // Blue picks T1 at 6; Red pair J1 + T2 at 7–8 would take T2 — instead give Blue both Tops: Blue T1 at 6,
+    // Red J1 + M1 at 7–8, Blue T2 + M2 at 9–10 → Blue holds T1, T2 (two Tops): locked picks cannot match.
+    let (m1, m2) = (u.index("M1").unwrap(), u.index("M2").unwrap());
+    let entries = [
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Pick(t1),
+        Entry::Pick(j1),
+        Entry::Pick(m1),
+        Entry::Pick(t2),
+        Entry::Pick(m2),
+    ];
+    let pos = Position::new(&f, &entries, &pools, &u).expect("position");
+    let mut memo = FeasibilityMemo::default();
+    let calls_before = memo.calls;
+    let kind = classify(&pos, 3, Some(6), &u, &pools, FeasibilityRule::On, &mut memo).unwrap();
+    assert!(
+        matches!(kind, NodeKind::Interior { .. }),
+        "infeasibility never terminates a node"
+    );
+    assert_eq!(
+        memo.calls, calls_before,
+        "no feasibility call at an interior node"
+    );
+    let kind = classify(&pos, 6, Some(6), &u, &pools, FeasibilityRule::On, &mut memo).unwrap();
+    match kind {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::Horizon);
+            assert!(
+                !end.blue_feasible,
+                "two Tops locked: Blue's picks cannot match"
+            );
+            // ten() has exactly two Tops and Blue holds both, so Red cannot fill Top either — the flags are
+            // read at the leaf for BOTH sides, and both are false here.
+            assert!(!end.red_feasible, "no Top left for Red");
+        }
+        NodeKind::Interior { .. } => panic!("horizon leaf"),
+    }
+    assert_eq!(
+        memo.calls,
+        calls_before + 2,
+        "both sides checked once at the leaf"
+    );
 }
