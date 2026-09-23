@@ -1562,3 +1562,20 @@ fn classify_reads_feasibility_only_at_leaves() {
         "both sides checked once at the leaf"
     );
 }
+
+#[test]
+fn fixture_file_rejects_unknown_fields() {
+    // R10: a typo in `epsilon` used to default silently.
+    let raw = std::fs::read_to_string(fixtures_dir().join("01-pair-completion.json")).unwrap();
+    let typo = raw.replace(r#""epsilon""#, r#""epsilonn""#);
+    assert!(typo != raw, "the fixture names epsilon");
+    let err = Fixture::from_json(&typo, "typo").expect_err("unknown field is an error");
+    let text = err.to_string();
+    assert!(text.contains("epsilonn"), "{text}");
+    assert!(matches!(err, FixtureError::Json { .. }));
+    // the slice-4 declaration: absent → false; the two denial probes say true
+    let fx = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json")).unwrap();
+    assert!(!fx.top_line_denies);
+    assert!(probe("probe-dry-pool").top_line_denies);
+    assert!(probe("probe-ban-breaks-role").top_line_denies);
+}

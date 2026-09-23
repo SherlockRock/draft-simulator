@@ -9,6 +9,8 @@ use std::collections::{HashMap, HashSet};
 
 pub const MAX_CHAMPIONS: usize = 32;
 
+/// Index into the universe's champion list. `Universe::new` refuses more than `MAX_CHAMPIONS` (32), so
+/// every index it hands out fits the `u32` bitmask shift in `ChampionSet` by construction (R10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChampionIdx(pub u8);
 

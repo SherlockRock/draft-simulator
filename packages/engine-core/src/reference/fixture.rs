@@ -45,6 +45,7 @@ enum EntryKind {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct EntrySpec {
     slot: usize,
     side: Side,
@@ -61,6 +62,7 @@ enum ExpectedSpec {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PoolsSpec {
     blue: Vec<String>,
     red: Vec<String>,
@@ -71,6 +73,7 @@ fn default_epsilon() -> f64 {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FixtureFile {
     id: String,
     tactic: u32,
@@ -85,6 +88,11 @@ struct FixtureFile {
     #[serde(default = "default_epsilon")]
     epsilon: f64,
     dry_run: DryRun,
+    /// Slice 4 (design § 6): the author declares that the top line legitimately breaks the OPPONENT's
+    /// comp (a denial). The harness asserts the declaration two-sidedly and that a non-denying fixture's
+    /// root value stays below L. Default false.
+    #[serde(default)]
+    top_line_denies: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -124,6 +132,7 @@ pub struct Fixture {
     pub expected_top: Vec<Action>,
     pub epsilon: f64,
     pub dry_run: DryRun,
+    pub top_line_denies: bool,
 }
 
 impl Fixture {
@@ -329,6 +338,7 @@ impl Fixture {
             expected_top,
             epsilon: file.epsilon,
             dry_run: file.dry_run,
+            top_line_denies: file.top_line_denies,
         })
     }
 
