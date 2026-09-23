@@ -209,6 +209,19 @@ fn universe_rejects_bad_tables() {
 }
 
 #[test]
+fn universe_rejects_parameters_whose_l_overflows() {
+    // Each champion's linear term is f64::MAX — finite on its own — but Sigma = Sigma|lin| sums two of
+    // them, overflowing to +inf before loss = 1 + 2*Sigma is computed (R1).
+    let huge = TINY
+        .replace(r#""linear": 2"#, &format!(r#""linear": {:e}"#, f64::MAX))
+        .replace(r#""linear": 1}"#, &format!(r#""linear": {:e}}}"#, f64::MAX));
+    assert!(matches!(
+        Universe::new(spec(&huge)),
+        Err(UniverseError::NonFinite(_))
+    ));
+}
+
+#[test]
 fn champion_set_is_a_bitmask() {
     let (a, b, c) = (ChampionIdx(0), ChampionIdx(5), ChampionIdx(31));
     let s = ChampionSet::EMPTY.with(a).with(c);

@@ -207,6 +207,12 @@ impl Universe {
         // R1: with the board added to a broken side's ±L, separating "feasible" from "this side infeasible"
         // needs L larger than the largest GAP between two boards (≤ 2·max|U|), not the largest board.
         let loss = 1.0 + 2.0 * magnitude;
+        // Individual entries were checked finite above; their SUM can still overflow (e.g. two champions
+        // each with a finite-but-huge `linear`). A non-finite L makes a both-infeasible leaf's board ± L
+        // ± L evaluate to NaN downstream (search.rs, the oracle) — reject it here instead.
+        if !loss.is_finite() {
+            return Err(UniverseError::NonFinite("L".to_string()));
+        }
 
         let meta = spec
             .champions
