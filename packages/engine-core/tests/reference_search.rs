@@ -266,3 +266,205 @@ fn root_errors_are_invalid_input() {
         "{err:?}"
     );
 }
+
+fn budgeted(node_budget: u64) -> SearchParams {
+    SearchParams {
+        node_budget: Some(node_budget),
+        ..unbudgeted(true, true)
+    }
+}
+
+#[test]
+fn a_node_budget_one_short_returns_the_previous_depth_as_partial() {
+    for name in [
+        "02-profitable-denial",
+        "04-partner-protection",
+        "07b-slot6-full-fan",
+    ] {
+        let fx = fixture(name);
+        let position = fx.position();
+        let d_max = max_depth_for(&input(&fx, &position, fx.mode));
+        let control = candidate(&fx, fx.mode, &unbudgeted(true, true));
+        assert!(!control.partial && control.depth == d_max);
+        let cut = candidate(&fx, fx.mode, &budgeted(control.nodes_total - 1));
+        assert!(cut.partial, "{name}");
+        assert_eq!(cut.depth, d_max - 1, "{name}");
+        let shallower = oracle(&fx, Mode::Horizon(d_max - 1));
+        assert_eq!(
+            pairs(&cut),
+            oracle_pairs(&shallower),
+            "{name}: the returned depth is exact at its own horizon"
+        );
+        assert!(cut.nodes_total < control.nodes_total, "{name}");
+        let exact = candidate(&fx, fx.mode, &budgeted(control.nodes_total));
+        assert!(
+            !exact.partial,
+            "{name}: a budget equal to the control's total completes"
+        );
+        assert_eq!(pairs(&exact), pairs(&control), "{name}");
+        assert_eq!(exact.depth, control.depth);
+    }
+}
+
+#[test]
+fn on_depth_fires_once_per_completed_depth_that_is_followed_by_a_deeper_one() {
+    let fx = fixture("04-partner-protection");
+    let position = fx.position();
+    let d_max = max_depth_for(&input(&fx, &position, fx.mode));
+    let mut seen: Vec<(usize, bool, f64)> = Vec::new();
+    let out = search(
+        &input(&fx, &position, fx.mode),
+        &unbudgeted(true, true),
+        &CancelHandle::new(),
+        |o| seen.push((o.depth, o.partial, o.value)),
+    )
+    .unwrap();
+    assert_eq!(seen.len(), d_max - 1, "every depth but the last fires");
+    assert_eq!(
+        seen.iter().map(|s| s.0).collect::<Vec<_>>(),
+        (1..d_max).collect::<Vec<_>>()
+    );
+    assert!(
+        seen.iter().all(|s| !s.1),
+        "a fired depth is complete, never partial"
+    );
+    for (d, _, v) in &seen {
+        assert_eq!(
+            *v,
+            oracle(&fx, Mode::Horizon(*d)).value,
+            "depth {d}'s partial value is exact"
+        );
+    }
+    assert_eq!(out.depth, d_max);
+}
+
+#[test]
+fn an_external_cancel_before_the_search_is_cancelled_not_partial() {
+    let fx = fixture("02-profitable-denial");
+    let position = fx.position();
+    let cancel = CancelHandle::new();
+    cancel.cancel();
+    let err = search(
+        &input(&fx, &position, fx.mode),
+        &unbudgeted(true, true),
+        &cancel,
+        |_| {},
+    )
+    .err();
+    assert!(matches!(err, Some(EngineError::Cancelled)), "{err:?}");
+}
+
+#[test]
+fn a_budget_cut_inside_the_first_iteration_is_a_timeout_at_depth_one() {
+    let fx = probe("probe-immediate-vs-delayed-h1");
+    let position = fx.position();
+    let control = search(
+        &input(&fx, &position, fx.mode),
+        &SearchParams::default(),
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(control.depth, 1);
+    assert_eq!(control.nodes_total, 4);
+    let params = SearchParams {
+        node_budget: Some(3),
+        ..SearchParams::default()
+    };
+    let err = search(
+        &input(&fx, &position, fx.mode),
+        &params,
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .err();
+    assert!(matches!(err, Some(EngineError::Timeout(1))), "{err:?}");
+}
+
+#[test]
+fn a_cancel_inside_an_iteration_returns_the_last_completed_depth_as_partial() {
+    // Cancel from the per-depth hook: it fires after the driver has decided to run depth 2 (after its own
+    // top-of-loop cancel check), so the flag is first seen at depth 2's first wake point and depth 1 comes back
+    // partial. A cancel BETWEEN iterations is `Err(Cancelled)` — the driver's contract — covered by the
+    // pre-search test above.
+    let fx = fixture("04-partner-protection");
+    let position = fx.position();
+    let cancel = CancelHandle::new();
+    let flag = cancel.clone();
+    let out = search(
+        &input(&fx, &position, fx.mode),
+        &unbudgeted(true, true),
+        &cancel,
+        |_| flag.cancel(),
+    )
+    .unwrap();
+    assert!(out.partial);
+    assert_eq!(out.depth, 1);
+    assert_eq!(pairs(&out), oracle_pairs(&oracle(&fx, Mode::Horizon(1))));
+}
+
+#[test]
+fn the_heartbeat_counters_are_fed() {
+    let fx = fixture("04-partner-protection");
+    let position = fx.position();
+    let cancel = CancelHandle::new();
+    let out = search(
+        &input(&fx, &position, fx.mode),
+        &unbudgeted(true, true),
+        &cancel,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(
+        u64::try_from(cancel.nodes_so_far()).unwrap(),
+        out.nodes_total
+    );
+    assert_eq!(cancel.depth_in_progress(), out.depth);
+}
+
+#[test]
+fn a_dry_pool_inside_the_horizon_ends_the_continuation_early() {
+    // probe-dry-pool: Blue takes R1, Red pairs two of R2..R5, Blue's pair takes the last two, Red's pick at
+    // slot 11 has no legal action → DryPool leaf at turns_used 3 (< horizon 4); Red count-infeasible, Blue fine.
+    let fx = probe("probe-dry-pool");
+    let c = candidate(&fx, fx.mode, &unbudgeted(true, true));
+    let o = oracle(&fx, fx.mode);
+    // the probe's own differential check: the Rust oracle reproduces the R1 prototype's dry run exactly
+    assert_eq!(
+        (o.value, o.leaves, o.nodes),
+        (fx.dry_run.value, fx.dry_run.leaves, fx.dry_run.nodes)
+    );
+    assert_eq!(pairs(&c), oracle_pairs(&o));
+    let idx = |n: &str| fx.universe.index(n).unwrap();
+    assert_eq!(c.top_set, vec![Action::Pick(idx("R1"))]);
+    let top = &c.ranked[0];
+    assert_eq!(top.ends.kind, LeafKind::DryPool);
+    assert!(top.ends.blue_feasible && !top.ends.red_feasible);
+    // the S11 guard's ALLOW case, through the same predicate tier_a gates on
+    assert!(!top.breaks_mover(c.mover), "a denial line is allowed");
+    assert!(
+        fx.top_line_denies,
+        "the probe declares that its top line denies"
+    );
+    assert_eq!(
+        top.continuation.len(),
+        2,
+        "R pair, B pair, then Red is dry — one turn short of the horizon"
+    );
+    assert_eq!(
+        top.value,
+        fx.universe.loss() + 4.0,
+        "board (4 + 3 + 3) − (3 + 3) = 4, plus L for Red"
+    );
+    // every Blue line that takes an R ends dry; the B lines reach the horizon
+    for r in &c.ranked {
+        let takes_r = fx
+            .universe
+            .id(match r.action {
+                Action::Pick(c) => c,
+                _ => unreachable!(),
+            })
+            .starts_with('R');
+        assert_eq!(r.ends.kind == LeafKind::DryPool, takes_r, "{:?}", r.action);
+    }
+}
