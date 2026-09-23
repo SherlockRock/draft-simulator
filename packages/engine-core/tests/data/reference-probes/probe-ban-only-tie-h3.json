@@ -103,6 +103,7 @@
     "C8"
   ],
   "epsilon": 1e-09,
+  "top_line_denies": false,
   "dry_run": {
     "value": 0,
     "leaves": 336,

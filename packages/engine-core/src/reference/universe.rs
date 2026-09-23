@@ -193,15 +193,18 @@ impl Universe {
             counter[over][of] = -e.value;
         }
 
-        let mut loss = 1.0;
+        let mut magnitude = 0.0;
         for c in &spec.champions {
-            loss += c.linear.abs();
+            magnitude += c.linear.abs();
         }
         for a in 0..n {
             for b in (a + 1)..n {
-                loss += synergy[a][b].abs() + counter[a][b].abs();
+                magnitude += synergy[a][b].abs() + counter[a][b].abs();
             }
         }
+        // R1: with the board added to a broken side's ±L, separating "feasible" from "this side infeasible"
+        // needs L larger than the largest GAP between two boards (≤ 2·max|U|), not the largest board.
+        let loss = 1.0 + 2.0 * magnitude;
 
         let meta = spec
             .champions
@@ -257,7 +260,7 @@ impl Universe {
         self.counter[blue.0 as usize][red.0 as usize]
     }
 
-    /// `L` (D3 ii): strictly larger than any reachable |U| in this universe.
+    /// `L` (R1): strictly larger than the gap between any two reachable board values in this universe.
     pub fn loss(&self) -> f64 {
         self.loss
     }

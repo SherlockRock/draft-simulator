@@ -234,7 +234,7 @@
   "epsilon": 1e-09,
   "dry_run": {
     "value": 0.0,
-    "leaves": 460,
-    "nodes": 629
+    "leaves": 600,
+    "nodes": 829
   }
 }

@@ -7,9 +7,10 @@
 //! U = Σ lin(b) + Σ_{b<b'} syn(b,b') − Σ lin(r) − Σ_{r<r'} syn(r,r') + Σ_{b,r} ctr(b,r),   ctr(b,r) = −ctr(r,b)
 //! ```
 //!
-//! over the picks on the board; bans have no term. A position where a side cannot complete
-//! five roles is terminal: `+L` if Red cannot, `−L` if Blue cannot, `0` if neither can, with
-//! `L` larger than any reachable |U| (D3 ii, via `crate::feasibility::can_complete_roles`).
+//! over the picks on the board; bans have no term. A side that cannot complete five roles pays
+//! `L` at the leaf — `U_leaf = U − L·[Blue infeasible] + L·[Red infeasible]`, both infeasible →
+//! `U` — and play never stops early; `L = 1 + 2·(Σ|lin| + Σ|syn| + Σ|ctr|)` separates the three
+//! bands (slice-4 R1, via `crate::feasibility::can_complete_roles`).
 //!
 //! Two checks per Tier A fixture (D6): (1) the oracle's top set equals the author's intended
 //! set — proves the fixture; (2) a candidate engine's top action is in the oracle's top set —

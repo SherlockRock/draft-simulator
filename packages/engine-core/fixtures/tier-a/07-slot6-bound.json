@@ -1,7 +1,7 @@
 {
   "id": "07-slot6-bound",
   "tactic": 7,
-  "notes": "Six real bans, Blue's T1 at slot 6, Red's pair at 7-8 is the root, Blue's pair answers (horizon 2). J1+S1 synergise +8 on linear 1 each (10 together) and are in both pools; Blue's best solos M2+A2 sum to 8. Each side has one private champion per role so no pair can exhaust a role for the other side (otherwise the side behind at the horizon forces 0 through mutual infeasibility). Red takes J1+S1: Blue answers M2+A2, value -1. This is the pair-then-pair CORRECTNESS case (21 root pairs). It is not a budget stress: slice 4 adds a sibling 07b with the mover's pool = all 12 available (66 root pairs), feasibility off (a full-fan pool lets a pair exhaust the other side's role), plus an unbudgeted control run, and puts the candidate's depth-2 budget assertion there.",
+  "notes": "Six real bans, Blue's T1 at slot 6, Red's pair at 7-8 is the root, Blue's pair answers (horizon 2). J1+S1 synergise +8 on linear 1 each (10 together) and are in both pools; Blue's best solos M2+A2 sum to 8. Each side has one private champion per role, so the Red fan is C(7,2) = 21 pairs. Red takes J1+S1: Blue answers M2+A2, value -1. This is the pair-then-pair CORRECTNESS case; the widest root fan is 07b.",
   "format": "standard",
   "feasibility": "on",
   "universe": {
@@ -228,7 +228,7 @@
   "epsilon": 1e-09,
   "dry_run": {
     "value": -1.0,
-    "leaves": 342,
-    "nodes": 361
+    "leaves": 370,
+    "nodes": 391
   }
 }

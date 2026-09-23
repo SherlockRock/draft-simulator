@@ -1,6 +1,8 @@
 //! The utility (design § 3, D3): the antisymmetric FM structural logit over the picks on the
-//! board, Blue-perspective, with the feasibility terminal rule. A trait so tests can wrap it
-//! (the strict-transform invariant) and so slice 4's alpha-beta consumes the same surface.
+//! board, Blue-perspective, with the leaf-carried additive feasibility rule (slice-4 R1: a side
+//! that cannot complete five roles pays L at the leaf; play never stops early). A trait so tests
+//! can wrap it (the strict-transform invariant) and so slice 4's alpha-beta consumes the same
+//! surface.
 
 use super::universe::{ChampionIdx, Universe};
 
@@ -50,12 +52,15 @@ impl Universe {
 }
 
 impl Objective for Universe {
+    /// R1 (slice 4): `board − L·[Blue infeasible] + L·[Red infeasible]`; both infeasible → the board.
     fn value(&self, leaf: &Leaf<'_>) -> f64 {
-        match (leaf.blue_feasible, leaf.red_feasible) {
-            (false, false) => 0.0,
-            (true, false) => self.loss(),
-            (false, true) => -self.loss(),
-            (true, true) => self.board_value(leaf.blue, leaf.red),
+        let mut u = self.board_value(leaf.blue, leaf.red);
+        if !leaf.blue_feasible {
+            u -= self.loss();
         }
+        if !leaf.red_feasible {
+            u += self.loss();
+        }
+        u
     }
 }

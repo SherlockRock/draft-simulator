@@ -75,6 +75,7 @@
     "X"
   ],
   "epsilon": 1e-09,
+  "top_line_denies": false,
   "dry_run": {
     "value": -3.0,
     "leaves": 8,

@@ -1,0 +1,197 @@
+{
+  "id": "probe-dry-pool",
+  "tactic": 0,
+  "notes": "Standard format, six real bans, root slot 6 (Blue pick), horizon 4 (B pick, R pair, B pair, R pick), feasibility on. Red's pool is R1..R5 (one per role, linear 4/3/3/3/3), ALL also in Blue's pool; Blue's private B1..B5 are worth 1. Red is feasible at the root with ZERO margin (pool 5 = remaining picks 5, one per role): trim one champion and the probe becomes RootInfeasible, not a dry pool. The instant Blue takes any R, Red is count-infeasible (4 < 5), so every root action ends with Red broken. Blue takes R1 (unique best, 59 vs 57); Red pairs two of the rest; Blue's pair takes the last two; Red's pick at slot 11 has no legal action -> a DryPool leaf inside the horizon (turns_used 3 < 4), Red broken, Blue fine: value = board 4 + L 55. Exists so the search's DryPool path and RankedAction::breaks_mover's allow case (the opponent broken, the mover intact) have coverage; top_line_denies is declared true.",
+  "format": "standard",
+  "feasibility": "on",
+  "universe": {
+    "champions": [
+      {
+        "id": "X1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "X6",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "R1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 4
+      },
+      {
+        "id": "R2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "R3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "R4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "R5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 3
+      },
+      {
+        "id": "B1",
+        "positions": [
+          "Top"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B2",
+        "positions": [
+          "Jungle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B3",
+        "positions": [
+          "Middle"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B4",
+        "positions": [
+          "Adc"
+        ],
+        "linear": 1
+      },
+      {
+        "id": "B5",
+        "positions": [
+          "Support"
+        ],
+        "linear": 1
+      }
+    ],
+    "synergy": [],
+    "counter": []
+  },
+  "pools": {
+    "blue": [
+      "R1",
+      "R2",
+      "R3",
+      "R4",
+      "R5",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "red": [
+      "R1",
+      "R2",
+      "R3",
+      "R4",
+      "R5"
+    ]
+  },
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X1"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X2"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X3"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X4"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "X5"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "X6"
+    }
+  ],
+  "oracle": {
+    "horizon": 4
+  },
+  "expected_top": [
+    "R1"
+  ],
+  "epsilon": 1e-09,
+  "top_line_denies": true,
+  "dry_run": {
+    "value": 59.0,
+    "leaves": 3180,
+    "nodes": 4920
+  }
+}

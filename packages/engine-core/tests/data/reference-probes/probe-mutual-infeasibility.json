@@ -1,7 +1,7 @@
 {
   "id": "probe-mutual-infeasibility",
   "tactic": 0,
-  "notes": "Red pair root, horizon 2, both pools cover the universe, two champions per role. Red's honest pair J1+S1 is worth exactly 0 against Blue's M2+A2 answer, and taking both Middles or both Adcs also yields 0 (both sides infeasible). Top set = {J1+S1, M2+M3, A2+A3}, value 0.",
+  "notes": "Red pair root, horizon 2, both pools cover the universe, two champions per role. Under the slice-3 rule (terminate on infeasibility, both infeasible -> 0) Red could tie its honest J1+S1 (0) by taking both Middles or both Adcs. Under the slice-4 rule (R1: play on, leaf = board - L[Blue inf] + L[Red inf]) Blue answers the suicide with its strong picks before the board is scored, so the honest pair is the unique top action at 0.",
   "format": "standard",
   "feasibility": "on",
   "universe": {
@@ -232,22 +232,15 @@
   },
   "expected_top": [
     [
-      "A2",
-      "A3"
-    ],
-    [
       "J1",
       "S1"
-    ],
-    [
-      "M2",
-      "M3"
     ]
   ],
   "epsilon": 1e-09,
+  "top_line_denies": false,
   "dry_run": {
     "value": 0.0,
-    "leaves": 2574,
-    "nodes": 2631
+    "leaves": 2970,
+    "nodes": 3036
   }
 }

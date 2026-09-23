@@ -1,10 +1,12 @@
 //! The two exact oracles (design § 4, D2): plain full-width minimax on a Blue-perspective
 //! value — the mover's slot takes max (Blue) or min (Red), no negation (S1) — either to the end
 //! of the draft or to a fixed number of turns with the static utility at the horizon. No
-//! pruning, no shortlists, no memoisation of the search (S6); feasibility is checked at every
-//! node (S5) and infeasibility is terminal (D3 ii).
+//! pruning, no shortlists, no memoisation of the search (S6); node classification is shared with
+//! the reference search (`node::classify`); feasibility is a leaf input, never a terminal
+//! (slice-4 R1).
 
 use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::node::{classify, ClassifyError, LeafEnd, NodeKind};
 use super::objective::{Leaf, Objective};
 use super::state::{Action, Pools, Position};
 use super::universe::Universe;
@@ -58,16 +60,24 @@ pub enum OracleError {
     NoLegalAction { slot: usize },
     #[error("the draft is complete")]
     DraftComplete,
-    /// The root itself is terminal by D3 ii; there is no decision to rank (a mis-authored fixture).
+    /// A side is already infeasible at the root; there is no decision to rank (a mis-authored fixture).
     #[error(
-        "the root is already terminal: blue_feasible={blue_feasible}, red_feasible={red_feasible}"
+        "the root is already infeasible: blue_feasible={blue_feasible}, red_feasible={red_feasible}"
     )]
-    RootTerminal {
+    RootInfeasible {
         blue_feasible: bool,
         red_feasible: bool,
     },
     #[error("a horizon of 0 evaluates the root and decides nothing")]
     HorizonZero,
+}
+
+impl From<ClassifyError> for OracleError {
+    fn from(err: ClassifyError) -> Self {
+        match err {
+            ClassifyError::NoLegalAction { slot } => OracleError::NoLegalAction { slot },
+        }
+    }
 }
 
 pub struct OracleInput<'a> {
@@ -99,38 +109,35 @@ impl Search<'_> {
         )
     }
 
-    fn leaf(&mut self, position: &Position<'_>, blue_feasible: bool, red_feasible: bool) -> f64 {
+    fn leaf(&mut self, position: &Position<'_>, end: LeafEnd) -> f64 {
         self.leaves += 1;
         self.input.objective.value(&Leaf {
             blue: position.picks(Side::Blue),
             red: position.picks(Side::Red),
-            blue_feasible,
-            red_feasible,
+            blue_feasible: end.blue_feasible,
+            red_feasible: end.red_feasible,
         })
     }
 
     /// Minimax value of `position`, `turns_used` turns below the root.
     fn value(&mut self, position: &Position<'_>, turns_used: usize) -> Result<f64, OracleError> {
         self.nodes += 1;
-        let blue_feasible = self.feasible(Side::Blue, position);
-        let red_feasible = self.feasible(Side::Red, position);
-        if !(blue_feasible && red_feasible) {
-            return Ok(self.leaf(position, blue_feasible, red_feasible));
-        }
-        let Some(slot) = position.next_slot() else {
-            return Ok(self.leaf(position, true, true));
+        let horizon = match self.input.mode {
+            Mode::FullRemainder => None,
+            Mode::Horizon(h) => Some(h),
         };
-        if let Mode::Horizon(h) = self.input.mode {
-            if turns_used >= h {
-                return Ok(self.leaf(position, true, true));
-            }
-        }
-        let actions = position.legal_actions(self.input.universe, self.input.pools);
-        if actions.is_empty() {
-            return Err(OracleError::NoLegalAction {
-                slot: position.slot_index(),
-            });
-        }
+        let (slot, actions) = match classify(
+            position,
+            turns_used,
+            horizon,
+            self.input.universe,
+            self.input.pools,
+            self.input.feasibility,
+            &mut self.memo,
+        )? {
+            NodeKind::Leaf(end) => return Ok(self.leaf(position, end)),
+            NodeKind::Interior { slot, actions } => (slot, actions),
+        };
         let mut best: Option<f64> = None;
         for action in actions {
             let v = self.value(&position.apply(action), turns_used + 1)?;
@@ -140,7 +147,7 @@ impl Search<'_> {
                 (Some(b), Side::Red) => b.min(v),
             });
         }
-        Ok(best.expect("actions is non-empty, checked above"))
+        Ok(best.expect("Interior carries at least one action"))
     }
 }
 
@@ -178,14 +185,14 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
         leaves: 0,
         nodes: 0,
     };
-    // The root is subject to the same terminal rule as every other node (D3 ii), and — as at every node —
-    // the terminal check comes BEFORE action generation: a starved root is "terminal", not "no legal action".
+    // A root where a side is already infeasible has nothing to rank (R1 keeps this as an error). Checked
+    // before action generation: a starved root is "infeasible", not "no legal action".
     let (blue_feasible, red_feasible) = (
         search.feasible(Side::Blue, position),
         search.feasible(Side::Red, position),
     );
     if !(blue_feasible && red_feasible) {
-        return Err(OracleError::RootTerminal {
+        return Err(OracleError::RootInfeasible {
             blue_feasible,
             red_feasible,
         });

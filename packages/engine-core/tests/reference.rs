@@ -157,8 +157,8 @@ fn universe_interns_ids_and_stores_symmetric_and_antisymmetric_tables() {
         "the reverse direction is the negation"
     );
     assert_eq!(u.counter(a, a), 0.0);
-    // L = 1 + Σ|lin| + Σ|syn| + Σ|ctr| = 1 + 3.5 + 3 + 4
-    assert_eq!(u.loss(), 11.5);
+    // L = 1 + 2·(Σ|lin| + Σ|syn| + Σ|ctr|) = 1 + 2·(3.5 + 3 + 4)   (slice-4 R1)
+    assert_eq!(u.loss(), 22.0);
     assert_eq!(u.all().len(), 3);
     let meta = u.champion_meta();
     assert_eq!(meta["B"].positions, vec![Role::Jungle, Role::Top]);
@@ -248,9 +248,14 @@ fn board_value_is_the_d3_formula() {
 }
 
 #[test]
-fn terminal_rule_orders_infeasibility_above_any_logit() {
+fn leaf_rule_is_additive_and_l_separates_the_bands() {
+    // R1: U = board − L·[Blue infeasible] + L·[Red infeasible]; both infeasible → the board.
     let u = Universe::new(spec(TINY)).expect("valid");
-    let (a, b) = (u.index("A").unwrap(), u.index("B").unwrap());
+    let (a, b, c) = (
+        u.index("A").unwrap(),
+        u.index("B").unwrap(),
+        u.index("C").unwrap(),
+    );
     let (blue, red) = ([a], [b]);
     let leaf = |bf, rf| Leaf {
         blue: &blue,
@@ -258,19 +263,58 @@ fn terminal_rule_orders_infeasibility_above_any_logit() {
         blue_feasible: bf,
         red_feasible: rf,
     };
-    assert_eq!(u.value(&leaf(true, true)), u.board_value(&[a], &[b]));
+    let board = u.board_value(&[a], &[b]);
+    assert_eq!(u.value(&leaf(true, true)), board);
     assert_eq!(
         u.value(&leaf(true, false)),
-        u.loss(),
-        "Red cannot complete → +L"
+        board + u.loss(),
+        "Red cannot complete → board + L"
     );
     assert_eq!(
         u.value(&leaf(false, true)),
-        -u.loss(),
-        "Blue cannot complete → −L"
+        board - u.loss(),
+        "Blue cannot complete → board − L"
     );
-    assert_eq!(u.value(&leaf(false, false)), 0.0, "neither can → 0");
-    assert!(u.loss() > u.board_value(&[a, b], &[]).abs());
+    assert_eq!(
+        u.value(&leaf(false, false)),
+        board,
+        "neither can → the board"
+    );
+
+    // Separation over EVERY board TINY can show (each of A, B, C on Blue, on Red, or absent):
+    // any Blue-infeasible leaf < any feasible leaf < any Red-infeasible leaf. This is why L doubled.
+    let all = [a, b, c];
+    let mut boards: Vec<(Vec<ChampionIdx>, Vec<ChampionIdx>)> = Vec::new();
+    for code in 0..27u32 {
+        let (mut bl, mut r) = (Vec::new(), Vec::new());
+        for (i, ch) in all.iter().enumerate() {
+            match (code / 3u32.pow(u32::try_from(i).expect("three champions index into u32"))) % 3 {
+                1 => bl.push(*ch),
+                2 => r.push(*ch),
+                _ => {}
+            }
+        }
+        boards.push((bl, r));
+    }
+    let values = |bf: bool, rf: bool| -> Vec<f64> {
+        boards
+            .iter()
+            .map(|(bl, r)| {
+                u.value(&Leaf {
+                    blue: bl,
+                    red: r,
+                    blue_feasible: bf,
+                    red_feasible: rf,
+                })
+            })
+            .collect()
+    };
+    let max = |v: &[f64]| v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let min = |v: &[f64]| v.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(max(&values(false, true)) < min(&values(true, true)));
+    assert!(max(&values(true, true)) < min(&values(true, false)));
+    assert!(max(&values(false, false)) < min(&values(true, false)));
+    assert!(max(&values(false, true)) < min(&values(false, false)));
 }
 
 use engine_core::reference::state::{Action, Entry, Pools, Position, PositionError};
@@ -616,7 +660,7 @@ fn load_dir_reads_the_eight_fixtures_in_name_order() {
         Fixture::load_dir(&probes_dir())
             .unwrap_or_else(|e| panic!("{e}"))
             .len(),
-        10
+        11
     );
 }
 
@@ -846,7 +890,7 @@ fn assert_dry_run(fx: &Fixture, eval: &Evaluation) {
     assert_eq!(eval.nodes, fx.dry_run.nodes, "{}: nodes", fx.id);
 }
 
-/// A strictly increasing map over the leaf value, applied after the terminal rule (D3 ii).
+/// A strictly increasing map over the leaf value, applied after the leaf rule (R1).
 struct Transformed<'a, F: Fn(f64) -> f64>(&'a Universe, F);
 
 impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
@@ -978,31 +1022,36 @@ fn a_ban_that_removes_the_last_champion_for_a_role_is_worth_l() {
         eval.top_set,
         vec![Action::Ban(fx.universe.index("S1").unwrap())]
     );
-    assert_eq!(eval.value, fx.universe.loss());
+    // R1: L (47 for this universe) plus the board Red is left with after the play-out (−1) — measured 46.
+    assert_eq!(eval.value, 46.0);
+    assert_eq!(eval.value, fx.universe.loss() - 1.0);
     assert_dry_run(&fx, &eval);
 }
 
 #[test]
-fn mutual_infeasibility_ties_the_honest_line_at_zero() {
-    // design S11: both pools cover the universe and each role has two champions; Red at 0 can also
-    // reach 0 by taking both Middles or both Adcs (both sides infeasible → 0).
+fn mutual_infeasibility_no_longer_ties_the_honest_line() {
+    // S11's mover-side tie resolved (slice-4 R1; the residual is in R1's why): under "play on, additive leaf" a suicide pair lets Blue answer before the board is
+    // scored. Red M2+M3: Blue takes J1+S1 itself (T1 2 + 1 + 1 + syn 8 = 12) vs Red 7 → +5; A2+A3 symmetric → +5.
+    // Red's honest J1+S1 → Blue M2+A2, 10 vs 10 → 0, the unique top action.
     let fx = probe("probe-mutual-infeasibility");
     let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
     let idx = |n: &str| fx.universe.index(n).unwrap();
-    let mut expected = vec![
-        Action::pair(idx("A2"), idx("A3")),
-        Action::pair(idx("J1"), idx("S1")),
-        Action::pair(idx("M2"), idx("M3")),
-    ];
-    expected.sort();
-    assert_eq!(eval.top_set, expected);
+    assert_eq!(eval.top_set, vec![Action::pair(idx("J1"), idx("S1"))]);
     assert_eq!(eval.value, 0.0);
+    let value_of = |a: Action| {
+        eval.ranked
+            .iter()
+            .find(|av| av.action == a)
+            .map(|av| av.value)
+    };
+    assert_eq!(value_of(Action::pair(idx("M2"), idx("M3"))), Some(5.0));
+    assert_eq!(value_of(Action::pair(idx("A2"), idx("A3"))), Some(5.0));
     assert_dry_run(&fx, &eval);
 }
 
 #[test]
 fn ranking_is_invariant_under_a_strictly_increasing_transform_including_terminals() {
-    // D3 ii: any transform applied to U must preserve terminal ordering. Fixture 05 has a −L branch.
+    // R1: any transform applied to U must preserve the band ordering. Fixture 05 has a board − L branch.
     for name in ["02-profitable-denial", "05-comp-breaking-pair"] {
         let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
             .unwrap_or_else(|e| panic!("{e}"));
@@ -1015,7 +1064,7 @@ fn ranking_is_invariant_under_a_strictly_increasing_transform_including_terminal
             .evaluate_with(&Transformed(&fx.universe, |x| x * x * x + x), fx.mode)
             .unwrap_or_else(|e| panic!("{e}"));
         // The hazard D3 ii names: a saturating map narrowing gaps toward an artificial tie. ε (1e-9) lives in the
-        // objective's output scale; x/(1+|x|) keeps every gap above 1e-4 at |x| ≤ 60, so ties stay exact and distinct stay distinct.
+        // objective's output scale; x/(1+|x|) keeps every gap above 1e-4 at |x| ≤ 80 (05's values reach board − L with L = 69), so ties stay exact and distinct stay distinct.
         let saturating = fx
             .evaluate_with(&Transformed(&fx.universe, |x| x / (1.0 + x.abs())), fx.mode)
             .unwrap_or_else(|e| panic!("{e}"));
@@ -1061,8 +1110,8 @@ fn hand_derived_root_values_independent_of_both_oracles() {
     );
     assert_eq!(
         value_of(&eval, Action::Pick(fx.universe.index("T3").unwrap())),
-        Some(-fx.universe.loss()),
-        "a fourth Top: Blue infeasible"
+        Some(8.0 - fx.universe.loss()),
+        "a fourth Top: Blue infeasible, board 8 after the play-out, minus L (73) = −65 (measured)"
     );
     // 02: ban S1 → boards tie at 0; any other ban → Red completes J1+S1 for +8 → −8
     let fx = load("02-profitable-denial");
@@ -1086,7 +1135,8 @@ fn hand_derived_root_values_independent_of_both_oracles() {
     );
     assert_eq!(
         value_of(&eval, Action::pair(idx("M3"), idx("M4"))),
-        Some(-fx.universe.loss())
+        Some(11.0 - fx.universe.loss()),
+        "three Middles: Blue infeasible, board 11 minus L (69) = −58 (measured)"
     );
 }
 
@@ -1212,7 +1262,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         input(&root, Mode::Horizon(0)).err(),
         Some(OracleError::HorizonZero)
     );
-    // an already-infeasible root is terminal, not a decision: fixture 02 with Blue's supports removed from its pool
+    // an already-infeasible root is not a decision (nothing to rank): fixture 02 with Blue's supports removed from its pool
     let fx = Fixture::load_file(&fixtures_dir().join("02-profitable-denial.json"))
         .unwrap_or_else(|e| panic!("{e}"));
     let (s4, s5) = (
@@ -1236,12 +1286,12 @@ fn oracle_bounds_are_asserted_at_the_root() {
     .err();
     assert_eq!(
         err,
-        Some(OracleError::RootTerminal {
+        Some(OracleError::RootInfeasible {
             blue_feasible: false,
             red_feasible: true
         })
     );
-    // the terminal check precedes action generation at the root too: fixture 01's mid-pair root with Blue's
+    // root feasibility precedes action generation at the root: fixture 01's mid-pair root with Blue's
     // remaining options (S1, S2, T3) removed from its pool has no legal action AND is infeasible — infeasible wins
     let fx = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json"))
         .unwrap_or_else(|e| panic!("{e}"));
@@ -1264,7 +1314,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     .err();
     assert_eq!(
         err,
-        Some(OracleError::RootTerminal {
+        Some(OracleError::RootInfeasible {
             blue_feasible: false,
             red_feasible: true
         }),
