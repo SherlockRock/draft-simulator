@@ -46,6 +46,7 @@ import {
     deriveIsComputing,
     eventListChanged,
     heartbeatMatchesState,
+    isFailedComputeUpdate,
     partialMatchesState,
     shouldCacheSnapshot,
     type LiveHeartbeat
@@ -235,6 +236,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
     const [engineHeartbeat, setEngineHeartbeat] = createSignal<LiveHeartbeat | null>(
         null
     );
+    // Target note D10 item 2: the latest event id whose compute ended without a
+    // result (the backend's explicit `snapshot: null`). Keyed by event id so it
+    // applies to that state only; cleared by any event/draft change, by a
+    // heartbeat (a new compute is running) and by a cache hit.
+    const [computeFailedFor, setComputeFailedFor] = createSignal<string | null>(null);
     const [viewingGameNumber, setViewingGameNumberSignal] = createSignal<number | null>(
         null
     );
@@ -289,20 +295,31 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
                 nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
             );
             setEngineHeartbeat(null);
+            setComputeFailedFor(null);
         });
         console.log("[nav] cache hit — restored prior snapshot from local cache");
     };
 
+    const currentLatestEventId = () => {
+        const events = navigatorContext().events;
+        return (
+            lastEventIdSeen() ?? (events.length > 0 ? events[events.length - 1].id : null)
+        );
+    };
+
+    const computeFailed = createMemo(() => {
+        const failedFor = computeFailedFor();
+        return failedFor !== null && failedFor === currentLatestEventId();
+    });
+
     const isComputing = createMemo(() => {
         const ctx = navigatorContext();
-        const events = ctx.events;
         return deriveIsComputing({
-            eventCount: events.length,
-            latestEventId:
-                lastEventIdSeen() ??
-                (events.length > 0 ? events[events.length - 1].id : null),
+            eventCount: ctx.events.length,
+            latestEventId: currentLatestEventId(),
             snapshot: ctx.snapshot,
-            hasLiveHeartbeat: engineHeartbeat() !== null
+            hasLiveHeartbeat: engineHeartbeat() !== null,
+            computeFailed: computeFailed()
         });
     });
 
@@ -315,6 +332,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         setSyntheticTreeSignal(null);
         setLastEventIdSeen(null);
         setEngineHeartbeat(null);
+        setComputeFailedFor(null);
         setNavigatorContext(initialNavigatorState());
     };
 
@@ -486,6 +504,11 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         // partial. The heartbeat clear below needs an actual change of the
         // event LIST instead; every other use of `eventsChanged` is unchanged.
         const eventListActuallyChanged = eventListChanged(prevEvents, nextEvents);
+        // D10 item 2: an explicit `snapshot: null` on the same draft is the
+        // backend's "compute failed" broadcast. `finalSnapshot` below keeps the
+        // previous snapshot for it, so without this flag the state would read
+        // "still computing" forever (no matching snapshot, live heartbeat kept).
+        const failedCompute = isFailedComputeUpdate(data, draftChanged);
         const snapshotChanged =
             nextSnapshot !== prevSnapshot && nextSnapshot !== undefined;
 
@@ -670,9 +693,18 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             if (
                 eventListActuallyChanged ||
                 draftChanged ||
+                failedCompute ||
                 (finalSnapshot && finalSnapshot.meta?.inProgress !== true)
             ) {
                 setEngineHeartbeat(null);
+            }
+            if (eventListActuallyChanged || draftChanged) {
+                setComputeFailedFor(null);
+            }
+            if (failedCompute) {
+                setComputeFailedFor(
+                    nextEvents.length > 0 ? nextEvents[nextEvents.length - 1].id : null
+                );
             }
             setNavigatorContext((p) => ({
                 session: data.session ?? p.session,
@@ -788,6 +820,8 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
             (ctx.events.length > 0 ? ctx.events[ctx.events.length - 1].id : null);
         if (!heartbeatMatchesState(hb, ctx.draft?.id ?? null, latestEventId)) return;
         setEngineHeartbeat({ ...hb, receivedAt: Date.now() });
+        // A heartbeat for this state means a new compute is running for it.
+        setComputeFailedFor(null);
     };
 
     createEffect(() => {
@@ -1110,6 +1144,7 @@ const NavigatorWorkflowInner: Component<{ children?: JSX.Element }> = (props) =>
         syntheticTree: effectiveTree,
         effectiveScenarios,
         isComputing,
+        computeFailed,
         currentMeta,
         engineHeartbeat,
         joinSession,

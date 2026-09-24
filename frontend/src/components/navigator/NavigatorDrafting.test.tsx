@@ -137,9 +137,10 @@ const emptyTree: NavigatorTreeNode = {
 function mount(
     order: string[],
     initialEngineTree: NavigatorTreeNode,
-    opts: { computing?: boolean; archive?: boolean } = {}
+    opts: { computing?: boolean; archive?: boolean; failed?: boolean } = {}
 ) {
     const computing = opts.computing ?? false;
+    const failed = opts.failed ?? false;
     const evs = events(order);
     const [engineTree, setEngineTree] = createSignal(initialEngineTree);
     const meta = {
@@ -208,6 +209,7 @@ function mount(
         syntheticTree: synthetic,
         effectiveScenarios: () => [],
         isComputing: () => computing,
+        computeFailed: () => failed,
         currentMeta: () => state.snapshot?.meta ?? null,
         engineHeartbeat: () => null,
         joinSession: vi.fn(),
@@ -316,6 +318,14 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         );
         expect(selected?.getAttribute("data-rank")).toBe("1");
         expect(selected?.textContent).toContain("Taric");
+    });
+    test("a failed compute renders the failed pill (target note D10 item 2)", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree, { failed: true });
+        const pill = container.querySelector("[data-engine-status]");
+        expect(pill?.getAttribute("data-engine-status")).toBe("failed");
+        expect(pill?.textContent).toBe(
+            "✕ Engine failed · next pick, ban or undo retries"
+        );
     });
     test("item7: empty pill with the infeasibility reason and the empty-fan card", () => {
         const { container, emitUndo } = mount(ITEM7_ORDER, emptyTree);

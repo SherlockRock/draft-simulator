@@ -98,6 +98,7 @@ const NavigatorDrafting: Component = () => {
         navigatorContext,
         syntheticTree,
         isComputing,
+        computeFailed,
         currentMeta,
         engineHeartbeat,
         emitPickStep,
@@ -272,7 +273,8 @@ const NavigatorDrafting: Component = () => {
             reason: () => emptyFanReason(picksOf("blue"), picksOf("red"), nameOf),
             progress: progress(),
             budgetHit: currentMeta()?.budgetHit === true,
-            heartbeatStaleMs: heartbeatStaleMs()
+            heartbeatStaleMs: heartbeatStaleMs(),
+            computeFailed: viewingArchive() ? false : computeFailed()
         })
     );
 

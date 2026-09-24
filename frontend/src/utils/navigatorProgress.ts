@@ -46,17 +46,33 @@ export interface ComputingInput {
         meta: { inProgress?: boolean } | null;
     } | null;
     hasLiveHeartbeat: boolean;
+    /** The compute for this very state ended without a result (target note
+     *  D10 item 2). Nothing is running, whatever the snapshot says. */
+    computeFailed: boolean;
 }
 
 /** Design § 4: event id lags, OR the snapshot is a partial, OR a live heartbeat
  *  says a recompute is running for this very state (swap/branch recomputes
- *  change no event). */
+ *  change no event). A failed compute for this state overrides all three:
+ *  without it, "no matching snapshot" reads as "still computing" forever. */
 export function deriveIsComputing(input: ComputingInput): boolean {
     if (input.eventCount === 0) return false;
+    if (input.computeFailed) return false;
     if (input.snapshot === null) return true;
     if (input.snapshot.after_event_id !== input.latestEventId) return true;
     if (input.snapshot.meta?.inProgress === true) return true;
     return input.hasLiveHeartbeat;
+}
+
+/** A `navigatorDraftUpdate` whose `snapshot` is an EXPLICIT null on the same
+ *  draft is the backend's "compute failed" broadcast: interim updates (after a
+ *  pick, ban or undo) omit the field, and the only other explicit null is the
+ *  next-game update, which changes the draft. Target note D10 item 2. */
+export function isFailedComputeUpdate(
+    update: { snapshot?: object | null },
+    draftChanged: boolean
+): boolean {
+    return update.snapshot === null && !draftChanged;
 }
 
 /** Partials never enter the local snapshot cache (design § 4). */

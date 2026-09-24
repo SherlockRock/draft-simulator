@@ -17,7 +17,8 @@ const base: EngineStatusInput = {
     reason: () => "should not be called",
     progress: null,
     budgetHit: false,
-    heartbeatStaleMs: null
+    heartbeatStaleMs: null,
+    computeFailed: false
 };
 
 describe("deriveEngineStatus (design § 4 table)", () => {
@@ -78,6 +79,31 @@ describe("deriveEngineStatus (design § 4 table)", () => {
         expect(formatEngineStatus(deriveEngineStatus({ ...base, meta: null }))).toBe(
             "● 8 candidates · depth ? · ? ms"
         );
+    });
+});
+
+describe("failed compute (target note D10 item 2)", () => {
+    test("a failed compute is its own pill, not thinking and not ready", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            computeFailed: true,
+            hasSnapshot: false,
+            fanCount: 0
+        });
+        expect(s).toEqual({ kind: "failed" });
+        expect(formatEngineStatus(s)).toBe(
+            "✕ Engine failed · next pick, ban or undo retries"
+        );
+    });
+    test("a failed recompute over an earlier final still reads failed, not ready", () => {
+        expect(deriveEngineStatus({ ...base, computeFailed: true })).toEqual({
+            kind: "failed"
+        });
+    });
+    test("draft complete beats failed", () => {
+        expect(
+            deriveEngineStatus({ ...base, computeFailed: true, draftComplete: true })
+        ).toEqual({ kind: "complete" });
     });
 });
 

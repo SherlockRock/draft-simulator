@@ -4,6 +4,7 @@ import {
     deriveIsComputing,
     eventListChanged,
     heartbeatMatchesState,
+    isFailedComputeUpdate,
     partialMatchesState,
     shouldCacheSnapshot
 } from "./navigatorProgress";
@@ -51,36 +52,117 @@ describe("deriveIsComputing (design § 4)", () => {
     });
     test("no events → never computing", () => {
         expect(
-            deriveIsComputing({ eventCount: 0, latestEventId: null, snapshot: null, hasLiveHeartbeat: true })
+            deriveIsComputing({
+                eventCount: 0,
+                latestEventId: null,
+                snapshot: null,
+                hasLiveHeartbeat: true,
+                computeFailed: false
+            })
         ).toBe(false);
     });
     test("no snapshot yet with events → computing", () => {
         expect(
-            deriveIsComputing({ eventCount: 1, latestEventId: "e1", snapshot: null, hasLiveHeartbeat: false })
+            deriveIsComputing({
+                eventCount: 1,
+                latestEventId: "e1",
+                snapshot: null,
+                hasLiveHeartbeat: false,
+                computeFailed: false
+            })
         ).toBe(true);
     });
     test("snapshot lagging the latest event → computing", () => {
         expect(
-            deriveIsComputing({ eventCount: 2, latestEventId: "e2", snapshot: snap("e1"), hasLiveHeartbeat: false })
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e1"),
+                hasLiveHeartbeat: false,
+                computeFailed: false
+            })
         ).toBe(true);
     });
     test("a partial for the latest event is still computing", () => {
         expect(
-            deriveIsComputing({ eventCount: 2, latestEventId: "e2", snapshot: snap("e2", true), hasLiveHeartbeat: false })
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e2", true),
+                hasLiveHeartbeat: false,
+                computeFailed: false
+            })
         ).toBe(true);
     });
     test("a final for the latest event is ready", () => {
         expect(
-            deriveIsComputing({ eventCount: 2, latestEventId: "e2", snapshot: snap("e2", false), hasLiveHeartbeat: false })
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e2", false),
+                hasLiveHeartbeat: false,
+                computeFailed: false
+            })
         ).toBe(false);
         expect(
-            deriveIsComputing({ eventCount: 2, latestEventId: "e2", snapshot: snap("e2"), hasLiveHeartbeat: false })
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e2"),
+                hasLiveHeartbeat: false,
+                computeFailed: false
+            })
         ).toBe(false);
     });
     test("a live heartbeat with no event lag (swap/branch recompute) → computing", () => {
         expect(
-            deriveIsComputing({ eventCount: 2, latestEventId: "e2", snapshot: snap("e2", false), hasLiveHeartbeat: true })
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e2", false),
+                hasLiveHeartbeat: true,
+                computeFailed: false
+            })
         ).toBe(true);
+    });
+    test("a failed compute for the latest event is NOT computing even with no snapshot (target note D10 item 2)", () => {
+        expect(
+            deriveIsComputing({
+                eventCount: 1,
+                latestEventId: "e1",
+                snapshot: null,
+                hasLiveHeartbeat: false,
+                computeFailed: true
+            })
+        ).toBe(false);
+    });
+    test("a failed compute over a partial for the same state is NOT computing", () => {
+        expect(
+            deriveIsComputing({
+                eventCount: 2,
+                latestEventId: "e2",
+                snapshot: snap("e2", true),
+                hasLiveHeartbeat: false,
+                computeFailed: true
+            })
+        ).toBe(false);
+    });
+});
+
+describe("isFailedComputeUpdate (D10 item 2)", () => {
+    const snapshot = { after_event_id: "e1" };
+    test("an explicit `snapshot: null` on the same draft is a compute that ended without a result", () => {
+        expect(isFailedComputeUpdate({ snapshot: null }, false)).toBe(true);
+    });
+    test("an omitted snapshot is an interim update, not a failure", () => {
+        expect(isFailedComputeUpdate({}, false)).toBe(false);
+        expect(isFailedComputeUpdate({ snapshot: undefined }, false)).toBe(false);
+    });
+    test("`snapshot: null` on a draft change is the next-game update, not a failure", () => {
+        expect(isFailedComputeUpdate({ snapshot: null }, true)).toBe(false);
+    });
+    test("a snapshot is never a failure", () => {
+        expect(isFailedComputeUpdate({ snapshot }, false)).toBe(false);
     });
 });
 

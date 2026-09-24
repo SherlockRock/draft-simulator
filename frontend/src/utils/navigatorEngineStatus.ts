@@ -26,7 +26,9 @@ export type EngineStatus =
           computeTimeMs: number | null;
           budgetHit: boolean;
       }
-    | { kind: "empty"; reason: string };
+    | { kind: "empty"; reason: string }
+    /** The compute for this state ended without a result (D10 item 2). */
+    | { kind: "failed" };
 
 export interface EngineStatusInput {
     hasSnapshot: boolean;
@@ -41,10 +43,12 @@ export interface EngineStatusInput {
     progress: EngineProgress | null;
     budgetHit: boolean;
     heartbeatStaleMs: number | null;
+    computeFailed: boolean;
 }
 
 export function deriveEngineStatus(input: EngineStatusInput): EngineStatus {
     if (input.draftComplete) return { kind: "complete" };
+    if (input.computeFailed) return { kind: "failed" };
     if (input.isComputing) {
         const painted = input.progress !== null && input.progress.depthPainted > 0;
         return {
@@ -108,5 +112,7 @@ export function formatEngineStatus(status: EngineStatus): string {
             );
         case "empty":
             return `✕ No legal completion — ${status.reason} · undo or relax pool`;
+        case "failed":
+            return "✕ Engine failed · next pick, ban or undo retries";
     }
 }
