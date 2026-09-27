@@ -28,5 +28,6 @@ pub mod objective;
 pub mod oracle;
 pub mod search;
 pub mod state;
+pub mod tier_b;
 pub mod transposition;
 pub mod universe;
