@@ -911,6 +911,17 @@ impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
     fn value(&self, leaf: &Leaf<'_>) -> f64 {
         (self.1)(self.0.value(leaf))
     }
+
+    /// Slice-5 U10: the map applies after the whole leaf rule, off-pool term and band included.
+    fn value_under(
+        &self,
+        leaf: &Leaf<'_>,
+        rule: FeasibilityRule,
+        blue_off: usize,
+        red_off: usize,
+    ) -> f64 {
+        (self.1)(self.0.value_under(leaf, rule, blue_off, red_off))
+    }
 }
 
 #[test]

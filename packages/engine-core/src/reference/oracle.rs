@@ -7,7 +7,7 @@
 //! `evaluate(.., Horizon(h))` at every h.
 
 use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
-use super::node::{classify, ClassifyError, LeafEnd, NodeKind};
+use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, NodeKind};
 use super::objective::{Leaf, Objective};
 use super::state::{Action, Pools, Position};
 use super::universe::Universe;
@@ -112,12 +112,17 @@ impl Search<'_> {
 
     fn leaf(&mut self, position: &Position<'_>, end: LeafEnd) -> f64 {
         self.leaves += 1;
-        self.input.objective.value(&Leaf {
-            blue: position.picks(Side::Blue),
-            red: position.picks(Side::Red),
-            blue_feasible: end.blue_feasible,
-            red_feasible: end.red_feasible,
-        })
+        self.input.objective.value_under(
+            &Leaf {
+                blue: position.picks(Side::Blue),
+                red: position.picks(Side::Red),
+                blue_feasible: end.blue_feasible,
+                red_feasible: end.red_feasible,
+            },
+            self.input.feasibility,
+            end.blue_off_pool,
+            end.red_off_pool,
+        )
     }
 
     /// Minimax value of `position`, `turns_used` turns below the root.
@@ -186,19 +191,27 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
         leaves: 0,
         nodes: 0,
     };
-    // A root where a side is already infeasible has nothing to rank (R1 keeps this as an error). Checked
-    // before action generation: a starved root is "infeasible", not "no legal action".
+    // A root where a side is already infeasible has nothing to rank under the gate (R1 keeps this as an
+    // error). Checked before action generation: a starved root is "infeasible", not "no legal action".
+    // Under the live rule (U10) a broken locked side is a fact on the board and the root is ranked, that
+    // side priced at L' on every leaf (search.rs says why).
     let (blue_feasible, red_feasible) = (
         search.feasible(Side::Blue, position),
         search.feasible(Side::Red, position),
     );
-    if !(blue_feasible && red_feasible) {
+    if input.feasibility != FeasibilityRule::PoolOrRoster && !(blue_feasible && red_feasible) {
         return Err(OracleError::RootInfeasible {
             blue_feasible,
             red_feasible,
         });
     }
-    let actions = position.legal_actions(input.universe, input.pools);
+    let actions = legal_actions_under(
+        position,
+        input.universe,
+        input.pools,
+        input.feasibility,
+        &mut search.memo,
+    );
     if actions.is_empty() {
         return Err(OracleError::NoLegalAction {
             slot: position.slot_index(),

@@ -9,11 +9,13 @@ use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
-use engine_core::reference::feasibility::FeasibilityRule;
+use engine_core::reference::feasibility::{off_pool_count, FeasibilityMemo, FeasibilityRule};
+use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::live::{
     entries_from_draft_state, pools_from_search, DropReason, Dropped, LiveError, LiveRoot,
     LiveUniverse, UnknownId, UnknownList,
 };
+use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::objective::{Leaf, Objective};
 use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{search, SearchOutcome, SearchParams};
@@ -1109,7 +1111,7 @@ fn measure_depth_two_on_every_sample_root() {
                 u,
                 Mode::Horizon(depth),
                 &params(None),
-                FeasibilityRule::On,
+                FeasibilityRule::PoolOrRoster,
             );
             println!(
                 "{label} | depth {depth} | root actions {} | nodes {} | leaves {} | cutoffs {} | table hits {} | {:?} | top {:?}",
@@ -1118,4 +1120,1287 @@ fn measure_depth_two_on_every_sample_root() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 8: pool or roster (U10) — an exhausted pool draws from the roster instead of refusing
+// ---------------------------------------------------------------------------------------------
+
+/// The user's case (2026-09-26): a small pool that bans and picks have used up. Under the hard gate
+/// the root is infeasible and the search refuses; under `PoolOrRoster` the side picks from the roster.
+#[test]
+fn an_exhausted_pool_draws_from_the_roster_under_pool_or_roster() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    // Slot 11: Red holds Gwen + Heimerdinger and needs three more picks; its pool has two left.
+    let tiny_red: Vec<String> = ["Gwen", "Heimerdinger", "Hwei", "Zed"]
+        .map(String::from)
+        .to_vec();
+    let root = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &tiny_red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let mut memo = FeasibilityMemo::default();
+
+    // The gate: two legal picks, and the side cannot finish — the search refuses at the root.
+    assert_eq!(position.legal_actions(u, &root.pools).len(), 2);
+    assert_eq!(
+        legal_actions_under(&position, u, &root.pools, FeasibilityRule::On, &mut memo).len(),
+        2
+    );
+    let refused = search(
+        &OracleInput {
+            position: &position,
+            universe: u,
+            pools: &root.pools,
+            objective: u,
+            feasibility: FeasibilityRule::On,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+        },
+        &params(None),
+        &CancelHandle::new(),
+        |_| {},
+    );
+    assert!(matches!(
+        refused,
+        Err(engine_core::engine::EngineError::InvalidInput { .. })
+    ));
+
+    // The live rule: every available champion is a legal pick, the root is feasible, the search ranks.
+    let widened = legal_actions_under(
+        &position,
+        u,
+        &root.pools,
+        FeasibilityRule::PoolOrRoster,
+        &mut memo,
+    );
+    assert_eq!(widened.len(), 173 - 11, "the whole roster net of the board");
+    assert!(widened.contains(&engine_core::reference::state::Action::Pick(idx("Hwei"))));
+    assert!(widened.contains(&engine_core::reference::state::Action::Pick(idx("Jinx"))));
+    let out = run(
+        &root,
+        u,
+        Mode::Horizon(2),
+        &params(None),
+        FeasibilityRule::PoolOrRoster,
+    );
+    assert_eq!(out.ranked.len(), 173 - 11);
+    assert_eq!(out.depth, 2);
+    assert!(
+        out.ranked.iter().all(|r| r.ends.red_feasible),
+        "Red can finish from the roster"
+    );
+    // The off-pool band: Red needs three picks and has two in-pool, so EVERY line carries exactly
+    // one forced off-pool pick (made now, or still to come) — the band ties, and the board decides
+    // which pick is the off-pool one. Nothing is charged twice and no line escapes the charge.
+    assert!(out
+        .ranked
+        .iter()
+        .all(|r| r.ends.red_off_pool == 1 && r.ends.blue_off_pool == 0));
+    println!(
+        "exhausted Red pool: top {:?} ({} legal picks, of which 2 in-pool; one forced off-pool pick on every line)",
+        out.top_set
+            .iter()
+            .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        out.ranked.len()
+    );
+
+    // An EMPTY pool is the same case: it cannot complete, so it draws from the roster.
+    let root = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &[], &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let out = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::PoolOrRoster,
+    );
+    assert_eq!(out.ranked.len(), 173 - 11);
+    // Three picks to come, none of them from a pool: one made now, two forecast, on every line.
+    assert!(out
+        .ranked
+        .iter()
+        .all(|r| r.ends.red_off_pool == 3 && r.ends.blue_off_pool == 0));
+}
+
+/// A pool that cannot cover five roles (the earlier refusal case) ranks under the live rule.
+#[test]
+fn a_pool_without_a_role_ranks_under_pool_or_roster() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let (_, meta) = load_production_data();
+    let no_support: Vec<String> = s
+        .pools
+        .red
+        .iter()
+        .filter(|id| !meta[*id].positions.contains(&Role::Support))
+        .take(12)
+        .cloned()
+        .collect();
+    let root = LiveRoot::from_draft_state(&state_at(&s, 2), &s.pools.blue, &no_support, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let out = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::PoolOrRoster,
+    );
+    assert_eq!(
+        out.ranked.len(),
+        171,
+        "a Blue ban root: every available champion"
+    );
+    assert!(out.ranked.iter().all(|r| r.ends.red_feasible));
+}
+
+/// While the pools suffice, `PoolOrRoster` is the gate: the same ranked order, top sets and counts
+/// on every sample root, bit-equal values on every line that leaves both sides feasible, and the
+/// lines that break a side shifted by the band difference L' − L (within rounding).
+#[test]
+fn pool_or_roster_is_the_gate_while_the_pools_suffice() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    for (events, label) in [
+        (2usize, "slot 2 Blue ban"),
+        (7, "slot 7 Red pair"),
+        (11, "slot 11 Red pick"),
+    ] {
+        let root =
+            LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
+                .unwrap_or_else(|e| panic!("{e}"));
+        let gate = run(
+            &root,
+            u,
+            Mode::Horizon(1),
+            &params(None),
+            FeasibilityRule::On,
+        );
+        let live_rule = run(
+            &root,
+            u,
+            Mode::Horizon(1),
+            &params(None),
+            FeasibilityRule::PoolOrRoster,
+        );
+        // Same order, same top set, same counts; every line ends the same way and carries no off-pool
+        // count (the pools suffice); bit-equal values on every line that leaves both sides feasible.
+        // A line that breaks a side (a Red pair of two sole-ADCs, say) is priced at L under the gate
+        // and at L' under the live rule (U10), so those values differ by exactly the band difference.
+        let actions = |o: &SearchOutcome| o.ranked.iter().map(|r| r.action).collect::<Vec<_>>();
+        assert_eq!(actions(&gate), actions(&live_rule), "{label}");
+        assert_eq!(gate.top_set, live_rule.top_set, "{label}");
+        assert_eq!(
+            (gate.nodes, gate.leaves),
+            (live_rule.nodes, live_rule.leaves),
+            "{label}"
+        );
+        let shift = u.live_loss() - u.loss();
+        for (g, l) in gate.ranked.iter().zip(&live_rule.ranked) {
+            assert_eq!(
+                (g.ends.kind, g.ends.blue_feasible, g.ends.red_feasible),
+                (l.ends.kind, l.ends.blue_feasible, l.ends.red_feasible),
+                "{label} {:?}",
+                g.action
+            );
+            assert_eq!(
+                (l.ends.blue_off_pool, l.ends.red_off_pool),
+                (0, 0),
+                "{label} {:?}: the pools suffice",
+                g.action
+            );
+            if g.ends.blue_feasible && g.ends.red_feasible {
+                assert_eq!(
+                    g.value.to_bits(),
+                    l.value.to_bits(),
+                    "{label} {:?}",
+                    g.action
+                );
+            } else {
+                assert!(
+                    ((l.value - g.value).abs() - shift).abs() <= 1e-9 * shift,
+                    "{label} {:?}: gate {} live {}",
+                    g.action,
+                    g.value,
+                    l.value
+                );
+            }
+        }
+    }
+}
+
+/// The incentive the cost exists for (review round 3), on a universe small enough for the ORACLE:
+/// sixteen champions, one per role in each pool, one spare support and one spare top in neither pool,
+/// four junk champions banned at slots 0–3. Root: Blue's ban at slot 4, horizon 3 (Blue ban, Red ban,
+/// Blue pick), every table zero so only the bands speak (L = P = 1, L' = 11). Denying a Red champion
+/// of a role the roster can still refill (T2, S2: a spare top and support exist) is worth +P — Red
+/// bans Blue's champion of the OTHER refillable role and Blue takes Red's, so Red is forced off-pool
+/// twice against Blue's once; those two form the top set. Self-banning such a role (T1, S1) is −P
+/// and ranks last. The spares (S3, X1) are harmless, 0. Jungle, mid and ADC have two champions
+/// each, so banning either one (own or Red's) invites the other ban and the mutual break: both
+/// sides broken, R1 values the leaf at the board, 0 — the S11 residual on a two-per-role universe.
+/// What the cost exists for: no self-ban is positive, no denial is below a harmless ban — measured
+/// on this probe; it holds while P > 2Σ (a flat P is lexicographic), not as a theorem. The oracle
+/// and the search agree bit for bit. (Every value here is the engine's: two hand derivations were
+/// wrong before the lines were printed.)
+#[test]
+fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
+    use engine_core::reference::oracle::evaluate;
+    let mk = |id: &str, role: Role| Champion {
+        id: id.into(),
+        positions: vec![role],
+        linear: 0.0,
+    };
+    let champions = vec![
+        mk("T1", Role::Top),
+        mk("J1", Role::Jungle),
+        mk("M1", Role::Middle),
+        mk("A1", Role::Adc),
+        mk("S1", Role::Support),
+        mk("T2", Role::Top),
+        mk("J2", Role::Jungle),
+        mk("M2", Role::Middle),
+        mk("A2", Role::Adc),
+        mk("S2", Role::Support),
+        mk("S3", Role::Support),
+        mk("X1", Role::Top),
+        mk("B1", Role::Top),
+        mk("B2", Role::Top),
+        mk("B3", Role::Top),
+        mk("B4", Role::Top),
+    ];
+    let n = champions.len();
+    let zero = vec![vec![0.0; n]; n];
+    let u = Universe::from_tables(champions, &zero, &zero).unwrap_or_else(|e| panic!("{e}"));
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    let pools = Pools {
+        blue: set(&["T1", "J1", "M1", "A1", "S1"]),
+        red: set(&["T2", "J2", "M2", "A2", "S2"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = ["B1", "B2", "B3", "B4"]
+        .iter()
+        .map(|id| Entry::Ban(idx(id)))
+        .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Blue));
+    assert_eq!(
+        position.available(&u).len(),
+        12,
+        "inside the oracle's bound"
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(engine_core::reference::state::Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(
+        bits(&engine),
+        oracle_ranked,
+        "the search must agree with the oracle under the rule"
+    );
+    assert_eq!(engine.top_set, oracle.top_set);
+    for r in &engine.ranked {
+        println!(
+            "incentive probe: {:>3} {:+.1}  ends {:?} blue {} red {} off-pool {}/{}  line {:?}",
+            r.action
+                .champions()
+                .map(|c| u.id(c))
+                .collect::<Vec<_>>()
+                .join("+"),
+            r.value,
+            r.ends.kind,
+            r.ends.blue_feasible,
+            r.ends.red_feasible,
+            r.ends.blue_off_pool,
+            r.ends.red_off_pool,
+            r.continuation
+                .iter()
+                .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    let ban = |id: &str| engine_core::reference::state::Action::Ban(idx(id));
+    let value_of = |id: &str| -> f64 {
+        engine
+            .ranked
+            .iter()
+            .find(|r| r.action == ban(id))
+            .map(|r| r.value)
+            .unwrap_or_else(|| panic!("{id} not ranked"))
+    };
+    // Denial of a role the roster can still refill (a spare top or support exists): Red is forced
+    // off-pool for the spare and cannot punish in kind — worth +P, and the top set.
+    assert_eq!(
+        engine.top_set,
+        [ban("T2"), ban("S2")].to_vec(),
+        "denial where the roster has a spare"
+    );
+    for deny in ["T2", "S2"] {
+        assert_eq!(
+            value_of(deny),
+            1.0,
+            "{deny}: Red goes off-pool for the spare"
+        );
+    }
+    // Self-banning a role with a spare: Red bans the other and Blue must fetch the spare — two
+    // forced picks against one, −P, and the two rank last.
+    for own in ["T1", "S1"] {
+        assert_eq!(value_of(own), -1.0, "self-break {own}");
+    }
+    let last_two: Vec<_> = engine.ranked[engine.ranked.len() - 2..]
+        .iter()
+        .map(|r| r.action)
+        .collect();
+    assert_eq!(last_two, [ban("T1"), ban("S1")].to_vec());
+    // The spares themselves: harmless, 0.
+    for spare in ["S3", "X1"] {
+        assert_eq!(value_of(spare), 0.0, "{spare}: harmless");
+    }
+    // Jungle, mid and ADC have exactly two champions here, so banning EITHER one lets the opponent
+    // ban the other and exhaust the role for both sides: the leaf is both-broken and R1 values it at
+    // the board (the S11 residual — antisymmetry forces the mutual break to 0). Those six bans
+    // therefore tie the harmless bans; a probe artefact of a two-per-role universe (a 173-champion
+    // roster cannot lose a role to two bans), recorded so nobody reads it as "self-break is free".
+    for two_deep in ["J1", "M1", "A1", "J2", "M2", "A2"] {
+        let line = engine
+            .ranked
+            .iter()
+            .find(|r| r.action == ban(two_deep))
+            .unwrap_or_else(|| panic!("{two_deep}"));
+        assert_eq!(line.value, 0.0, "{two_deep}: the mutual break");
+        assert!(
+            !line.ends.blue_feasible && !line.ends.red_feasible,
+            "{two_deep}: both sides broken"
+        );
+    }
+    // What the cost exists for (review round 3): no self-ban is positive, and no denial is below a
+    // harmless ban.
+    for own in ["T1", "J1", "M1", "A1", "S1"] {
+        assert!(value_of(own) <= 0.0, "self-break {own} never pays");
+    }
+    for deny in ["T2", "J2", "M2", "A2", "S2"] {
+        assert!(
+            value_of(deny) >= 0.0,
+            "denial {deny} is never worse than a harmless ban"
+        );
+    }
+    // The literals above are ±P: zero tables give L = P = 1 and L' = 11 (asserted last, so a
+    // mutation of the cost fails on a value, not on this line).
+    assert_eq!(
+        (u.off_pool_cost(), u.loss(), u.live_loss()),
+        (1.0, 1.0, 11.0)
+    );
+    println!(
+        "incentive probe: top set {:?}, nodes {} leaves {}",
+        engine
+            .top_set
+            .iter()
+            .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        engine.nodes,
+        engine.leaves
+    );
+}
+
+/// A universe for the band tests: bans `K1..K10` (junk tops), the named champions with the linear
+/// term given, every pairwise table zero — so Σ is the sum of the linear terms and L, P, L' are
+/// small integers the assertions can name.
+fn band_universe(named: &[(&str, Role, f64)]) -> Universe {
+    let mk = |id: &str, role: Role, linear: f64| Champion {
+        id: id.into(),
+        positions: vec![role],
+        linear,
+    };
+    let mut champions: Vec<Champion> = named
+        .iter()
+        .map(|(id, role, linear)| mk(id, *role, *linear))
+        .collect();
+    for i in 1..=10 {
+        champions.push(mk(&format!("K{i}"), Role::Top, 0.0));
+    }
+    let n = champions.len();
+    let zero = vec![vec![0.0; n]; n];
+    Universe::from_tables(champions, &zero, &zero).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// Review round 4's reachable defect (the user's small-pool case at the last pick): five locked
+/// champions that cannot fill five roles are infeasible on ANY roster, so a side whose pool has no
+/// support chooses at its final pick between the honest off-pool support (−P) and a suicide fifth
+/// pick from its own pool (−L'). With L' = L = P the board decided and a strong in-pool champion won;
+/// L' = L + 10P makes the off-pool pick win whatever the board says. Red's last pick (slot 19): four
+/// non-supports locked, two non-supports left in the pool (the top is worth 0.5 to Red), one support
+/// on the roster. Oracle-checked.
+#[test]
+fn an_off_pool_support_beats_every_in_pool_suicide_fifth_pick() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("X1", Role::Top, 0.5),
+        ("X2", Role::Middle, 0.0),
+        ("S", Role::Support, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(
+        (u.loss(), u.off_pool_cost(), u.live_loss()),
+        (2.0, 2.0, 22.0)
+    );
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "X1", "X2"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    // Slots 0–18 in order: six bans, B pick, R pair, B pair, R pick, four bans, R pick, B pair.
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+        ("K10", true),
+        ("RA", false),
+        ("BA", false),
+        ("BS", false),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Red), 19)
+    );
+    let mut memo = FeasibilityMemo::default();
+    // The gate refuses (two in-pool non-supports cannot finish); the live rule widens to X1, X2, S.
+    let widened = legal_actions_under(
+        &position,
+        &u,
+        &pools,
+        FeasibilityRule::PoolOrRoster,
+        &mut memo,
+    );
+    assert_eq!(widened.len(), 3);
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&engine), oracle_ranked);
+    let line = |id: &str| {
+        engine
+            .ranked
+            .iter()
+            .find(|r| r.action == Action::Pick(idx(id)))
+            .unwrap_or_else(|| panic!("{id} not ranked"))
+    };
+    // Honest: the roster support, one off-pool pick made, Red still feasible → board + P.
+    assert_eq!(line("S").value, u.off_pool_cost());
+    assert!(line("S").ends.red_feasible && line("S").ends.red_off_pool == 1);
+    // Suicide: five non-supports, infeasible on any roster, no off-pool pick → board + L'.
+    assert_eq!(line("X1").value, -0.5 + u.live_loss());
+    assert!(!line("X1").ends.red_feasible && line("X1").ends.red_off_pool == 0);
+    assert_eq!(engine.top_set, vec![Action::Pick(idx("S"))]);
+    assert_eq!(
+        engine.ranked.last().map(|r| r.action),
+        Some(Action::Pick(idx("X2")))
+    );
+    // The fixture is not vacuous: priced at L instead of L' the suicide top would have ranked FIRST.
+    assert!(-0.5 + u.loss() < u.off_pool_cost());
+}
+
+/// The same collision two roles deep (review round 4: "with two roles missing, suicide at −L beats
+/// honest at −2P outright"). Blue's pair at slots 17–18 with top, jungle and mid locked and only a
+/// top and a jungle left in its pool (each worth 0.5 to Blue): the honest pair takes an ADC and a
+/// support from the roster (two forced picks, −2P), the suicide pair keeps the pool and breaks the
+/// comp (−L'). With L' = L the suicide pair would have won by the board. The best honest pair takes
+/// Red's only support, forcing Red off-pool in turn — the live form of denial, worth +P. Oracle-checked.
+#[test]
+fn two_forced_off_pool_picks_beat_a_suicide_pair() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("Y1", Role::Top, 0.5),
+        ("Y2", Role::Jungle, 0.5),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("A", Role::Adc, 0.0),
+        ("S", Role::Support, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(
+        (u.loss(), u.off_pool_cost(), u.live_loss()),
+        (3.0, 3.0, 33.0)
+    );
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "Y1", "Y2"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    // Slots 0–16: six bans, B pick, R pair, B pair, R pick, four bans, R pick — Blue's pair is next.
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+        ("K10", true),
+        ("RA", false),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Blue), 17)
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&engine), oracle_ranked);
+    assert_eq!(engine.ranked.len(), 10, "every pair of the five available");
+    let pair = |a: &str, b: &str| Action::pair(idx(a), idx(b));
+    let line = |action: Action| {
+        engine
+            .ranked
+            .iter()
+            .find(|r| r.action == action)
+            .unwrap_or_else(|| panic!("{action:?} not ranked"))
+    };
+    let p = u.off_pool_cost();
+    // Honest, and Red keeps its support: two forced picks → −2P.
+    assert_eq!(line(pair("A", "S")).value, -2.0 * p);
+    assert_eq!(line(pair("A", "S")).ends.blue_off_pool, 2);
+    // Honest and denying: Red's pool can no longer finish, so Red is charged one forced pick → −P.
+    assert_eq!(line(pair("A", "RS")).value, -p);
+    assert_eq!(
+        (
+            line(pair("A", "RS")).ends.blue_off_pool,
+            line(pair("A", "RS")).ends.red_off_pool
+        ),
+        (2, 1)
+    );
+    assert_eq!(engine.top_set, vec![pair("A", "RS")]);
+    // Suicide: Blue infeasible on any roster, nothing off-pool → board − L'.
+    assert_eq!(line(pair("Y1", "Y2")).value, 1.0 - u.live_loss());
+    assert!(!line(pair("Y1", "Y2")).ends.blue_feasible);
+    // Every line that breaks Blue ALONE ranks below both honest lines. The pair that takes both
+    // supports (RS + S) breaks Red too, and R1 values a both-broken leaf at the board — here the
+    // board net of Blue's two off-pool picks, −2P, tying the honest (A, S): the S11 residual
+    // (target note § 6), reachable when the mover can exhaust a role for both sides; unchanged here.
+    let honest_floor = line(pair("A", "S")).value;
+    for r in &engine.ranked {
+        if !r.ends.blue_feasible && r.ends.red_feasible {
+            assert!(r.value < honest_floor, "{:?} breaks Blue alone", r.action);
+        }
+    }
+    assert_eq!(line(pair("RS", "S")).value, -2.0 * p);
+    assert!(!line(pair("RS", "S")).ends.blue_feasible && !line(pair("RS", "S")).ends.red_feasible);
+    // The fixture is not vacuous: priced at L the suicide pair would have beaten both honest pairs.
+    assert!(1.0 - u.loss() > -p);
+}
+
+/// Review round 4, defect 3: the forced-pick bound is a role count, not a champion count. Red has
+/// top, jungle and mid locked and two picks to come; its pool still holds three champions, but all
+/// of them are tops or junglers — the pool is short by two ROLES with champions to spare. The old
+/// bound (`max(1, remaining − |pool net|)`) charged 1; the matching bound charges 2, at every leaf
+/// of a Blue-ban root inside the horizon (so the charge is a forecast, not a pick already made).
+/// Oracle-checked.
+#[test]
+fn a_pool_short_by_two_roles_is_charged_two_forced_picks() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("X1", Role::Top, 0.0),
+        ("X2", Role::Top, 0.0),
+        ("X3", Role::Jungle, 0.0),
+        ("A1", Role::Adc, 0.0),
+        ("A2", Role::Adc, 0.0),
+        ("S1", Role::Support, 0.0),
+        ("S2", Role::Support, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "X1", "X2", "X3"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    // Slots 0–12: six bans, B pick, R pair, B pair, R pick, R ban — Blue's ban at slot 13 is next.
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Blue), 13)
+    );
+    let mut memo = FeasibilityMemo::default();
+    assert_eq!(
+        off_pool_count(
+            &mut memo,
+            FeasibilityRule::PoolOrRoster,
+            Side::Red,
+            &position,
+            &pools,
+            &u
+        ),
+        2,
+        "two roles the pool cannot cover, whatever its size"
+    );
+    assert_eq!(
+        off_pool_count(
+            &mut memo,
+            FeasibilityRule::PoolOrRoster,
+            Side::Blue,
+            &position,
+            &pools,
+            &u
+        ),
+        0
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&engine), oracle_ranked);
+    // Twelve bans (25 champions, 13 on the board). No single ban can take a role from the roster
+    // (two ADCs, two supports), so every leaf forecasts Red's two forced picks: ten bans tie at +2P.
+    // The two that ban Blue's OWN ADC or support leave Blue's pool short by one role — one forced
+    // pick for Blue, +P — and rank below them (self-break by a ban, priced by the same bound).
+    assert_eq!(engine.ranked.len(), 12);
+    assert_eq!(engine.top_set.len(), 10);
+    assert_eq!(engine.value, 2.0 * u.off_pool_cost());
+    for r in &engine.ranked {
+        let own = r.action == Action::Ban(idx("BA")) || r.action == Action::Ban(idx("BS"));
+        assert!(
+            r.ends.red_feasible && r.ends.blue_feasible,
+            "{:?}",
+            r.action
+        );
+        assert_eq!(
+            (r.ends.red_off_pool, r.ends.blue_off_pool),
+            (2, usize::from(own)),
+            "{:?}",
+            r.action
+        );
+        assert_eq!(
+            r.value,
+            if own { 1.0 } else { 2.0 } * u.off_pool_cost(),
+            "{:?}",
+            r.action
+        );
+    }
+}
+
+/// Review round 4, defect 5 (round 1's shape in a new place): equal off-pool counts must leave the
+/// board bit for bit. On the sample board `(board − P) + P ≠ board`, so the counts are netted as
+/// integers before the one multiply; the gate rules ignore the counts and are `value` itself.
+#[test]
+fn equal_off_pool_counts_leave_the_board_bit_for_bit() {
+    let live = live_universe();
+    let u = &live.universe;
+    let blue = sorted(u, &["Pantheon".into(), "Tristana".into(), "Veigar".into()]);
+    let red = sorted(u, &["Gwen".into(), "Heimerdinger".into()]);
+    let board = u.board_value(&blue, &red);
+    let leaf = Leaf {
+        blue: &blue,
+        red: &red,
+        blue_feasible: true,
+        red_feasible: true,
+    };
+    let p = u.off_pool_cost();
+    assert_ne!(
+        ((board - p) + p).to_bits(),
+        board.to_bits(),
+        "the test must sit on a board where (b − P) + P ≠ b, or it proves nothing"
+    );
+    for k in 0..=5 {
+        assert_eq!(
+            u.value_under(&leaf, FeasibilityRule::PoolOrRoster, k, k)
+                .to_bits(),
+            board.to_bits(),
+            "{k} off-pool picks each"
+        );
+    }
+    assert_eq!(
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, 0, 2),
+        board + 2.0 * p
+    );
+    assert_eq!(
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, 3, 1),
+        board - 2.0 * p
+    );
+    for rule in [FeasibilityRule::On, FeasibilityRule::Off] {
+        assert_eq!(
+            u.value_under(&leaf, rule, 0, 0).to_bits(),
+            u.value(&leaf).to_bits()
+        );
+    }
+    // The live band: L' = L + 10P, and a side broken on any roster sits at it.
+    assert_eq!(u.live_loss(), u.loss() + 10.0 * p);
+    let broken = Leaf {
+        blue: &blue,
+        red: &red,
+        blue_feasible: false,
+        red_feasible: true,
+    };
+    assert_eq!(
+        u.value_under(&broken, FeasibilityRule::PoolOrRoster, 0, 0),
+        board - u.live_loss()
+    );
+    assert_eq!(u.value(&broken), board - u.loss());
+}
+
+/// Review round 4's verification reproduced the collision on LIVE data: slot 7 with Red's pool cut
+/// to Aphelios and Ashe (both ADC-only), horizon 1. The pair (Aphelios, Ashe) breaks Red on any
+/// roster and, priced at L = P, beat every feasible line — each of which carries at least four
+/// off-pool picks, because only one of the two ADCs can ever be used. Under L' the top line is
+/// Red-feasible. The
+/// roster is cut by exclusions to twenty-two champions (four of each primary role from Blue's own
+/// pool, so Blue never widens, plus the two ADCs): the widened pair fan is then 231, not 13 695 —
+/// the collision lives in the pool's shape, not the roster's size.
+#[test]
+fn a_two_adc_pool_at_the_pair_root_does_not_pick_the_suicide_pair() {
+    use engine_core::reference::state::Action;
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let on_board: Vec<String> = s
+        .events
+        .iter()
+        .take(7)
+        .map(|e| e.champion.clone())
+        .collect();
+    let exclusions = cut_roster(&s, &on_board, &["Aphelios".into(), "Ashe".into()]);
+    let tiny_red: Vec<String> = ["Aphelios", "Ashe"].map(String::from).to_vec();
+    let root =
+        LiveRoot::from_draft_state(&state_at(&s, 7), &s.pools.blue, &tiny_red, &exclusions, u)
+            .unwrap_or_else(|e| panic!("{e}"));
+    assert!(root.unknown.is_empty());
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.available(u).len()),
+        (Some(Side::Red), 22)
+    );
+    let out = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::PoolOrRoster,
+    );
+    assert_eq!(out.ranked.len(), 231, "every pair of the 22 available");
+    let suicide = out
+        .ranked
+        .iter()
+        .find(|r| r.action == Action::pair(idx("Aphelios"), idx("Ashe")))
+        .unwrap_or_else(|| panic!("the suicide pair is legal"));
+    assert!(!suicide.ends.red_feasible && suicide.ends.red_off_pool == 0);
+    let top = &out.ranked[0];
+    assert!(top.ends.red_feasible, "the top line must not break Red");
+    // Every feasible line: Red uses at most one of its two ADCs, so at least four picks come from
+    // outside the pool (made now plus forecast) — five when the pair itself takes the ADC role and
+    // neither pool ADC can ever be used; Blue's cut pool still covers five roles.
+    assert_eq!((top.ends.red_off_pool, top.ends.blue_off_pool), (4, 0));
+    for r in out.ranked.iter().filter(|r| r.ends.red_feasible) {
+        assert!(
+            r.ends.red_off_pool >= 4 && r.ends.blue_off_pool == 0,
+            "{:?}: {:?}",
+            r.action,
+            r.ends
+        );
+        // Red minimises: the suicide pair sits at board + L', above every feasible line's board + 4P or 5P.
+        assert!(r.value < suicide.value, "{:?}", r.action);
+    }
+    // Not vacuous: priced at L instead of L' the suicide pair would have beaten the top line.
+    assert!(suicide.value - u.live_loss() + u.loss() < top.value);
+    println!(
+        "two-ADC pool at slot 7: top {:?} value {:.4}; suicide pair value {:.4}",
+        top.action.champions().map(|c| u.id(c)).collect::<Vec<_>>(),
+        top.value,
+        suicide.value
+    );
+}
+
+/// Round 5 (Codex): a finite L' is not enough — the largest live leaf is |board| + 5P + L' (a side
+/// broken alone with off-pool picks made), so `from_tables` refuses a universe where that bound
+/// overflows although L and L' are both finite, and one where L is finite but L' is not.
+#[test]
+fn a_universe_whose_largest_live_leaf_overflows_is_refused() {
+    let two = |linear: f64| {
+        vec![
+            Champion {
+                id: "A".into(),
+                positions: vec![Role::Top],
+                linear,
+            },
+            Champion {
+                id: "B".into(),
+                positions: vec![Role::Support],
+                linear: 0.0,
+            },
+        ]
+    };
+    let zero = vec![vec![0.0; 2]; 2];
+    let refused = |linear: f64| Universe::from_tables(two(linear), &zero, &zero).err();
+    // L ≈ MAX/12 and L' ≈ 11·MAX/12 are finite; Σ + 5P + L' ≈ 33·MAX/24 is not.
+    assert_eq!(
+        refused(f64::MAX / 24.0),
+        Some(UniverseError::NonFinite("L'".into()))
+    );
+    // L ≈ MAX/4 is finite; L' = L + 10·L is not.
+    assert_eq!(
+        refused(f64::MAX / 8.0),
+        Some(UniverseError::NonFinite("L'".into()))
+    );
+    // L itself overflows first (the slice-4 check).
+    assert_eq!(
+        refused(f64::MAX),
+        Some(UniverseError::NonFinite("L".into()))
+    );
+    // Under the bound the universe builds and L' is the exact sum.
+    let u =
+        Universe::from_tables(two(f64::MAX / 64.0), &zero, &zero).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(u.live_loss(), u.loss() + 10.0 * u.off_pool_cost());
+}
+
+/// The exclusion list that leaves exactly `extra` plus four champions of each primary role from
+/// Blue's own pool available (so Blue's pool always covers five roles and never widens), given
+/// what is already on the board. Keeps the live universe and the pools real while cutting a pair
+/// fan from thousands to a few hundred (tests 8e, 8i).
+fn cut_roster(s: &Sample, on_board: &[String], extra: &[String]) -> Vec<String> {
+    let (_, meta) = load_production_data();
+    let mut keep: Vec<String> = extra.to_vec();
+    for role in [
+        Role::Top,
+        Role::Jungle,
+        Role::Middle,
+        Role::Adc,
+        Role::Support,
+    ] {
+        let mut ids: Vec<&String> = s
+            .pools
+            .blue
+            .iter()
+            .filter(|id| !on_board.contains(id) && !keep.contains(id))
+            .filter(|id| meta[*id].positions.first() == Some(&role))
+            .collect();
+        ids.sort();
+        assert!(ids.len() >= 4, "{role:?}: Blue's pool has four primaries");
+        keep.extend(ids.into_iter().take(4).cloned());
+    }
+    meta.keys()
+        .filter(|id| !keep.contains(id) && !on_board.contains(id))
+        .cloned()
+        .collect()
+}
+
+/// Review round 5 (judgement): the incentive probe's tables are all zero, so no board gain ever sits
+/// behind a self-ban and "self-break never pays" was vacuous there. Here it is not: a roster support
+/// SX is worth +1 to Blue, Blue's pool can finish (BA, BS), and the only road to SX is to ban one's
+/// own support first. Blue's ban at slot 15, horizon 3 (ban, Red's pick, Blue's pair): at P = L the
+/// self-ban BS ranks below the harmless ban K10 and denying Red's support ranks above it; at
+/// P = 0.1·L the judge measured the self-ban as the TOP action (+0.7) and denial inverted (−0.7) —
+/// which is why a board-comparable P is not "the same shape with a smaller constant" (§ 5b). Oracle-
+/// checked; `off_pool_cost` → 0 must fail the first assertion.
+#[test]
+fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("SX", Role::Support, 1.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(
+        (u.loss(), u.off_pool_cost(), u.live_loss()),
+        (3.0, 3.0, 33.0)
+    );
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    // Slots 0–14: six bans, B pick, R pair, B pair, R pick, R ban, B ban, R ban — Blue's ban at 15 next.
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Blue), 15)
+    );
+    assert_eq!(position.available(&u).len(), 6, "BA BS RA RS SX K10");
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&engine), oracle_ranked);
+    let value_of = |id: &str| -> f64 {
+        engine
+            .ranked
+            .iter()
+            .find(|r| r.action == Action::Ban(idx(id)))
+            .map(|r| r.value)
+            .unwrap_or_else(|| panic!("{id} not ranked"))
+    };
+    for r in &engine.ranked {
+        println!(
+            "self-break probe: ban {:>3} {:+.1}  line {:?}",
+            r.action
+                .champions()
+                .map(|c| u.id(c))
+                .collect::<Vec<_>>()
+                .join("+"),
+            r.value,
+            r.continuation
+                .iter()
+                .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                .collect::<Vec<_>>()
+        );
+    }
+    // Self-break to reach SX: Blue's pair becomes (BA, SX), one off-pool pick for a board of +1 → −P + 1.
+    assert!(
+        value_of("BS") < value_of("K10"),
+        "banning one's own support to unlock SX must rank below a harmless ban"
+    );
+    assert_eq!(value_of("BS"), 1.0 - u.off_pool_cost());
+    assert_eq!(
+        value_of("K10"),
+        0.0,
+        "the harmless ban: everyone picks in pool"
+    );
+    // Denial: Red loses its support and retaliates on Blue's; both sides fetch one roster champion
+    // and Blue gets SX — the off-pool picks cancel and the board's +1 remains (the engine's line,
+    // oracle-checked; a hand derivation had Red fetching SX itself, which Red never does).
+    assert!(value_of("RS") > value_of("K10"));
+    assert_eq!(value_of("RS"), 1.0);
+}
+
+/// Review round 5 (judgement, verified by running it): under the live rule a board where a side's
+/// LOCKED picks cannot fill five roles — the sample's slot 7 with Red pairing Aphelios and Ashe, a
+/// real play that champion-meta lists as BOTTOM-only — used to REFUSE at every later root for both
+/// sides (`RootInfeasible`: pool ∨ roster, and no roster fixes the locked pair). The draft must go
+/// on (U10: "has to pick something"), so under `pool_or_roster` the root is ranked with that side
+/// priced at L' on every leaf: Blue's pair at slot 9 ranks in exactly the order the bare board gives
+/// (`off`), every line Red-infeasible, and the gate still refuses. The roster is cut to twenty as
+/// in 8e (190 pairs).
+#[test]
+fn a_board_whose_locked_picks_cannot_fill_five_roles_is_ranked_not_refused() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let mut state = state_at(&s, 7);
+    state.red_picks.push("Aphelios".into());
+    state.red_picks.push("Ashe".into());
+    let mut on_board: Vec<String> = s
+        .events
+        .iter()
+        .take(7)
+        .map(|e| e.champion.clone())
+        .collect();
+    on_board.extend(["Aphelios".to_string(), "Ashe".to_string()]);
+    let exclusions = cut_roster(&s, &on_board, &[]);
+    let root = LiveRoot::from_draft_state(&state, &s.pools.blue, &s.pools.red, &exclusions, u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Blue), 9)
+    );
+    assert_eq!(position.available(u).len(), 20);
+    // The gate refuses: Red cannot finish from its pool.
+    let refused = search(
+        &OracleInput {
+            position: &position,
+            universe: u,
+            pools: &root.pools,
+            objective: u,
+            feasibility: FeasibilityRule::On,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+        },
+        &params(None),
+        &CancelHandle::new(),
+        |_| {},
+    );
+    assert!(matches!(
+        refused,
+        Err(engine_core::engine::EngineError::InvalidInput { .. })
+    ));
+    let live_rule = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::PoolOrRoster,
+    );
+    let bare = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::Off,
+    );
+    assert_eq!(live_rule.ranked.len(), 190);
+    assert_eq!(live_rule.top_set, bare.top_set);
+    let bare_value = |action| {
+        bare.ranked
+            .iter()
+            .find(|r| r.action == action)
+            .map(|r| r.value)
+            .unwrap_or_else(|| panic!("{action:?}"))
+    };
+    // Lines that keep Blue's comp intact: Red broken alone, the bare board plus L' (within rounding),
+    // in the board's order up to rounding — adding L' ≈ 11 290 to boards of size ≈ 1 rounds away
+    // differences below an ulp of L' (≈ 2e-12), so near-tied pairs may swap, never more.
+    let intact: Vec<_> = live_rule
+        .ranked
+        .iter()
+        .filter(|r| r.ends.blue_feasible)
+        .collect();
+    assert!(intact.len() > 150, "{}", intact.len());
+    for w in intact.windows(2) {
+        assert!(
+            bare_value(w[0].action) >= bare_value(w[1].action) - 1e-9,
+            "{:?} above {:?}",
+            w[0].action,
+            w[1].action
+        );
+    }
+    for l in &intact {
+        assert!(!l.ends.red_feasible);
+        assert_eq!((l.ends.blue_off_pool, l.ends.red_off_pool), (0, 0));
+        let b = bare_value(l.action);
+        assert!(
+            (l.value - b - u.live_loss()).abs() <= 1e-9 * u.live_loss(),
+            "{:?}: live {} bare {}",
+            l.action,
+            l.value,
+            b
+        );
+    }
+    // Pairs that break Blue's own comp too (two of a role Tristana or Veigar already fills): both
+    // sides broken, R1's board exactly — L' below every intact line, so the live rule ranks them
+    // last where the bare board interspersed them. Blue must keep its comp to collect Red's break.
+    let first_broken = live_rule
+        .ranked
+        .iter()
+        .position(|r| !r.ends.blue_feasible)
+        .unwrap_or_else(|| panic!("some pair breaks Blue"));
+    for r in &live_rule.ranked[first_broken..] {
+        assert!(
+            !r.ends.blue_feasible && !r.ends.red_feasible,
+            "{:?}",
+            r.action
+        );
+        assert_eq!(r.value.to_bits(), bare_value(r.action).to_bits());
+    }
+}
+
+/// Review round 5 (judgement): the Tier A harness's band check reads L/2, so a Tier A fixture that
+/// declared the live rule would misfire silently; the loader refuses the rule instead (the live rule
+/// is Tier B's and the wire's). Every shipped Tier A fixture declares `on` or `off`.
+#[test]
+fn the_tier_a_loader_refuses_the_live_rule() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/tier-a/01-pair-completion.json");
+    let raw = std::fs::read_to_string(&path).expect("fixture 01");
+    assert_eq!(raw.matches("\"feasibility\": \"on\"").count(), 1);
+    let live_rule = raw.replace(
+        "\"feasibility\": \"on\"",
+        "\"feasibility\": \"pool_or_roster\"",
+    );
+    match Fixture::from_json(&live_rule, "01-live") {
+        Err(FixtureError::Invalid { field, reason, .. }) => {
+            assert_eq!(field, "feasibility");
+            assert!(reason.contains("Tier B"), "{reason}");
+        }
+        other => panic!("expected the loader to refuse: {other:?}"),
+    }
+    assert!(Fixture::from_json(&raw, "01").is_ok());
 }

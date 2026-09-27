@@ -4,6 +4,7 @@
 //! can wrap it (the strict-transform invariant) and so slice 4's alpha-beta consumes the same
 //! surface.
 
+use super::feasibility::FeasibilityRule;
 use super::universe::{ChampionIdx, Universe};
 
 /// What a leaf sees: both sides' picks and whether each side can still fill five roles.
@@ -20,6 +21,22 @@ pub trait Objective {
     /// one — and must be a function of the pick SETS and the flags, never of slice order (slice-5
     /// U3: the search compares values reached by different paths bit for bit).
     fn value(&self, leaf: &Leaf<'_>) -> f64;
+
+    /// `value` under `rule` (slice-5 U10): under `FeasibilityRule::PoolOrRoster` the leaf also
+    /// carries `blue_off` / `red_off`, each side's off-pool picks made plus the forced ones still to
+    /// come (a lower bound from the feasibility predicate), and the infeasibility band is the wider
+    /// L'. Under `On` / `Off` the counts are 0 and `value` is the answer. The oracle and the search
+    /// call this one. No default on purpose (review round 5): a default that called `value` would be
+    /// exact under the gate and silently WRONG under `PoolOrRoster` even with zero counts (L where
+    /// L' is due), so every implementation — the strict-transform test wrappers included — must say
+    /// what it does under the live rule (a wrapper forwards to the wrapped objective's `value_under`).
+    fn value_under(
+        &self,
+        leaf: &Leaf<'_>,
+        rule: FeasibilityRule,
+        blue_off: usize,
+        red_off: usize,
+    ) -> f64;
 }
 
 impl Universe {
@@ -58,6 +75,36 @@ impl Universe {
     }
 }
 
+impl Universe {
+    /// Under the live rule the two bands can meet: five locked champions that cannot fill five
+    /// roles are infeasible on ANY roster, so a side whose pool lacks a role chooses between a forced
+    /// off-pool pick (−P) and a suicide comp (−L'); with L' = L = P the board would decide (review
+    /// round 4). Feasible live leaves span `board ± 5P` (net counts run from −5 to 5), so the band
+    /// that keeps every leaf where Blue ALONE is broken below every feasible one must clear
+    /// 2Σ + 10P: `L' = L + 10P = 11·L`, finite by construction (`from_tables` rejects an L' that
+    /// overflows, and a largest leaf `Σ + 5P + L'` that does). `board − P·k` and `board − L'`
+    /// therefore never tie for any k ≤ 5. A BOTH-broken leaf is `board + net·P` — the off-pool
+    /// picks made are facts, the bands cancel (R1) — the S11 residual, unchanged by this slice.
+    fn live_leaf_value(&self, leaf: &Leaf<'_>, blue_off: usize, red_off: usize) -> f64 {
+        // Blue-perspective: Blue's off-pool picks cost, Red's pay. Net the INTEGER counts first —
+        // `(board − kP) + kP` is not `board` on floats (review round 4, the round-1 defect's shape).
+        // Each count ≤ 5 (five picks a side; forced ≤ remaining), so the conversion is exact.
+        let count = |n: usize| i8::try_from(n).unwrap_or(i8::MAX);
+        let net = count(red_off).saturating_sub(count(blue_off));
+        let board = self.board_value(leaf.blue, leaf.red);
+        let board = if net == 0 {
+            board
+        } else {
+            board + f64::from(net) * self.off_pool_cost()
+        };
+        match (leaf.blue_feasible, leaf.red_feasible) {
+            (false, true) => board - self.live_loss(),
+            (true, false) => board + self.live_loss(),
+            _ => board,
+        }
+    }
+}
+
 impl Objective for Universe {
     /// R1 (slice 4): `board − L·[Blue infeasible] + L·[Red infeasible]`; both infeasible → the board
     /// EXACTLY — one operation per case, because `(board − L) + L` is not `board` on floats (slice-5
@@ -69,6 +116,28 @@ impl Objective for Universe {
             (false, true) => board - self.loss(),
             (true, false) => board + self.loss(),
             _ => board,
+        }
+    }
+
+    /// The gate rules are `value` itself (Tier A: bit-identical by construction); the live rule is
+    /// `board + P·(red_off − blue_off)`, then the R1 flags at L'.
+    fn value_under(
+        &self,
+        leaf: &Leaf<'_>,
+        rule: FeasibilityRule,
+        blue_off: usize,
+        red_off: usize,
+    ) -> f64 {
+        match rule {
+            FeasibilityRule::On | FeasibilityRule::Off => {
+                debug_assert_eq!(
+                    (blue_off, red_off),
+                    (0, 0),
+                    "off-pool counts are zero under the gate"
+                );
+                self.value(leaf)
+            }
+            FeasibilityRule::PoolOrRoster => self.live_leaf_value(leaf, blue_off, red_off),
         }
     }
 }

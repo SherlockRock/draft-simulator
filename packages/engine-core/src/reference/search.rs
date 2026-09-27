@@ -6,8 +6,8 @@
 //! `iterative_deepening::deepen_with_hook` and `cancellation::CancelHandle`, unchanged — the target note's
 //! § 2 contract, met by reuse.
 
-use super::feasibility::{side_feasible, FeasibilityMemo};
-use super::node::{classify, ClassifyError, LeafEnd, LeafKind, NodeKind};
+use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::Leaf;
 use super::oracle::{Mode, OracleError, OracleInput};
 use super::state::{Action, Position};
@@ -158,12 +158,17 @@ impl Iteration<'_, '_> {
     }
 
     fn leaf_value(&self, position: &Position<'_>, end: LeafEnd) -> f64 {
-        self.input.objective.value(&Leaf {
-            blue: position.picks(Side::Blue),
-            red: position.picks(Side::Red),
-            blue_feasible: end.blue_feasible,
-            red_feasible: end.red_feasible,
-        })
+        self.input.objective.value_under(
+            &Leaf {
+                blue: position.picks(Side::Blue),
+                red: position.picks(Side::Red),
+                blue_feasible: end.blue_feasible,
+                red_feasible: end.red_feasible,
+            },
+            self.input.feasibility,
+            end.blue_off_pool,
+            end.red_off_pool,
+        )
     }
 
     /// R4: children by the static utility of the child position, best first for the mover; equal values
@@ -424,15 +429,24 @@ pub fn search(
         feasible(&mut shared.memo, Side::Blue),
         feasible(&mut shared.memo, Side::Red),
     );
-    if !(blue_feasible && red_feasible) {
+    // The gate refuses a root a side cannot finish from (slice 4, R3). Under the live rule (U10)
+    // only locked picks that cannot fill five roles are infeasible — a fact on the board, often the
+    // OPPONENT's (a pair of two ADC-only champions), and the draft goes on: that side is priced at L'
+    // on every leaf, a constant, so the ranking is the board's and the off-pool term's (round 5).
+    if input.feasibility != FeasibilityRule::PoolOrRoster && !(blue_feasible && red_feasible) {
         return Err(invalid(OracleError::RootInfeasible {
             blue_feasible,
             red_feasible,
         }));
     }
-    if position
-        .legal_actions(input.universe, input.pools)
-        .is_empty()
+    if legal_actions_under(
+        position,
+        input.universe,
+        input.pools,
+        input.feasibility,
+        &mut shared.memo,
+    )
+    .is_empty()
     {
         return Err(invalid(OracleError::NoLegalAction {
             slot: position.slot_index(),

@@ -210,7 +210,9 @@ impl<'f> Position<'f> {
     }
 
     /// Ban slot: every available champion. Pick slot: every available champion in the mover's
-    /// pool — all unordered pairs at a pair's first half, singles otherwise. Never `Skip`.
+    /// pool — all unordered pairs at a pair's first half, singles otherwise. Never `Skip`. This is
+    /// the hard gate (D4, `FeasibilityRule::On`); `node::legal_actions_under` applies the
+    /// `PoolOrRoster` widening on top of it.
     pub fn legal_actions(&self, universe: &Universe, pools: &Pools) -> Vec<Action> {
         let Some(slot) = self.next_slot() else {
             return Vec::new();
@@ -219,23 +221,29 @@ impl<'f> Position<'f> {
         match slot.action {
             ActionType::Ban => available.iter().map(Action::Ban).collect(),
             ActionType::Pick => {
-                let mine: Vec<ChampionIdx> = available
-                    .intersect(pools.for_side(slot.side))
-                    .iter()
-                    .collect();
-                if slot.pair_start {
-                    let mut pairs =
-                        Vec::with_capacity(mine.len() * mine.len().saturating_sub(1) / 2);
-                    for (i, &a) in mine.iter().enumerate() {
-                        for &b in &mine[i + 1..] {
-                            pairs.push(Action::pair(a, b));
-                        }
-                    }
-                    pairs
-                } else {
-                    mine.into_iter().map(Action::Pick).collect()
+                self.pick_actions_from(available.intersect(pools.for_side(slot.side)))
+            }
+        }
+    }
+
+    /// The pick actions over an explicit candidate set at the next slot: all unordered pairs at a
+    /// pair's first half, singles otherwise. Callers pass `available ∩ pool` (the gate) or
+    /// `available` (the roster fallback, U10).
+    pub fn pick_actions_from(&self, candidates: ChampionSet) -> Vec<Action> {
+        let Some(slot) = self.next_slot() else {
+            return Vec::new();
+        };
+        let mine: Vec<ChampionIdx> = candidates.iter().collect();
+        if slot.pair_start {
+            let mut pairs = Vec::with_capacity(mine.len() * mine.len().saturating_sub(1) / 2);
+            for (i, &a) in mine.iter().enumerate() {
+                for &b in &mine[i + 1..] {
+                    pairs.push(Action::pair(a, b));
                 }
             }
+            pairs
+        } else {
+            mine.into_iter().map(Action::Pick).collect()
         }
     }
 

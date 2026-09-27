@@ -50,6 +50,21 @@ fn max_bipartite_matching(champion_masks: &[RoleMask]) -> usize {
     matched
 }
 
+/// The size of the largest role assignment among `champions` (distinct champions to distinct roles,
+/// each champion in a role it can play): the rank of the set in the transversal matroid the
+/// predicate below extends. `reference::feasibility::off_pool_count` reads it to price a pool that
+/// cannot finish: `5 − rank(locked ∪ pool)` roles must come from outside the pool.
+pub(crate) fn max_role_matching(
+    champions: &[String],
+    meta: &HashMap<String, ChampionMeta>,
+) -> usize {
+    let masks: Vec<RoleMask> = champions
+        .iter()
+        .map(|c| champion_role_mask(c, meta))
+        .collect();
+    max_bipartite_matching(&masks)
+}
+
 fn try_augment(
     champ_idx: usize,
     champ_mask: RoleMask,
