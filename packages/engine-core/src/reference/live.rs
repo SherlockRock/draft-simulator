@@ -10,9 +10,11 @@
 //! it never produces `Skip` (no product surface records one, D5). It never refuses a compute over
 //! a pool or exclusion id it does not know: those are reported in `LiveRoot::unknown` (U5).
 
-use super::state::PositionError;
-use super::universe::{Champion, Universe, UniverseError};
-use crate::draft_state::{ActionType, Side};
+use super::entries::{board_picks, pool_set_lenient};
+use super::format::Format;
+use super::state::{Entry, Pools, Position, PositionError};
+use super::universe::{Champion, ChampionSet, Universe, UniverseError};
+use crate::draft_state::{ActionType, DraftState, Side};
 use crate::fm::{dot, FmWeights, RANK};
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
@@ -143,5 +145,165 @@ impl LiveUniverse {
             padded,
             dropped,
         })
+    }
+}
+
+/// Slot by slot over `Format::standard()` up to the state's turn index, taking the next id from
+/// the list the slot's side and kind name (U6).
+pub fn entries_from_draft_state(
+    state: &DraftState,
+    universe: &Universe,
+) -> Result<Vec<Entry>, LiveError> {
+    let format = Format::standard();
+    let filled = state.turn_index();
+    let slots = format.slots().len();
+    if filled > slots {
+        return Err(LiveError::TooManyEntries {
+            count: filled,
+            slots,
+        });
+    }
+    let mut cursors = [0usize; 4];
+    let mut entries = Vec::with_capacity(filled);
+    for i in 0..filled {
+        let slot = format.slot(i).expect("i < slots");
+        let (list, cursor) = match (slot.side, slot.action) {
+            (Side::Blue, ActionType::Ban) => (&state.blue_bans, &mut cursors[0]),
+            (Side::Red, ActionType::Ban) => (&state.red_bans, &mut cursors[1]),
+            (Side::Blue, ActionType::Pick) => (&state.blue_picks, &mut cursors[2]),
+            (Side::Red, ActionType::Pick) => (&state.red_picks, &mut cursors[3]),
+        };
+        let id = list.get(*cursor).ok_or(LiveError::Inconsistent {
+            slot: i,
+            side: slot.side,
+            kind: slot.action,
+        })?;
+        *cursor += 1;
+        let idx = universe
+            .index(id)
+            .ok_or_else(|| LiveError::UnknownChampion {
+                field: format!("position[{i}]"),
+                id: id.clone(),
+            })?;
+        entries.push(match slot.action {
+            ActionType::Ban => Entry::Ban(idx),
+            ActionType::Pick => Entry::Pick(idx),
+        });
+    }
+    Ok(entries)
+}
+
+/// Which request list an unknown id came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnknownList {
+    PoolsBlue,
+    PoolsRed,
+    Exclusions,
+}
+
+impl std::fmt::Display for UnknownList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            UnknownList::PoolsBlue => "pools.blue",
+            UnknownList::PoolsRed => "pools.red",
+            UnknownList::Exclusions => "exclusions",
+        })
+    }
+}
+
+/// A pool or exclusion id the universe does not know (U5): a typo, or a champion in
+/// `LiveUniverse::dropped` — the caller has both lists and decides which it was.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownId {
+    pub list: UnknownList,
+    pub id: String,
+}
+
+/// The pools of a live request (U5): each side's set = its search ids ∪ its own picks on the board;
+/// `excluded` = the cross-game exclusions (folded into the position by `Position::with_excluded`).
+/// Ids the universe does not know are collected in `unknown`, never refused — a root refusal that
+/// follows (`RootInfeasible` after a dropped id emptied a role) should be reported together with it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResolvedPools {
+    pub pools: Pools,
+    pub excluded: ChampionSet,
+    pub unknown: Vec<UnknownId>,
+}
+
+pub fn pools_from_search(
+    blue_search: &[String],
+    red_search: &[String],
+    exclusions: &[String],
+    entries: &[Entry],
+    format: &Format,
+    universe: &Universe,
+) -> ResolvedPools {
+    let mut unknown = Vec::new();
+    let mut resolve = |list: UnknownList, ids: &[String]| {
+        let (set, missing) = pool_set_lenient(ids, universe);
+        unknown.extend(missing.into_iter().map(|id| UnknownId { list, id }));
+        set
+    };
+    let blue = resolve(UnknownList::PoolsBlue, blue_search).union(board_picks(
+        entries,
+        format,
+        Side::Blue,
+    ));
+    let red =
+        resolve(UnknownList::PoolsRed, red_search).union(board_picks(entries, format, Side::Red));
+    let excluded = resolve(UnknownList::Exclusions, exclusions);
+    ResolvedPools {
+        pools: Pools { blue, red },
+        excluded,
+        unknown,
+    }
+}
+
+/// A converted root: the standard format, the entries, the pools and the ids that were not
+/// resolved. Validated by `Position::new` at construction, so `position` cannot be the first thing
+/// to fail. **`position()` is the only constructor that carries `excluded`**: a `Position` rebuilt
+/// from `entries` with `Position::new` alone has no exclusions.
+#[derive(Clone, Debug)]
+pub struct LiveRoot {
+    pub format: Format,
+    pub entries: Vec<Entry>,
+    pub pools: Pools,
+    /// Cross-game exclusions, applied to every `position()` (`Position::with_excluded`).
+    pub excluded: ChampionSet,
+    /// Pool / exclusion ids the universe does not know (U5) — reported, not refused.
+    pub unknown: Vec<UnknownId>,
+}
+
+impl LiveRoot {
+    pub fn from_draft_state(
+        state: &DraftState,
+        blue_search: &[String],
+        red_search: &[String],
+        exclusions: &[String],
+        universe: &Universe,
+    ) -> Result<Self, LiveError> {
+        let format = Format::standard();
+        let entries = entries_from_draft_state(state, universe)?;
+        let resolved = pools_from_search(
+            blue_search,
+            red_search,
+            exclusions,
+            &entries,
+            &format,
+            universe,
+        );
+        Position::new(&format, &entries, &resolved.pools, universe)?;
+        Ok(Self {
+            format,
+            entries,
+            pools: resolved.pools,
+            excluded: resolved.excluded,
+            unknown: resolved.unknown,
+        })
+    }
+
+    pub fn position<'f>(&'f self, universe: &Universe) -> Result<Position<'f>, PositionError> {
+        Position::new(&self.format, &self.entries, &self.pools, universe)
+            .map(|p| p.with_excluded(self.excluded))
     }
 }

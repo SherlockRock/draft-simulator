@@ -5,11 +5,18 @@
 mod common;
 
 use common::{load_production_data, repo_root};
-use engine_core::draft_state::Side;
+use engine_core::cancellation::CancelHandle;
+use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
-use engine_core::reference::live::{DropReason, Dropped, LiveUniverse};
+use engine_core::reference::feasibility::FeasibilityRule;
+use engine_core::reference::live::{
+    entries_from_draft_state, pools_from_search, DropReason, Dropped, LiveError, LiveRoot,
+    LiveUniverse, UnknownId, UnknownList,
+};
 use engine_core::reference::objective::{Leaf, Objective};
+use engine_core::reference::oracle::{Mode, OracleInput};
+use engine_core::reference::search::{search, SearchOutcome, SearchParams};
 use engine_core::reference::state::{Entry, Pools, Position};
 use engine_core::reference::universe::{
     Champion, ChampionIdx, ChampionSet, Universe, UniverseError, MAX_CHAMPIONS,
@@ -17,6 +24,8 @@ use engine_core::reference::universe::{
 use proptest::prelude::*;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::Duration;
 
 // ---------------------------------------------------------------------------------------------
 // Loading
@@ -528,4 +537,585 @@ fn a_both_broken_leaf_is_the_board_bit_for_bit_on_live_floats() {
         board.to_bits(),
         "the test must sit on a board where (b − L) + L ≠ b, or it proves nothing"
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// 6: the converter on a real session state (U9)
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct Sample {
+    events: Vec<SampleEvent>,
+    pools: SamplePools,
+}
+
+#[derive(Deserialize)]
+struct SampleEvent {
+    slot: usize,
+    side: String,
+    kind: String,
+    champion: String,
+}
+
+#[derive(Deserialize)]
+struct SamplePools {
+    blue: Vec<String>,
+    red: Vec<String>,
+}
+
+fn sample() -> Sample {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/live/session-fce65eb1.json");
+    serde_json::from_str(&std::fs::read_to_string(&path).expect("sample state"))
+        .expect("sample parses")
+}
+
+/// The state after the first `events` recorded events (the incumbent's count-positional shape).
+fn state_at(sample: &Sample, events: usize) -> DraftState {
+    let mut state = DraftState::default();
+    for (i, e) in sample.events.iter().take(events).enumerate() {
+        assert_eq!(e.slot, i, "sample events are in slot order");
+        let list = match (e.side.as_str(), e.kind.as_str()) {
+            ("blue", "ban") => &mut state.blue_bans,
+            ("red", "ban") => &mut state.red_bans,
+            ("blue", "pick") => &mut state.blue_picks,
+            ("red", "pick") => &mut state.red_picks,
+            other => panic!("sample event {other:?}"),
+        };
+        list.push(e.champion.clone());
+    }
+    state
+}
+
+fn params(node_budget: Option<u64>) -> SearchParams {
+    SearchParams {
+        node_budget,
+        prune: true,
+        transposition: true,
+        wall_budget: Duration::from_secs(86_400),
+        min_completed_depth: 1,
+    }
+}
+
+fn run(
+    root: &LiveRoot,
+    u: &Universe,
+    mode: Mode,
+    params: &SearchParams,
+    feasibility: FeasibilityRule,
+) -> SearchOutcome {
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    search(
+        &OracleInput {
+            position: &position,
+            universe: u,
+            pools: &root.pools,
+            objective: u,
+            feasibility,
+            mode,
+            epsilon: 1e-9,
+        },
+        params,
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{e}"))
+}
+
+#[test]
+fn the_sample_state_converts_at_every_root_shape() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+
+    // Slot 11: Red single pick after Blue Pantheon / Red Gwen + Heimerdinger / Blue Tristana + Veigar.
+    let state = state_at(&s, 11);
+    let root = LiveRoot::from_draft_state(&state, &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(root.entries.len(), 11);
+    assert!(root.unknown.is_empty());
+    assert!(root.excluded.is_empty());
+    assert_eq!(
+        &root.entries[..6],
+        &["Aatrox", "Ahri", "Thresh", "Ivern", "Nidalee", "Blitzcrank"]
+            .map(|id| Entry::Ban(idx(id)))
+    );
+    assert_eq!(
+        &root.entries[6..],
+        &["Pantheon", "Gwen", "Heimerdinger", "Tristana", "Veigar"].map(|id| Entry::Pick(idx(id)))
+    );
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Red));
+    assert!(!position.is_mid_pair());
+    assert_eq!(position.picks(Side::Blue).len(), 3);
+    assert_eq!(position.picks(Side::Red).len(), 2);
+    assert_eq!(
+        root.pools.blue.len(),
+        85,
+        "every sample Blue pick is already in its pool"
+    );
+    assert_eq!(root.pools.red.len(), 102);
+    assert_eq!(position.available(u).len(), 173 - 11);
+
+    // U5: a past pick outside the recorded pool loads as a fact.
+    let blue_without_veigar: Vec<String> = s
+        .pools
+        .blue
+        .iter()
+        .filter(|id| *id != "Veigar")
+        .cloned()
+        .collect();
+    let root = LiveRoot::from_draft_state(&state, &blue_without_veigar, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(root.pools.blue.contains(idx("Veigar")));
+    assert_eq!(root.pools.blue.len(), 85);
+
+    // Slot 7: Red pair start.
+    let root = LiveRoot::from_draft_state(&state_at(&s, 7), &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Red));
+    assert!(position.next_slot().is_some_and(|slot| slot.pair_start));
+
+    // Slot 2: Blue ban (slot 3 belongs to Red).
+    let root = LiveRoot::from_draft_state(&state_at(&s, 2), &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Blue));
+    assert_eq!(
+        position.next_slot().map(|slot| slot.action),
+        Some(ActionType::Ban)
+    );
+
+    // Slot 8: a mid-pair root (Red's first pick of the pair is on the board, D8 2) — the completing
+    // pick is a single action.
+    let root = LiveRoot::from_draft_state(&state_at(&s, 8), &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Red));
+    assert!(position.is_mid_pair());
+    let legal = position.legal_actions(u, &root.pools);
+    assert!(!legal.is_empty());
+    assert!(legal
+        .iter()
+        .all(|a| matches!(a, engine_core::reference::state::Action::Pick(_))));
+
+    // A completed draft converts (twenty entries) and the search refuses it at the root.
+    let mut complete = state_at(&s, 11);
+    complete.red_picks.push("Jinx".into());
+    complete.red_bans.push("Zed".into());
+    complete.blue_bans.push("Syndra".into());
+    complete.red_bans.push("Lulu".into());
+    complete.blue_bans.push("Ornn".into());
+    complete.red_picks.push("Kaisa".into());
+    complete.blue_picks.push("Leona".into());
+    complete.blue_picks.push("Garen".into());
+    complete.red_picks.push("Sion".into());
+    assert_eq!(complete.turn_index(), 20);
+    let root = LiveRoot::from_draft_state(&complete, &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert!(position.is_complete());
+    assert_eq!(position.picks(Side::Blue).len(), 5);
+    let refused = search(
+        &OracleInput {
+            position: &position,
+            universe: u,
+            pools: &root.pools,
+            objective: u,
+            feasibility: FeasibilityRule::On,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+        },
+        &params(None),
+        &CancelHandle::new(),
+        |_| {},
+    );
+    assert!(
+        matches!(
+            refused,
+            Err(engine_core::engine::EngineError::InvalidInput { .. })
+        ),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn the_converter_names_every_inconsistency() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+
+    let lopsided = DraftState {
+        blue_bans: vec!["Aatrox".into(), "Thresh".into()],
+        ..Default::default()
+    };
+    assert_eq!(
+        entries_from_draft_state(&lopsided, u).err(),
+        Some(LiveError::Inconsistent {
+            slot: 1,
+            side: Side::Red,
+            kind: ActionType::Ban
+        })
+    );
+
+    let mut unknown = state_at(&s, 2);
+    unknown.blue_bans[0] = "Nobody".into();
+    assert_eq!(
+        entries_from_draft_state(&unknown, u).err(),
+        Some(LiveError::UnknownChampion {
+            field: "position[0]".into(),
+            id: "Nobody".into()
+        })
+    );
+
+    // U5: a stale POOL or EXCLUSION id is reported, never refused (the incumbent tolerates it too).
+    let state = state_at(&s, 11);
+    let entries = entries_from_draft_state(&state, u).unwrap_or_else(|e| panic!("{e}"));
+    let mut red = s.pools.red.clone();
+    red.push("FiddleSticks".into());
+    let resolved = pools_from_search(
+        &s.pools.blue,
+        &red,
+        &["Nobody".into()],
+        &entries,
+        &engine_core::reference::format::Format::standard(),
+        u,
+    );
+    assert_eq!(
+        resolved.unknown,
+        vec![
+            UnknownId {
+                list: UnknownList::PoolsRed,
+                id: "FiddleSticks".into()
+            },
+            UnknownId {
+                list: UnknownList::Exclusions,
+                id: "Nobody".into()
+            }
+        ]
+    );
+    assert_eq!(resolved.unknown[0].list.to_string(), "pools.red");
+    assert_eq!(resolved.pools.red.len(), 102);
+    assert!(resolved.excluded.is_empty());
+    let root = LiveRoot::from_draft_state(&state, &s.pools.blue, &red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(root.unknown.len(), 1);
+    assert_eq!(root.unknown[0].id, "FiddleSticks");
+
+    let overrun = DraftState {
+        blue_bans: vec!["Aatrox".into(); 5],
+        red_bans: vec!["Ahri".into(); 5],
+        blue_picks: vec!["Zed".into(); 6],
+        red_picks: vec!["Jinx".into(); 5],
+    };
+    assert_eq!(
+        entries_from_draft_state(&overrun, u).err(),
+        Some(LiveError::TooManyEntries {
+            count: 21,
+            slots: 20
+        })
+    );
+}
+
+/// Cross-game exclusions (target note § 2): never a ban, never a pick, never a feasibility option.
+#[test]
+fn excluded_champions_are_never_generated_and_do_not_count_for_feasibility() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let exclusions = ["Hwei".to_string(), "Akali".to_string()];
+
+    // Slot 11, Red pick: Hwei was the unexcluded top pick (§ 8); now it is not even legal.
+    let root = LiveRoot::from_draft_state(
+        &state_at(&s, 11),
+        &s.pools.blue,
+        &s.pools.red,
+        &exclusions,
+        u,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        root.excluded,
+        [idx("Hwei"), idx("Akali")].into_iter().collect()
+    );
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert!(position.taken().contains(idx("Hwei")), "folded into taken");
+    assert_eq!(position.available(u).len(), 173 - 11 - 2);
+    let legal = position.legal_actions(u, &root.pools);
+    assert!(!legal.contains(&engine_core::reference::state::Action::Pick(idx("Hwei"))));
+    assert_eq!(legal.len(), 91, "93 legal picks minus the two excluded");
+    let out = run(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::On,
+    );
+    assert!(out
+        .ranked
+        .iter()
+        .all(|r| r.action != engine_core::reference::state::Action::Pick(idx("Hwei"))));
+
+    // Slot 2, Blue ban: an excluded champion is not offered as a ban either.
+    let root = LiveRoot::from_draft_state(
+        &state_at(&s, 2),
+        &s.pools.blue,
+        &s.pools.red,
+        &exclusions,
+        u,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let legal = position.legal_actions(u, &root.pools);
+    assert_eq!(legal.len(), 171 - 2);
+    assert!(!legal.contains(&engine_core::reference::state::Action::Ban(idx("Hwei"))));
+}
+
+/// A pool that cannot cover five roles (a partial scouting pool) makes the root infeasible: the
+/// search refuses with `InvalidInput`, it does not rank (slice-4 R3 root check; named for 5b).
+#[test]
+fn a_pool_without_a_role_is_refused_at_the_root_not_ranked() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let (_, meta) = load_production_data();
+    let no_support: Vec<String> = s
+        .pools
+        .red
+        .iter()
+        .filter(|id| !meta[*id].positions.contains(&Role::Support))
+        .take(12)
+        .cloned()
+        .collect();
+    assert_eq!(no_support.len(), 12);
+    // Slot 2: Red has no picks yet (at slot 11 Red's Heimerdinger already covers support).
+    let root = LiveRoot::from_draft_state(&state_at(&s, 2), &s.pools.blue, &no_support, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let refused = search(
+        &OracleInput {
+            position: &position,
+            universe: u,
+            pools: &root.pools,
+            objective: u,
+            feasibility: FeasibilityRule::On,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+        },
+        &params(None),
+        &CancelHandle::new(),
+        |_| {},
+    );
+    match refused {
+        Err(engine_core::engine::EngineError::InvalidInput { path }) => {
+            assert!(path[0].contains("infeasible"), "{path:?}")
+        }
+        other => panic!("expected InvalidInput(RootInfeasible), got {other:?}"),
+    }
+}
+
+#[test]
+fn the_reference_search_runs_on_every_sample_root_under_a_node_budget() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    // (events, label, depth the 400 000-node budget allows, partial): the pair root's depth-2
+    // iteration (≈ 1.5 × 10⁷ nodes) is cut and depth 1 is returned partial; the others complete.
+    for (events, label, depth, partial) in [
+        (2usize, "slot 2 Blue ban", 2, false),
+        (7, "slot 7 Red pair", 1, true),
+        (11, "slot 11 Red pick", 2, false),
+    ] {
+        let root =
+            LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
+                .unwrap_or_else(|e| panic!("{e}"));
+        let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+        let legal = position.legal_actions(u, &root.pools).len();
+        let out = run(
+            &root,
+            u,
+            Mode::Horizon(2),
+            &params(Some(400_000)),
+            FeasibilityRule::On,
+        );
+        assert_eq!(
+            out.ranked.len(),
+            legal,
+            "{label}: every legal root action is ranked"
+        );
+        assert!(!out.top_set.is_empty(), "{label}");
+        assert_eq!((out.depth, out.partial), (depth, partial), "{label}");
+        assert!(out.value.is_finite(), "{label}");
+        println!(
+            "{label}: {legal} root actions, depth {} (partial {}), value {:.4}, nodes {} / leaves {} / cutoffs {} / hits {}, {:?}",
+            out.depth, out.partial, out.value, out.nodes, out.leaves, out.cutoffs, out.table_hits, out.elapsed
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 7: the search agrees with itself on the live universe (pruning soundness without the oracle)
+// ---------------------------------------------------------------------------------------------
+
+fn bits(o: &SearchOutcome) -> Vec<(engine_core::reference::state::Action, u64)> {
+    o.ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect()
+}
+
+/// R3 pins this shape: every root child has a full window, and a horizon inside the ban phase ties
+/// every leaf under a root child, so nothing can cut and nothing is stored. The four configurations
+/// must still agree bit for bit.
+#[test]
+fn prune_and_table_change_no_live_value_at_the_real_pick_root() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let root = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut outcomes = Vec::new();
+    for (prune, transposition) in [(false, false), (true, false), (false, true), (true, true)] {
+        let p = SearchParams {
+            prune,
+            transposition,
+            ..params(None)
+        };
+        let out = run(&root, u, Mode::Horizon(2), &p, FeasibilityRule::On);
+        assert_eq!(out.depth, 2);
+        assert!(!out.partial);
+        assert_eq!(
+            out.cutoffs, 0,
+            "a full window per root child + a ban ply below it cannot cut"
+        );
+        assert_eq!(
+            out.table_hits, 0,
+            "no interior node repeats inside two plies from a pick root"
+        );
+        println!(
+            "slot 11 prune {prune} table {transposition}: nodes {} leaves {} {:?}",
+            out.nodes, out.leaves, out.elapsed
+        );
+        outcomes.push(out);
+    }
+    for o in &outcomes[1..] {
+        assert_eq!(bits(o), bits(&outcomes[0]), "ranked lists differ");
+        assert_eq!(o.top_set, outcomes[0].top_set);
+    }
+}
+
+/// A root where both mechanisms fire on the live universe: slot 14 (Red ban) at horizon 3 — Red ban,
+/// Blue ban, Red pick. The two bans commute (S12), so every Red-pick node is reached twice and the
+/// second visit is a table hit; the Red-pick layer under a max node is where alpha-beta cuts. The
+/// state is the sample extended by three synthetic events (Red pick Jinx at 11, Red ban Zed at 12,
+/// Blue ban Syndra at 13) and the pools are cut to six champions each so the test stays inside a
+/// debug-build budget; feasibility is off because six-champion pools are not the point here.
+#[test]
+fn prune_and_table_change_no_live_value_where_both_can_fire() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let mut state = state_at(&s, 11);
+    state.red_picks.push("Jinx".into());
+    state.red_bans.push("Zed".into());
+    state.blue_bans.push("Syndra".into());
+    assert_eq!(state.turn_index(), 14);
+    let cut = |ids: &[String]| -> Vec<String> {
+        ids.iter()
+            .filter(|id| !["Jinx", "Zed", "Syndra"].contains(&id.as_str()))
+            .take(6)
+            .cloned()
+            .collect()
+    };
+    let root = LiveRoot::from_draft_state(&state, &cut(&s.pools.blue), &cut(&s.pools.red), &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(position.mover(), Some(Side::Red));
+    assert_eq!(
+        position.next_slot().map(|slot| slot.action),
+        Some(ActionType::Ban)
+    );
+
+    let plain = run(
+        &root,
+        u,
+        Mode::Horizon(3),
+        &SearchParams {
+            prune: false,
+            transposition: false,
+            ..params(None)
+        },
+        FeasibilityRule::Off,
+    );
+    let full = run(
+        &root,
+        u,
+        Mode::Horizon(3),
+        &SearchParams {
+            prune: true,
+            transposition: true,
+            ..params(None)
+        },
+        FeasibilityRule::Off,
+    );
+    for o in [&plain, &full] {
+        assert_eq!(o.depth, 3);
+        assert!(!o.partial);
+        println!(
+            "slot 14 prune+table {}: nodes {} leaves {} cutoffs {} hits {} {:?}",
+            o.cutoffs > 0 || o.table_hits > 0,
+            o.nodes,
+            o.leaves,
+            o.cutoffs,
+            o.table_hits,
+            o.elapsed
+        );
+    }
+    assert_eq!(plain.cutoffs, 0);
+    assert_eq!(plain.table_hits, 0);
+    assert!(
+        full.cutoffs > 0,
+        "alpha-beta cuts under a max node with distinct leaves"
+    );
+    assert!(full.table_hits > 0, "commuting bans transpose (S12)");
+    assert!(full.leaves < plain.leaves);
+    assert_eq!(bits(&full), bits(&plain), "ranked lists differ");
+    assert_eq!(full.top_set, plain.top_set);
+}
+
+/// § 8 of the design: the unbudgeted depth-2 numbers on the three roots.
+/// `cargo test --release -p engine-core --test live -- --ignored --nocapture measure`
+#[test]
+#[ignore = "measurement, not a gate: cargo test --release --test live -- --ignored --nocapture"]
+fn measure_depth_two_on_every_sample_root() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    for (events, label) in [
+        (2usize, "slot 2 Blue ban"),
+        (7, "slot 7 Red pair"),
+        (11, "slot 11 Red pick"),
+    ] {
+        let root =
+            LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
+                .unwrap_or_else(|e| panic!("{e}"));
+        for depth in 1..=2 {
+            // The live rule; the gate's counts and top sets on this sample (the pools suffice), see § 8.
+            let out = run(
+                &root,
+                u,
+                Mode::Horizon(depth),
+                &params(None),
+                FeasibilityRule::On,
+            );
+            println!(
+                "{label} | depth {depth} | root actions {} | nodes {} | leaves {} | cutoffs {} | table hits {} | {:?} | top {:?}",
+                out.ranked.len(), out.nodes, out.leaves, out.cutoffs, out.table_hits, out.elapsed,
+                out.top_set.iter().map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>()).collect::<Vec<_>>()
+            );
+        }
+    }
 }
