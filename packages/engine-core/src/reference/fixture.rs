@@ -1,13 +1,17 @@
 //! Tier A fixture files (design § 5, D6): one JSON per fixture, validated on load so a
-//! mis-authored fixture fails with its field named rather than as a wrong answer.
+//! mis-authored fixture fails with its field named rather than as a wrong answer. Entry, pool and
+//! action specs are the shared ones in `super::entries` (slice-5 U7).
 
+use super::entries::{
+    spec_to_action, spec_to_entries, spec_to_pools, ActionSpec, EntrySpec, PoolsSpec, SpecError,
+};
 use super::feasibility::FeasibilityRule;
 use super::format::{Format, Turn};
 use super::objective::Objective;
 use super::oracle::{evaluate, Evaluation, OracleError, OracleInput};
 use super::state::{Action, Entry, Pools, Position, PositionError};
 use super::universe::{ChampionSet, Universe, UniverseSpec};
-use crate::draft_state::{ActionType, Side};
+use crate::draft_state::Side;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -36,38 +40,6 @@ enum OracleSpec {
     Horizon { horizon: usize },
 }
 
-#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum EntryKind {
-    Ban,
-    Pick,
-    Skip,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct EntrySpec {
-    slot: usize,
-    side: Side,
-    kind: EntryKind,
-    #[serde(default)]
-    champion: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ExpectedSpec {
-    Single(String),
-    Pair([String; 2]),
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PoolsSpec {
-    blue: Vec<String>,
-    red: Vec<String>,
-}
-
 fn default_epsilon() -> f64 {
     1e-9
 }
@@ -84,7 +56,7 @@ struct FixtureFile {
     pools: PoolsSpec,
     position: Vec<EntrySpec>,
     oracle: OracleSpec,
-    expected_top: Vec<ExpectedSpec>,
+    expected_top: Vec<ActionSpec>,
     #[serde(default = "default_epsilon")]
     epsilon: f64,
     dry_run: DryRun,
@@ -171,6 +143,14 @@ impl Fixture {
             field: field.to_string(),
             reason,
         };
+        let spec_err = |e: SpecError| {
+            let (field, reason) = e.field_and_reason();
+            FixtureError::Invalid {
+                id: id.clone(),
+                field,
+                reason,
+            }
+        };
 
         let format = match file.format {
             FormatSpec::Named(name) if name == "standard" => Format::standard(),
@@ -187,7 +167,7 @@ impl Fixture {
 
         let five_picks =
             format.picks_per_side(Side::Blue) == 5 && format.picks_per_side(Side::Red) == 5;
-        if file.feasibility == FeasibilityRule::On && !five_picks {
+        if file.feasibility != FeasibilityRule::Off && !five_picks {
             return Err(invalid(
                 "feasibility",
                 "\"on\" needs five picks a side (the predicate is defined only there); declare \"off\" and say why in notes".into(),
@@ -196,64 +176,11 @@ impl Fixture {
 
         let universe =
             Universe::new(file.universe).map_err(|e| invalid("universe", e.to_string()))?;
-        let lookup = |field: &str, name: &str| {
-            universe
-                .index(name)
-                .ok_or_else(|| invalid(field, format!("unknown champion {name:?}")))
-        };
 
-        let mut pools = Pools::default();
-        for name in &file.pools.blue {
-            pools.blue = pools.blue.with(lookup("pools.blue", name)?);
-        }
-        for name in &file.pools.red {
-            pools.red = pools.red.with(lookup("pools.red", name)?);
-        }
-
-        let mut entries = Vec::with_capacity(file.position.len());
-        for (i, e) in file.position.iter().enumerate() {
-            let field = |suffix: &str| format!("position[{i}].{suffix}");
-            if e.slot != i {
-                return Err(invalid(
-                    &field("slot"),
-                    format!("slot {} at index {i}", e.slot),
-                ));
-            }
-            let slot = format
-                .slot(i)
-                .ok_or_else(|| invalid(&field("slot"), "beyond the format".into()))?;
-            if e.side != slot.side {
-                return Err(invalid(
-                    &field("side"),
-                    format!("the format's slot {i} belongs to {:?}", slot.side),
-                ));
-            }
-            let expected_kind = match slot.action {
-                ActionType::Ban => EntryKind::Ban,
-                ActionType::Pick => EntryKind::Pick,
-            };
-            if e.kind != expected_kind
-                && !(e.kind == EntryKind::Skip && slot.action == ActionType::Ban)
-            {
-                return Err(invalid(
-                    &field("kind"),
-                    format!("the format's slot {i} is a {:?}", slot.action),
-                ));
-            }
-            let entry = match (e.kind, &e.champion) {
-                (EntryKind::Skip, None) => Entry::Skip,
-                (EntryKind::Skip, Some(_)) => {
-                    return Err(invalid(
-                        &field("champion"),
-                        "a skip names no champion".into(),
-                    ))
-                }
-                (_, None) => return Err(invalid(&field("champion"), "missing".into())),
-                (EntryKind::Ban, Some(name)) => Entry::Ban(lookup(&field("champion"), name)?),
-                (EntryKind::Pick, Some(name)) => Entry::Pick(lookup(&field("champion"), name)?),
-            };
-            entries.push(entry);
-        }
+        // Tier A pools are authored exactly: no board union (an off-pool pick is an authoring error).
+        let entries = spec_to_entries(&file.position, &format, &universe).map_err(spec_err)?;
+        let pools =
+            spec_to_pools(&file.pools, &entries, &format, &universe, false).map_err(spec_err)?;
         // Position::new re-checks kinds and adds duplicate / pool checks; its errors are position-level.
         let position = Position::new(&format, &entries, &pools, &universe)
             .map_err(|e: PositionError| invalid("position", e.to_string()))?;
@@ -289,34 +216,7 @@ impl Fixture {
         let mut expected_top = Vec::with_capacity(file.expected_top.len());
         for (i, e) in file.expected_top.iter().enumerate() {
             let field = format!("expected_top[{i}]");
-            let action = match e {
-                ExpectedSpec::Single(name) => {
-                    let c = lookup(&field, name)?;
-                    match root.action {
-                        ActionType::Ban => Action::Ban(c),
-                        ActionType::Pick if !root.pair_start => Action::Pick(c),
-                        ActionType::Pick => {
-                            return Err(invalid(
-                                &field,
-                                "the root is a pair turn; expected actions are [a, b] pairs".into(),
-                            ))
-                        }
-                    }
-                }
-                ExpectedSpec::Pair([a, b]) => {
-                    if !root.pair_start {
-                        return Err(invalid(
-                            &field,
-                            "the root is not a pair turn; expected actions are single ids".into(),
-                        ));
-                    }
-                    let (a, b) = (lookup(&field, a)?, lookup(&field, b)?);
-                    if a == b {
-                        return Err(invalid(&field, "a pair of the same champion".into()));
-                    }
-                    Action::pair(a, b)
-                }
-            };
+            let action = spec_to_action(e, root, &field, &universe).map_err(spec_err)?;
             if expected_top.contains(&action) {
                 return Err(invalid(&field, "duplicate".into()));
             }

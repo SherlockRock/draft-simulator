@@ -18,6 +18,7 @@
 //!
 //! This module sits beside the incumbent search and removes nothing from it.
 
+pub mod entries;
 pub mod feasibility;
 pub mod fixture;
 pub mod format;
