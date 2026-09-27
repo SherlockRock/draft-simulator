@@ -5,9 +5,12 @@
 mod common;
 
 use common::{load_production_data, repo_root};
+use engine_core::draft_state::Side;
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
 use engine_core::reference::live::{DropReason, Dropped, LiveUniverse};
+use engine_core::reference::objective::{Leaf, Objective};
+use engine_core::reference::state::{Entry, Pools, Position};
 use engine_core::reference::universe::{
     Champion, ChampionIdx, ChampionSet, Universe, UniverseError, MAX_CHAMPIONS,
 };
@@ -400,4 +403,129 @@ fn from_tables_names_a_wrong_shape_and_a_non_finite_entry() {
     let mut lower = two.clone();
     lower[1][0] = f64::INFINITY;
     assert!(Universe::from_tables(champions(2), &lower, &two).is_ok());
+}
+
+// ---------------------------------------------------------------------------------------------
+// 5: canonical order (U3)
+// ---------------------------------------------------------------------------------------------
+
+/// `board_value`'s loops on picks in the ORDER GIVEN — what a slot-ordered pick list would sum.
+fn unsorted_value(u: &Universe, blue: &[ChampionIdx]) -> f64 {
+    let mut v = 0.0;
+    for &b in blue {
+        v += u.linear(b);
+    }
+    for (i, &b) in blue.iter().enumerate() {
+        for &b2 in &blue[i + 1..] {
+            v += u.synergy(b, b2);
+        }
+    }
+    v
+}
+
+#[test]
+fn two_paths_to_the_same_blue_set_give_equal_picks_and_bit_equal_values() {
+    let live = live_universe();
+    let u = &live.universe;
+    // Find a live triple (a < b < c) where summing as [a, b, c] and as [b, a, c] differs in rounding —
+    // the case a slot-ordered pick list would expose. The search proves the sort is load-bearing.
+    let n = u8::try_from(u.len()).expect("< 256");
+    let mut found = None;
+    'outer: for a in 0..n {
+        for b in (a + 1)..n {
+            for c in (b + 1)..n {
+                let (a, b, c) = (ChampionIdx(a), ChampionIdx(b), ChampionIdx(c));
+                if unsorted_value(u, &[a, b, c]).to_bits()
+                    != unsorted_value(u, &[b, a, c]).to_bits()
+                {
+                    found = Some((a, b, c));
+                    break 'outer;
+                }
+            }
+        }
+    }
+    let (a, b, c) = found.expect("some live triple sums differently in a different order");
+    println!(
+        "order-sensitive triple: {} {} {}",
+        u.id(a),
+        u.id(b),
+        u.id(c)
+    );
+
+    // Slots 0–5 bans, 6 Blue pick, 7–8 Red pair, 9–10 Blue pair. Path 1: Blue a, then pair (b, c).
+    // Path 2: Blue b, then pair (a, c). Same Blue set, different slot order.
+    // Six bans and two Red picks from indices outside the triple.
+    let others: Vec<ChampionIdx> = (0..n)
+        .map(ChampionIdx)
+        .filter(|i| ![a, b, c].contains(i))
+        .take(9)
+        .collect();
+    let (bans, rest) = others.split_at(6);
+    let (reds, next_red) = (&rest[..2], rest[2]);
+    let entries = |first: ChampionIdx, pair: [ChampionIdx; 2]| -> Vec<Entry> {
+        let mut e: Vec<Entry> = bans.iter().map(|&x| Entry::Ban(x)).collect();
+        e.push(Entry::Pick(first));
+        e.push(Entry::Pick(reds[0]));
+        e.push(Entry::Pick(reds[1]));
+        e.push(Entry::Pick(pair[0]));
+        e.push(Entry::Pick(pair[1]));
+        e
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let pools = Pools {
+        blue: [a, b, c].into_iter().collect(),
+        red: reds.iter().copied().collect(),
+    };
+    let p1 =
+        Position::new(&format, &entries(a, [b, c]), &pools, u).unwrap_or_else(|e| panic!("{e}"));
+    let p2 =
+        Position::new(&format, &entries(b, [a, c]), &pools, u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        p1.picks(Side::Blue),
+        p2.picks(Side::Blue),
+        "index-sorted, not slot-ordered"
+    );
+    assert_eq!(p1.picks(Side::Blue), &[a, b, c]);
+    let value = |p: &Position<'_>| {
+        u.value(&Leaf {
+            blue: p.picks(Side::Blue),
+            red: p.picks(Side::Red),
+            blue_feasible: true,
+            red_feasible: true,
+        })
+    };
+    assert_eq!(value(&p1).to_bits(), value(&p2).to_bits());
+    // And `apply` keeps the invariant on the way down a line.
+    let p3 = p2.apply(engine_core::reference::state::Action::Pick(next_red));
+    assert_eq!(p3.picks(Side::Red).len(), 3);
+    assert!(p3.picks(Side::Red).windows(2).all(|w| w[0] < w[1]));
+}
+
+/// R1 on floats (slice-5 review): a both-broken leaf is the board EXACTLY, not `(board − L) + L`.
+#[test]
+fn a_both_broken_leaf_is_the_board_bit_for_bit_on_live_floats() {
+    let live = live_universe();
+    let u = &live.universe;
+    let blue = sorted(u, &["Pantheon".into(), "Tristana".into(), "Veigar".into()]);
+    let red = sorted(u, &["Gwen".into(), "Heimerdinger".into()]);
+    let board = u.board_value(&blue, &red);
+    let leaf = |blue_feasible: bool, red_feasible: bool| {
+        u.value(&Leaf {
+            blue: &blue,
+            red: &red,
+            blue_feasible,
+            red_feasible,
+        })
+    };
+    assert_eq!(leaf(false, false).to_bits(), board.to_bits());
+    assert_eq!(leaf(true, true).to_bits(), board.to_bits());
+    assert_eq!(leaf(false, true), board - u.loss());
+    assert_eq!(leaf(true, false), board + u.loss());
+    // The identity the old two-step form broke: with L ≈ 1026 the round trip lands an ulp of L away,
+    // which is hundreds of ulps of the board.
+    assert_ne!(
+        ((board - u.loss()) + u.loss()).to_bits(),
+        board.to_bits(),
+        "the test must sit on a board where (b − L) + L ≠ b, or it proves nothing"
+    );
 }

@@ -17,14 +17,21 @@ pub struct Leaf<'a> {
 pub trait Objective {
     /// Blue-perspective value: Blue maximises, Red minimises (D3). Implementations must return a
     /// finite value — the oracle sorts root values with `partial_cmp` and panics on a non-finite
-    /// one.
+    /// one — and must be a function of the pick SETS and the flags, never of slice order (slice-5
+    /// U3: the search compares values reached by different paths bit for bit).
     fn value(&self, leaf: &Leaf<'_>) -> f64;
 }
 
 impl Universe {
     /// `Σ lin(b) + Σ_{b<b'} syn(b,b') − Σ lin(r) − Σ_{r<r'} syn(r,r') + Σ_{b,r} ctr(b,r)`.
-    /// Bans have no term (D3 iii); nothing here reads them.
+    /// Bans have no term (D3 iii); nothing here reads them. Both slices must be index-sorted
+    /// (`Position` keeps them so, U3): the sums then run in one canonical order and the value is a
+    /// function of the two sets, bit for bit, on any floats.
     pub fn board_value(&self, blue: &[ChampionIdx], red: &[ChampionIdx]) -> f64 {
+        debug_assert!(
+            blue.windows(2).all(|w| w[0] < w[1]) && red.windows(2).all(|w| w[0] < w[1]),
+            "board_value takes index-sorted picks (U3)"
+        );
         let mut u = 0.0;
         for &b in blue {
             u += self.linear(b);
@@ -52,15 +59,16 @@ impl Universe {
 }
 
 impl Objective for Universe {
-    /// R1 (slice 4): `board − L·[Blue infeasible] + L·[Red infeasible]`; both infeasible → the board.
+    /// R1 (slice 4): `board − L·[Blue infeasible] + L·[Red infeasible]`; both infeasible → the board
+    /// EXACTLY — one operation per case, because `(board − L) + L` is not `board` on floats (slice-5
+    /// review: with L ≈ 1026 it is off by an ulp, which would rank a both-broken line above a feasible
+    /// line with the same board).
     fn value(&self, leaf: &Leaf<'_>) -> f64 {
-        let mut u = self.board_value(leaf.blue, leaf.red);
-        if !leaf.blue_feasible {
-            u -= self.loss();
+        let board = self.board_value(leaf.blue, leaf.red);
+        match (leaf.blue_feasible, leaf.red_feasible) {
+            (false, true) => board - self.loss(),
+            (true, false) => board + self.loss(),
+            _ => board,
         }
-        if !leaf.red_feasible {
-            u += self.loss();
-        }
-        u
     }
 }

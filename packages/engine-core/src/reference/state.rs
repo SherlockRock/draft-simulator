@@ -71,6 +71,8 @@ pub enum PositionError {
     PickOutsidePool { slot: usize, id: String },
 }
 
+/// `blue` / `red` are kept **index-sorted** (slice-5 U3): a leaf value computed over them is then a
+/// function of the pick SETS, so two paths to the same board give bit-equal values on any floats.
 #[derive(Clone, Debug)]
 pub struct Position<'f> {
     format: &'f Format,
@@ -127,7 +129,7 @@ impl<'f> Position<'f> {
                         });
                     }
                     pos.taken = pos.taken.with(c);
-                    pos.picks_mut(slot.side).push(c);
+                    pos.insert_pick(slot.side, c);
                 }
                 _ => return Err(PositionError::KindMismatch { slot: i }),
             }
@@ -136,11 +138,14 @@ impl<'f> Position<'f> {
         Ok(pos)
     }
 
-    fn picks_mut(&mut self, side: Side) -> &mut Vec<ChampionIdx> {
-        match side {
+    /// Sorted insert (U3): the pick lists are index-sorted sets, never slot-ordered.
+    fn insert_pick(&mut self, side: Side, c: ChampionIdx) {
+        let picks = match side {
             Side::Blue => &mut self.blue,
             Side::Red => &mut self.red,
-        }
+        };
+        let at = picks.partition_point(|&p| p < c);
+        picks.insert(at, c);
     }
 
     pub fn format(&self) -> &'f Format {
@@ -175,14 +180,28 @@ impl<'f> Position<'f> {
         self.next_slot().is_some_and(|s| s.pair_end)
     }
 
+    /// Everything unavailable: the board's bans and picks, plus any champions folded in by
+    /// [`Position::with_excluded`].
     pub fn taken(&self) -> ChampionSet {
         self.taken
+    }
+
+    /// Cross-game exclusions (target note § 2; slice-5 U5): champions unavailable to both sides this
+    /// game. Folded into `taken`, so they are never generated as bans or picks, never count towards
+    /// feasibility, and ride the transposition key unchanged (constant within a search). Banning one
+    /// would be a no-op — exactly the `Skip` D5 does not generate. A position rebuilt from
+    /// `entries()` with `Position::new` does NOT carry them: re-apply this on every rebuild
+    /// (`live::LiveRoot::position` does).
+    pub fn with_excluded(mut self, excluded: ChampionSet) -> Self {
+        self.taken = self.taken.union(excluded);
+        self
     }
 
     pub fn available(&self, universe: &Universe) -> ChampionSet {
         universe.all().minus(self.taken)
     }
 
+    /// Index-sorted (U3).
     pub fn picks(&self, side: Side) -> &[ChampionIdx] {
         match side {
             Side::Blue => &self.blue,
@@ -248,6 +267,6 @@ impl<'f> Position<'f> {
     fn push_pick(&mut self, side: Side, c: ChampionIdx) {
         self.taken = self.taken.with(c);
         self.entries.push(Entry::Pick(c));
-        self.picks_mut(side).push(c);
+        self.insert_pick(side, c);
     }
 }
