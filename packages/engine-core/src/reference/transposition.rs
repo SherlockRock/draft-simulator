@@ -18,27 +18,20 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Key {
     slot: usize,
-    blue: u32,
-    red: u32,
-    taken: u32,
+    blue: ChampionSet,
+    red: ChampionSet,
+    taken: ChampionSet,
     turns_left: usize,
 }
 
 impl Key {
     pub fn of(position: &Position<'_>, turns_left: usize) -> Self {
-        let set = |side: Side| -> u32 {
-            position
-                .picks(side)
-                .iter()
-                .copied()
-                .collect::<ChampionSet>()
-                .bits()
-        };
+        let set = |side: Side| -> ChampionSet { position.picks(side).iter().copied().collect() };
         Self {
             slot: position.slot_index(),
             blue: set(Side::Blue),
             red: set(Side::Red),
-            taken: position.taken().bits(),
+            taken: position.taken(),
             turns_left,
         }
     }

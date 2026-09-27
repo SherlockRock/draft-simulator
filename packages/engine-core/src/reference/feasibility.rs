@@ -16,13 +16,13 @@ pub enum FeasibilityRule {
     Off,
 }
 
-/// Memo keyed on `(side, locked bitmask, pool-net bitmask)`. Both sets are monotone along any
+/// Memo keyed on `(side, locked set, pool-net set)`. Both sets are monotone along any
 /// line of play, so the key identifies the predicate's inputs exactly — but only for a fixed
 /// universe and a fixed format: the key carries no identity for either, so a memo must never be
 /// shared across a different universe or a different format.
 #[derive(Debug, Default)]
 pub struct FeasibilityMemo {
-    memo: HashMap<(Side, u32, u32), bool>,
+    memo: HashMap<(Side, ChampionSet, ChampionSet), bool>,
     pub calls: u64,
     pub misses: u64,
 }
@@ -44,7 +44,7 @@ pub fn side_feasible(
     let locked = position.picks(side);
     let locked_set: ChampionSet = locked.iter().copied().collect();
     let pool_net = pools.for_side(side).intersect(position.available(universe));
-    let key = (side, locked_set.bits(), pool_net.bits());
+    let key = (side, locked_set, pool_net);
     if let Some(&known) = memo.memo.get(&key) {
         return known;
     }

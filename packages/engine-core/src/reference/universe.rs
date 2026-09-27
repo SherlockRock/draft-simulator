@@ -1,65 +1,99 @@
-//! A fixture's synthetic universe (design § 3, D1): champions with positions and a linear term,
+//! A universe (design § 3, D1; slice-5 design § 2–3): champions with positions and a linear term,
 //! a symmetric synergy table and an antisymmetric counter table. Ids are interned to `u8`
-//! indices; sets are `u32` bitmasks. Strings appear only at the JSON boundary and in messages.
+//! indices; sets are 256-bit bitmasks. Strings appear only at the JSON boundary and in messages.
+//!
+//! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
+//! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-pub const MAX_CHAMPIONS: usize = 32;
+pub const MAX_CHAMPIONS: usize = 256;
+const WORDS: usize = 4;
 
-/// Index into the universe's champion list. `Universe::new` refuses more than `MAX_CHAMPIONS` (32), so
-/// every index it hands out fits the `u32` bitmask shift in `ChampionSet` by construction (R10).
+/// Index into the universe's champion list. Both constructors refuse more than `MAX_CHAMPIONS`
+/// (256), so every index they hand out addresses a bit of `ChampionSet` by construction (R10, U1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChampionIdx(pub u8);
 
+/// A set of champion indices: four 64-bit words (U1). `Hash`/`Eq` make it a key in its own right
+/// (`transposition::Key`, `FeasibilityMemo`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ChampionSet(u32);
+pub struct ChampionSet([u64; WORDS]);
 
 impl ChampionSet {
-    pub const EMPTY: Self = Self(0);
+    pub const EMPTY: Self = Self([0; WORDS]);
 
-    pub fn with(self, c: ChampionIdx) -> Self {
-        Self(self.0 | (1u32 << c.0))
+    fn place(c: ChampionIdx) -> (usize, u64) {
+        let i = usize::from(c.0);
+        (i / 64, 1u64 << (i % 64))
     }
 
-    pub fn without(self, c: ChampionIdx) -> Self {
-        Self(self.0 & !(1u32 << c.0))
+    pub fn with(mut self, c: ChampionIdx) -> Self {
+        let (word, bit) = Self::place(c);
+        self.0[word] |= bit;
+        self
+    }
+
+    pub fn without(mut self, c: ChampionIdx) -> Self {
+        let (word, bit) = Self::place(c);
+        self.0[word] &= !bit;
+        self
     }
 
     pub fn contains(self, c: ChampionIdx) -> bool {
-        self.0 & (1u32 << c.0) != 0
+        let (word, bit) = Self::place(c);
+        self.0[word] & bit != 0
     }
 
-    pub fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+    pub fn union(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a |= b;
+        }
+        self
     }
 
-    pub fn intersect(self, other: Self) -> Self {
-        Self(self.0 & other.0)
+    pub fn intersect(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a &= b;
+        }
+        self
     }
 
-    pub fn minus(self, other: Self) -> Self {
-        Self(self.0 & !other.0)
+    pub fn minus(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a &= !b;
+        }
+        self
     }
 
     pub fn len(self) -> usize {
-        self.0.count_ones() as usize
+        self.0
+            .iter()
+            .map(|w| usize::try_from(w.count_ones()).expect("a u32 count fits usize"))
+            .sum()
     }
 
     pub fn is_empty(self) -> bool {
-        self.0 == 0
+        self.0 == [0; WORDS]
     }
 
-    pub fn bits(self) -> u32 {
-        self.0
-    }
-
+    /// Ascending index order, set bits only (no scan of the 256 positions).
     pub fn iter(self) -> impl Iterator<Item = ChampionIdx> {
-        (0..MAX_CHAMPIONS as u8)
-            .map(ChampionIdx)
-            .filter(move |c| self.contains(*c))
+        self.0.into_iter().enumerate().flat_map(|(word, mut bits)| {
+            std::iter::from_fn(move || {
+                if bits == 0 {
+                    return None;
+                }
+                let bit = usize::try_from(bits.trailing_zeros()).expect("a u32 fits usize");
+                bits &= bits - 1;
+                Some(ChampionIdx(
+                    u8::try_from(word * 64 + bit).expect("four words hold 256 indices"),
+                ))
+            })
+        })
     }
 }
 
@@ -115,6 +149,9 @@ pub enum UniverseError {
     NonFinite(String),
     #[error("{0:?} lists no position")]
     NoPositions(String),
+    /// `from_tables`: a table is not `n × n` for the `n` champions given.
+    #[error("{0} table is not {1}×{1}")]
+    Shape(&'static str, usize),
 }
 
 #[derive(Clone, Debug)]
@@ -124,31 +161,38 @@ pub struct Universe {
     synergy: Vec<Vec<f64>>,
     counter: Vec<Vec<f64>>,
     loss: f64,
+    off_pool_cost: f64,
+    live_loss: f64,
     meta: HashMap<String, ChampionMeta>,
 }
 
+/// Interns ids in list order; refuses more than `MAX_CHAMPIONS` and duplicate ids. Shared by both
+/// constructors so the cap and the index arithmetic live in one place.
+fn intern(champions: &[Champion]) -> Result<HashMap<String, ChampionIdx>, UniverseError> {
+    let n = champions.len();
+    if n > MAX_CHAMPIONS {
+        return Err(UniverseError::TooMany);
+    }
+    let mut index = HashMap::with_capacity(n);
+    for (i, c) in champions.iter().enumerate() {
+        let idx = ChampionIdx(u8::try_from(i).expect("capped at MAX_CHAMPIONS"));
+        if index.insert(c.id.clone(), idx).is_some() {
+            return Err(UniverseError::DuplicateChampion(c.id.clone()));
+        }
+    }
+    Ok(index)
+}
+
 impl Universe {
+    /// A fixture's entry lists (Tier A). Unknown ids, self-pairs and duplicate entries are
+    /// rejected here; the dense checks are `from_tables`'.
     pub fn new(spec: UniverseSpec) -> Result<Self, UniverseError> {
         let n = spec.champions.len();
-        if n > MAX_CHAMPIONS {
-            return Err(UniverseError::TooMany);
-        }
-        let mut index = HashMap::with_capacity(n);
-        for (i, c) in spec.champions.iter().enumerate() {
-            if !c.linear.is_finite() {
-                return Err(UniverseError::NonFinite(c.id.clone()));
-            }
-            if c.positions.is_empty() {
-                return Err(UniverseError::NoPositions(c.id.clone()));
-            }
-            if index.insert(c.id.clone(), ChampionIdx(i as u8)).is_some() {
-                return Err(UniverseError::DuplicateChampion(c.id.clone()));
-            }
-        }
+        let index = intern(&spec.champions)?;
         let lookup = |id: &str| -> Result<usize, UniverseError> {
             index
                 .get(id)
-                .map(|c| c.0 as usize)
+                .map(|c| usize::from(c.0))
                 .ok_or_else(|| UniverseError::UnknownChampion(id.to_string()))
         };
 
@@ -195,13 +239,66 @@ impl Universe {
             counter[over][of] = -e.value;
         }
 
+        Self::from_tables(spec.champions, &synergy, &counter)
+    }
+
+    /// Dense form (U2). Only the upper triangle (`a < b`) of each table is read: the lower
+    /// triangle is written as `synergy[a][b]` and `-counter[a][b]`, so symmetry and antisymmetry
+    /// hold by construction. Diagonals are ignored. Checks, in order: the cap, each champion's
+    /// linear term finite and positions non-empty, duplicate ids, table shape, each read entry
+    /// finite, and a finite `L`.
+    pub fn from_tables(
+        champions: Vec<Champion>,
+        synergy: &[Vec<f64>],
+        counter: &[Vec<f64>],
+    ) -> Result<Self, UniverseError> {
+        let n = champions.len();
+        if n > MAX_CHAMPIONS {
+            return Err(UniverseError::TooMany);
+        }
+        for c in &champions {
+            if !c.linear.is_finite() {
+                return Err(UniverseError::NonFinite(c.id.clone()));
+            }
+            if c.positions.is_empty() {
+                return Err(UniverseError::NoPositions(c.id.clone()));
+            }
+        }
+        let index = intern(&champions)?;
+        if synergy.len() != n || synergy.iter().any(|row| row.len() != n) {
+            return Err(UniverseError::Shape("synergy", n));
+        }
+        if counter.len() != n || counter.iter().any(|row| row.len() != n) {
+            return Err(UniverseError::Shape("counter", n));
+        }
+
+        let mut syn = vec![vec![0.0; n]; n];
+        let mut ctr = vec![vec![0.0; n]; n];
         let mut magnitude = 0.0;
-        for c in &spec.champions {
+        for c in &champions {
             magnitude += c.linear.abs();
         }
         for a in 0..n {
             for b in (a + 1)..n {
-                magnitude += synergy[a][b].abs() + counter[a][b].abs();
+                let s = synergy[a][b];
+                if !s.is_finite() {
+                    return Err(UniverseError::NonFinite(format!(
+                        "syn({}, {})",
+                        champions[a].id, champions[b].id
+                    )));
+                }
+                let k = counter[a][b];
+                if !k.is_finite() {
+                    return Err(UniverseError::NonFinite(format!(
+                        "ctr({} over {})",
+                        champions[a].id, champions[b].id
+                    )));
+                }
+                syn[a][b] = s;
+                syn[b][a] = s;
+                ctr[a][b] = k;
+                ctr[b][a] = -k;
+                magnitude += s.abs() + k.abs();
             }
         }
         // R1: with the board added to a broken side's ±L, separating "feasible" from "this side infeasible"
@@ -213,9 +310,20 @@ impl Universe {
         if !loss.is_finite() {
             return Err(UniverseError::NonFinite("L".to_string()));
         }
+        // U10: the flat off-pool cost P = L (the user's choice; `off_pool_cost`'s doc), and the live
+        // rule's infeasibility band L' = L + 10·P, computed FROM P so the band follows the cost if P
+        // ever moves, and written as that sum so `live_loss == loss + 10·off_pool_cost` holds bit for
+        // bit for every L (11·L can differ from L + 10·L by an ulp). A finite L' is not enough on its
+        // own: the largest live leaf is |board| + 5P + L' (a side broken alone with off-pool picks
+        // made), so that bound must be finite too, or a leaf could reach +∞ and break the objective's
+        // finite contract.
+        let off_pool_cost = loss;
+        let live_loss = loss + 10.0 * off_pool_cost;
+        if !live_loss.is_finite() || !(magnitude + 5.0 * off_pool_cost + live_loss).is_finite() {
+            return Err(UniverseError::NonFinite("L'".to_string()));
+        }
 
-        let meta = spec
-            .champions
+        let meta = champions
             .iter()
             .map(|c| {
                 (
@@ -230,11 +338,13 @@ impl Universe {
             .collect();
 
         Ok(Self {
-            champions: spec.champions,
+            champions,
             index,
-            synergy,
-            counter,
+            synergy: syn,
+            counter: ctr,
             loss,
+            off_pool_cost,
+            live_loss,
             meta,
         })
     }
@@ -252,20 +362,20 @@ impl Universe {
     }
 
     pub fn id(&self, c: ChampionIdx) -> &str {
-        &self.champions[c.0 as usize].id
+        &self.champions[usize::from(c.0)].id
     }
 
     pub fn linear(&self, c: ChampionIdx) -> f64 {
-        self.champions[c.0 as usize].linear
+        self.champions[usize::from(c.0)].linear
     }
 
     pub fn synergy(&self, a: ChampionIdx, b: ChampionIdx) -> f64 {
-        self.synergy[a.0 as usize][b.0 as usize]
+        self.synergy[usize::from(a.0)][usize::from(b.0)]
     }
 
     /// `ctr(blue, red)`: positive when the Blue champion counters the Red one.
     pub fn counter(&self, blue: ChampionIdx, red: ChampionIdx) -> f64 {
-        self.counter[blue.0 as usize][red.0 as usize]
+        self.counter[usize::from(blue.0)][usize::from(red.0)]
     }
 
     /// `L` (R1): strictly larger than the gap between any two reachable board values in this universe.
@@ -273,9 +383,29 @@ impl Universe {
         self.loss
     }
 
+    /// The off-pool cost P (slice-5 U10, the user's flat choice): `P = L > 2Σ`, so one off-pool
+    /// pick outweighs any board difference and the rule is LEXICOGRAPHIC — the engine never prefers
+    /// an off-pool pick while the pool can finish, however strong the champion; breaking one's own
+    /// pool never pays; forcing the opponent off-pool is worth P per pick. A board-comparable P is
+    /// NOT a constant change: legality stays gated while the pool can finish, so a lower P only
+    /// makes breaking one's own pool the way to a strong roster champion (round 5 measured it:
+    /// at P = 0.1·L "ban your own support" is the top action and denial inverts) — a real
+    /// board-comparable rule needs always-widened legality, a Tier B question (D4).
+    pub fn off_pool_cost(&self) -> f64 {
+        self.off_pool_cost
+    }
+
+    /// `L'` (slice-5 U10): the infeasibility band under `FeasibilityRule::PoolOrRoster`, `L + 10·P`
+    /// — strictly larger than the gap between any two feasible live leaves, off-pool term included
+    /// (`objective.rs`, `live_leaf_value`); `from_tables` also guarantees that the largest live leaf,
+    /// `Σ + 5P + L'`, is finite. Tier A's `loss` is unchanged.
+    pub fn live_loss(&self) -> f64 {
+        self.live_loss
+    }
+
     pub fn all(&self) -> ChampionSet {
         (0..self.champions.len())
-            .map(|i| ChampionIdx(i as u8))
+            .map(|i| ChampionIdx(u8::try_from(i).expect("capped at MAX_CHAMPIONS")))
             .collect()
     }
 
