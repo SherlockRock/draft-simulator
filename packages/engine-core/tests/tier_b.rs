@@ -323,6 +323,7 @@ fn tier_b_report() {
                 feasibility: FeasibilityRule::PoolOrRoster,
                 mode: Mode::Horizon(2),
                 epsilon: 1e-9,
+                off_pool_cost: None,
             },
             &SearchParams {
                 node_budget: Some(20_000_000),

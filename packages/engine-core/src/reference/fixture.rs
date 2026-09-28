@@ -296,6 +296,7 @@ impl Fixture {
             feasibility: self.feasibility,
             mode,
             epsilon: self.epsilon,
+            off_pool_cost: None,
         })
     }
 }

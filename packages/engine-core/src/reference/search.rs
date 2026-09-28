@@ -9,7 +9,7 @@
 use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::Leaf;
-use super::oracle::{Mode, OracleError, OracleInput};
+use super::oracle::{resolve_off_pool_cost, Mode, OracleError, OracleInput};
 use super::state::{Action, Position};
 use super::transposition::{Entry, Key, TranspositionTable};
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
@@ -122,6 +122,8 @@ struct Shared {
     memo: FeasibilityMemo,
     table: TranspositionTable,
     nodes_total: u64,
+    /// P for this search (`oracle::resolve_off_pool_cost`), fixed before the first iteration.
+    off_pool_cost: f64,
 }
 
 /// One iteration at `depth`. Two lifetimes on purpose: `'i` is this iteration's borrows (the driver's
@@ -166,6 +168,7 @@ impl Iteration<'_, '_> {
                 red_feasible: end.red_feasible,
             },
             self.input.feasibility,
+            self.shared.off_pool_cost,
             end.blue_off_pool,
             end.red_off_pool,
         )
@@ -410,10 +413,12 @@ pub fn search(
     if input.mode == Mode::Horizon(0) {
         return Err(invalid(OracleError::HorizonZero));
     }
+    let off_pool_cost = resolve_off_pool_cost(input).map_err(invalid)?;
     let mut shared = Shared {
         memo: FeasibilityMemo::default(),
         table: TranspositionTable::default(),
         nodes_total: 0,
+        off_pool_cost,
     };
     let feasible = |memo: &mut FeasibilityMemo, side| {
         side_feasible(

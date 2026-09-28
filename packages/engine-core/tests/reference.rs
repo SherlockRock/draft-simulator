@@ -917,10 +917,14 @@ impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
         &self,
         leaf: &Leaf<'_>,
         rule: FeasibilityRule,
+        off_pool_cost: f64,
         blue_off: usize,
         red_off: usize,
     ) -> f64 {
-        (self.1)(self.0.value_under(leaf, rule, blue_off, red_off))
+        (self.1)(
+            self.0
+                .value_under(leaf, rule, off_pool_cost, blue_off, red_off),
+        )
     }
 }
 
@@ -1182,6 +1186,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
             feasibility: FeasibilityRule::Off,
             mode,
             epsilon: 1e-9,
+            off_pool_cost: None,
         })
     };
     let root = Position::new(&f, &[], &pools, &u).expect("empty");
@@ -1220,6 +1225,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
+        off_pool_cost: None,
     })
     .err();
     assert_eq!(
@@ -1251,6 +1257,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::DraftComplete));
@@ -1279,6 +1286,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::NoLegalAction { slot: 1 }));
@@ -1307,6 +1315,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::On,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
     })
     .err();
     assert_eq!(
@@ -1335,6 +1344,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::On,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
     })
     .err();
     assert_eq!(
@@ -1367,6 +1377,7 @@ fn swapping_both_completed_pairs_at_once_changes_nothing() {
         feasibility: fx.feasibility,
         mode: fx.mode,
         epsilon: fx.epsilon,
+        off_pool_cost: None,
     })
     .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(

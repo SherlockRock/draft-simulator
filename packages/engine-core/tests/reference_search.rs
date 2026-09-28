@@ -4,10 +4,11 @@
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::Side;
 use engine_core::engine::EngineError;
+use engine_core::reference::feasibility::FeasibilityRule;
 use engine_core::reference::fixture::{Fixture, Mode};
 use engine_core::reference::node::LeafKind;
 use engine_core::reference::objective::{Leaf, Objective};
-use engine_core::reference::oracle::{evaluate, Evaluation, OracleInput};
+use engine_core::reference::oracle::{evaluate, Evaluation, OracleError, OracleInput};
 use engine_core::reference::search::{max_depth_for, search, SearchOutcome, SearchParams};
 use engine_core::reference::state::{Action, Entry, Position};
 use std::path::PathBuf;
@@ -36,6 +37,7 @@ fn input<'a>(fx: &'a Fixture, position: &'a Position<'a>, mode: Mode) -> OracleI
         feasibility: fx.feasibility,
         mode,
         epsilon: fx.epsilon,
+        off_pool_cost: None,
     }
 }
 
@@ -265,6 +267,46 @@ fn root_errors_are_invalid_input() {
         matches!(err, Some(EngineError::InvalidInput { ref path }) if path[0].contains("horizon of 0")),
         "{err:?}"
     );
+}
+
+/// B-proper design § 1: `off_pool_cost` is read under `roster` only. A value under any other rule is
+/// refused by the search and the oracle alike — never silently ignored (the `value_under` default
+/// trap of slice-5 review round 5, in a new place).
+#[test]
+fn an_off_pool_cost_under_a_rule_that_does_not_read_it_is_refused() {
+    let fx = fixture("01-pair-completion");
+    let position = fx.position();
+    for rule in [
+        FeasibilityRule::On,
+        FeasibilityRule::Off,
+        FeasibilityRule::PoolOrRoster,
+    ] {
+        let input = OracleInput {
+            position: &position,
+            universe: &fx.universe,
+            pools: &fx.pools,
+            objective: &fx.universe,
+            feasibility: rule,
+            mode: fx.mode,
+            epsilon: fx.epsilon,
+            off_pool_cost: Some(0.15),
+        };
+        let err = search(
+            &input,
+            &unbudgeted(true, true),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .err();
+        assert!(
+            matches!(err, Some(EngineError::InvalidInput { ref path }) if path[0].starts_with("off_pool_cost:")),
+            "{rule:?}: {err:?}"
+        );
+        assert!(
+            matches!(evaluate(&input), Err(OracleError::OffPoolCost { .. })),
+            "{rule:?}: the oracle must refuse it too"
+        );
+    }
 }
 
 fn budgeted(node_budget: u64) -> SearchParams {

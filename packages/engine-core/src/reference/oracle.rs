@@ -71,6 +71,9 @@ pub enum OracleError {
     },
     #[error("a horizon of 0 evaluates the root and decides nothing")]
     HorizonZero,
+    /// `OracleInput::off_pool_cost` does not fit the rule (B-proper design § 1).
+    #[error("off_pool_cost: {reason}")]
+    OffPoolCost { reason: String },
 }
 
 impl From<ClassifyError> for OracleError {
@@ -89,11 +92,33 @@ pub struct OracleInput<'a> {
     pub feasibility: FeasibilityRule,
     pub mode: Mode,
     pub epsilon: f64,
+    /// P, the flat cost of one off-pool pick, in the objective's unit (blue-win logits on the live
+    /// universe). Read under `FeasibilityRule::Roster` ONLY, where it is required; every other rule
+    /// refuses a value (`OracleError::OffPoolCost`): `PoolOrRoster` prices at `Universe::off_pool_cost()`
+    /// = L by construction and the gate rules have no off-pool picks. A silently ignored value would
+    /// be the trap review round 5 removed from `Objective::value_under`.
+    pub off_pool_cost: Option<f64>,
+}
+
+/// The P this search prices off-pool picks at, from the rule and `OracleInput::off_pool_cost`
+/// (B-proper design § 1): `PoolOrRoster` → `Universe::off_pool_cost()` (= L, lexicographic);
+/// `On` / `Off` → 0 (the counts are 0); a value under any of these is refused.
+pub fn resolve_off_pool_cost(input: &OracleInput<'_>) -> Result<f64, OracleError> {
+    match (input.feasibility, input.off_pool_cost) {
+        (FeasibilityRule::PoolOrRoster, None) => Ok(input.universe.off_pool_cost()),
+        (FeasibilityRule::On | FeasibilityRule::Off, None) => Ok(0.0),
+        (rule, Some(_)) => Err(OracleError::OffPoolCost {
+            reason: format!(
+                "not read under {rule:?}: pool_or_roster prices at P = L itself and the gate rules have no off-pool picks"
+            ),
+        }),
+    }
 }
 
 struct Search<'a> {
     input: &'a OracleInput<'a>,
     memo: FeasibilityMemo,
+    off_pool_cost: f64,
     leaves: u64,
     nodes: u64,
 }
@@ -120,6 +145,7 @@ impl Search<'_> {
                 red_feasible: end.red_feasible,
             },
             self.input.feasibility,
+            self.off_pool_cost,
             end.blue_off_pool,
             end.red_off_pool,
         )
@@ -183,11 +209,13 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
     if input.mode == Mode::Horizon(0) {
         return Err(OracleError::HorizonZero);
     }
+    let off_pool_cost = resolve_off_pool_cost(input)?;
 
     let started = Instant::now();
     let mut search = Search {
         input,
         memo: FeasibilityMemo::default(),
+        off_pool_cost,
         leaves: 0,
         nodes: 0,
     };

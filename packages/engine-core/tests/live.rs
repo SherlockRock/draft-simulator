@@ -616,6 +616,7 @@ fn run(
             feasibility,
             mode,
             epsilon: 1e-9,
+            off_pool_cost: None,
         },
         params,
         &CancelHandle::new(),
@@ -729,6 +730,7 @@ fn the_sample_state_converts_at_every_root_shape() {
             feasibility: FeasibilityRule::On,
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
+            off_pool_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -906,6 +908,7 @@ fn a_pool_without_a_role_is_refused_at_the_root_not_ranked() {
             feasibility: FeasibilityRule::On,
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
+            off_pool_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -1158,6 +1161,7 @@ fn an_exhausted_pool_draws_from_the_roster_under_pool_or_roster() {
             feasibility: FeasibilityRule::On,
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
+            off_pool_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -1403,6 +1407,7 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
         feasibility: FeasibilityRule::PoolOrRoster,
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
+        off_pool_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -1633,6 +1638,7 @@ fn an_off_pool_support_beats_every_in_pool_suicide_fifth_pick() {
         feasibility: FeasibilityRule::PoolOrRoster,
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
+        off_pool_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -1742,6 +1748,7 @@ fn two_forced_off_pool_picks_beat_a_suicide_pair() {
         feasibility: FeasibilityRule::PoolOrRoster,
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
+        off_pool_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -1890,6 +1897,7 @@ fn a_pool_short_by_two_roles_is_charged_two_forced_picks() {
         feasibility: FeasibilityRule::PoolOrRoster,
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
+        off_pool_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -1953,23 +1961,23 @@ fn equal_off_pool_counts_leave_the_board_bit_for_bit() {
     );
     for k in 0..=5 {
         assert_eq!(
-            u.value_under(&leaf, FeasibilityRule::PoolOrRoster, k, k)
+            u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, k, k)
                 .to_bits(),
             board.to_bits(),
             "{k} off-pool picks each"
         );
     }
     assert_eq!(
-        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, 0, 2),
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 0, 2),
         board + 2.0 * p
     );
     assert_eq!(
-        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, 3, 1),
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 3, 1),
         board - 2.0 * p
     );
     for rule in [FeasibilityRule::On, FeasibilityRule::Off] {
         assert_eq!(
-            u.value_under(&leaf, rule, 0, 0).to_bits(),
+            u.value_under(&leaf, rule, 0.0, 0, 0).to_bits(),
             u.value(&leaf).to_bits()
         );
     }
@@ -1982,7 +1990,7 @@ fn equal_off_pool_counts_leave_the_board_bit_for_bit() {
         red_feasible: true,
     };
     assert_eq!(
-        u.value_under(&broken, FeasibilityRule::PoolOrRoster, 0, 0),
+        u.value_under(&broken, FeasibilityRule::PoolOrRoster, p, 0, 0),
         board - u.live_loss()
     );
     assert_eq!(u.value(&broken), board - u.loss());
@@ -2210,6 +2218,7 @@ fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
         feasibility: FeasibilityRule::PoolOrRoster,
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
+        off_pool_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -2303,6 +2312,7 @@ fn a_board_whose_locked_picks_cannot_fill_five_roles_is_ranked_not_refused() {
             feasibility: FeasibilityRule::On,
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
+            off_pool_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
