@@ -6,14 +6,15 @@ mod common;
 
 use common::{load_production_data, repo_root};
 use engine_core::cancellation::CancelHandle;
-use engine_core::draft_state::Side;
+use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
 use engine_core::reference::feasibility::FeasibilityRule;
 use engine_core::reference::live::LiveUniverse;
 use engine_core::reference::oracle::{Mode, OracleInput};
-use engine_core::reference::search::{search, SearchParams};
+use engine_core::reference::search::{search, SearchParams, Shortlist};
 use engine_core::reference::state::{Action, Entry};
-use engine_core::reference::tier_b::{Category, TierBError, TierBFixture};
+use engine_core::reference::tier_b::{Category, TierBError, TierBFixture, Verdict};
+use engine_core::reference::universe::{Universe, DEFAULT_OFF_POOL_COST};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -132,16 +133,12 @@ fn an_illegal_actual_next_is_a_warning() {
     let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(loaded.warnings.len(), 1, "{:?}", loaded.warnings);
     assert!(loaded.warnings[0].contains("Gwen is not a legal action here (already on the board)"));
+    // Off-pool is legal under `roster` (B-proper), so an off-pool `actual_next` is no longer a
+    // warning; the report prints its pool membership instead.
     let raw = sample_json("sample-fce65eb1-slot-11")
         .replace("\"actual_next\": \"Jinx\"", "\"actual_next\": \"Zac\"");
     let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
-    assert!(
-        loaded.warnings[0].contains(
-            "Zac is not a legal action here (outside the mover's pool, which can still finish)"
-        ),
-        "{:?}",
-        loaded.warnings
-    );
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     // Excluded — not "already on the board", although exclusions live in `taken` (review round 2).
     let raw = sample_json("sample-fce65eb1-slot-11").replace(
         "\"review\": \"\"",
@@ -287,7 +284,13 @@ fn load_dir_walks_the_samples_in_name_order() {
     let live = live();
     let loaded =
         TierBFixture::load_dir(&dir("tests/data/tier-b"), &live).unwrap_or_else(|e| panic!("{e}"));
-    let ids: Vec<&str> = loaded.iter().map(|l| l.fixture.id.as_str()).collect();
+    let ids: Vec<String> = loaded
+        .iter()
+        .map(|l| match l {
+            Ok(l) => l.fixture.id.clone(),
+            Err(e) => panic!("{e}"),
+        })
+        .collect();
     assert_eq!(
         ids,
         [
@@ -299,143 +302,803 @@ fn load_dir_walks_the_samples_in_name_order() {
     );
 }
 
-/// D7: a report read by a human, never a gate. Prints the ranked top three, how each continuation
-/// ends, the actual next action and the S11 band for every position in `fixtures/tier-b/`.
+/// B-proper § 3: one malformed file is reported in its place; the rest of the directory still loads.
 #[test]
-#[ignore = "Tier B report, not a gate (D7): cargo test --release --test tier_b -- --ignored --nocapture"]
-fn tier_b_report() {
+fn load_dir_continues_past_a_malformed_file() {
     let live = live();
-    let u = &live.universe;
-    let corpus = dir("fixtures/tier-b");
-    let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
-    println!(
-        "{} Tier B position(s) in {}",
-        loaded.len(),
-        corpus.display()
+    let tmp = std::env::temp_dir().join(format!("tier-b-load-dir-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).expect("temp dir");
+    std::fs::write(
+        tmp.join("a-good.json"),
+        sample_json("sample-fce65eb1-slot-11"),
+    )
+    .expect("write");
+    std::fs::write(tmp.join("b-bad.json"), "{ not json").expect("write");
+    let loaded = TierBFixture::load_dir(&tmp, &live).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::remove_dir_all(&tmp).expect("cleanup");
+    assert_eq!(loaded.len(), 2);
+    assert!(loaded[0].is_ok(), "{:?}", loaded[0].as_ref().err());
+    assert!(
+        matches!(loaded[1], Err(TierBError::Json { ref label, .. }) if label.ends_with("b-bad.json")),
+        "{:?}",
+        loaded[1].as_ref().err()
     );
-    for l in loaded {
-        for w in &l.warnings {
-            println!("  warning: {w}");
+}
+
+/// B-proper § 3: the `off-pool` category and the structured verdict round-trip; a verdict on a ban
+/// root is a warning, not an error.
+#[test]
+fn a_verdict_and_the_off_pool_category_round_trip() {
+    let live = live();
+    let raw = sample_json("2026-09-27-smoke-1-blue-first-pick")
+        .replace(
+            "\"category\": \"counter-pick\"",
+            "\"category\": \"off-pool\"",
+        )
+        // The smoke files carry the user's review text: splice the verdict in before `review`.
+        .replace(
+            "\"review\":",
+            "\"verdict\": {\"off_pool\": true}, \"review\":",
+        );
+    let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    assert_eq!(loaded.fixture.category, Category::OffPool);
+    assert_eq!(loaded.fixture.verdict, Some(Verdict { off_pool: true }));
+    // Absent by default.
+    let plain = TierBFixture::from_json(
+        &sample_json("2026-09-27-smoke-1-blue-first-pick"),
+        "plain",
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(plain.fixture.verdict, None);
+    // An unknown key inside the verdict is refused like any unknown field.
+    assert!(matches!(
+        TierBFixture::from_json(
+            &sample_json("2026-09-27-smoke-1-blue-first-pick").replace(
+                "\"review\":",
+                "\"verdict\": {\"off_pool\": true, \"why\": \"x\"}, \"review\":"
+            ),
+            "edited",
+            &live
+        ),
+        Err(TierBError::Json { .. })
+    ));
+    // A ban root has no off-pool question.
+    let raw = sample_json("sample-skip-at-slot-1").replace(
+        "\"review\": \"\"",
+        "\"review\": \"\", \"verdict\": {\"off_pool\": false}",
+    );
+    let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(loaded.warnings.len(), 1, "{:?}", loaded.warnings);
+    assert!(loaded.warnings[0].contains("no off-pool question at a ban root"));
+}
+
+// ---------------------------------------------------------------- the report (B-proper § 3)
+
+/// One rule-and-P the report runs every position under.
+#[derive(Clone, Copy, Debug)]
+enum Arm {
+    PoolOrRoster,
+    Roster(f64),
+}
+
+impl Arm {
+    fn label(self, u: &Universe) -> String {
+        match self {
+            Arm::PoolOrRoster => format!("pool_or_roster (P = L = {:.1})", u.off_pool_cost()),
+            Arm::Roster(p) => format!("roster P = {p}"),
         }
-        let fx = l.fixture;
+    }
+}
+
+fn env_list<T: std::str::FromStr>(name: &str, default: &str) -> Vec<T>
+where
+    T::Err: std::fmt::Debug,
+{
+    std::env::var(name)
+        .unwrap_or_else(|_| default.to_string())
+        .split(',')
+        .map(|s| {
+            s.trim()
+                .parse::<T>()
+                .unwrap_or_else(|e| panic!("{name}: {s:?}: {e:?}"))
+        })
+        .collect()
+}
+
+/// What the roster sweep says about one pick root (B-proper § 3; the shapes review round 1 named).
+/// `in_pool_at` / `off_pool_at` are the sweep P values (ascending) at which the top action was in-pool
+/// / off-pool, after the arms that cannot speak were left out (partial, mixed top set).
+#[derive(Clone, Debug, PartialEq)]
+enum BreakEven {
+    BanRoot,
+    NoArm,
+    InPoolAtEvery {
+        smallest: f64,
+    },
+    OffPoolAtEvery {
+        largest: f64,
+    },
+    /// Off-pool at low P, in-pool at high P — the one shape a single bound reads.
+    Monotone {
+        largest_off: f64,
+        smallest_in: f64,
+    },
+    /// The top is off-pool at some P above a P where it was in-pool: no single bound exists.
+    NonMonotone {
+        in_pool_at: Vec<f64>,
+        off_pool_at: Vec<f64>,
+    },
+}
+
+fn break_even(pick_root: bool, in_pool_at: &[f64], off_pool_at: &[f64]) -> BreakEven {
+    if !pick_root {
+        return BreakEven::BanRoot;
+    }
+    match (in_pool_at.first(), off_pool_at.last()) {
+        (None, None) => BreakEven::NoArm,
+        (Some(&smallest), None) => BreakEven::InPoolAtEvery { smallest },
+        (None, Some(&largest)) => BreakEven::OffPoolAtEvery { largest },
+        (Some(&smallest_in), Some(&largest_off)) if largest_off < smallest_in => {
+            BreakEven::Monotone {
+                largest_off,
+                smallest_in,
+            }
+        }
+        _ => BreakEven::NonMonotone {
+            in_pool_at: in_pool_at.to_vec(),
+            off_pool_at: off_pool_at.to_vec(),
+        },
+    }
+}
+
+impl BreakEven {
+    fn describe(&self) -> String {
+        match self {
+            BreakEven::BanRoot => "no off-pool question at a ban root".into(),
+            BreakEven::NoArm => "no roster arm could speak (every arm partial or a mixed tie)".into(),
+            BreakEven::InPoolAtEvery { .. } => "top in-pool at every P".into(),
+            BreakEven::OffPoolAtEvery { .. } => "top off-pool at every P".into(),
+            BreakEven::Monotone {
+                largest_off,
+                smallest_in,
+            } => format!("top in-pool at P ≥ {smallest_in}; top off-pool at P ≤ {largest_off}"),
+            BreakEven::NonMonotone {
+                in_pool_at,
+                off_pool_at,
+            } => format!(
+                "NON-MONOTONE across the sweep — in-pool at {in_pool_at:?}, off-pool at {off_pool_at:?}; no single bound, refine the sweep"
+            ),
+        }
+    }
+}
+
+/// A verdict's constraint on P: half-open bounds over the sweep points (`None` = unbounded on that
+/// side), or the reason the verdict cannot bound P. `off_pool: true` needs P below every P where the
+/// top was in-pool; `false` needs P above every P where it was off-pool.
+#[derive(Clone, Debug, PartialEq)]
+enum Constraint {
+    Bounds {
+        lo: Option<f64>,
+        hi: Option<f64>,
+        note: &'static str,
+    },
+    Unusable(String),
+}
+
+fn constraint(off_pool: bool, be: &BreakEven) -> Constraint {
+    use BreakEven::*;
+    match (off_pool, be) {
+        (_, BanRoot) => Constraint::Unusable("no off-pool question at a ban root".into()),
+        (_, NoArm) => Constraint::Unusable("no roster arm could speak".into()),
+        (_, NonMonotone { .. }) => {
+            Constraint::Unusable("the sweep is non-monotone; refine it".into())
+        }
+        (true, Monotone { smallest_in, .. }) => Constraint::Bounds {
+            lo: None,
+            hi: Some(*smallest_in),
+            note: "",
+        },
+        (true, InPoolAtEvery { smallest }) if *smallest <= 0.0 => Constraint::Unusable(
+            "the top was in-pool even at P = 0; no P meets this verdict".into(),
+        ),
+        (true, InPoolAtEvery { smallest }) => Constraint::Bounds {
+            lo: None,
+            hi: Some(*smallest),
+            note: " (below the whole sweep: widen it downward)",
+        },
+        (true, OffPoolAtEvery { .. }) => Constraint::Bounds {
+            lo: None,
+            hi: None,
+            note: " (satisfied at every sweep P)",
+        },
+        (false, Monotone { largest_off, .. }) => Constraint::Bounds {
+            lo: Some(*largest_off),
+            hi: None,
+            note: "",
+        },
+        (false, OffPoolAtEvery { largest }) => Constraint::Bounds {
+            lo: Some(*largest),
+            hi: None,
+            note: " (above the whole sweep: widen it upward)",
+        },
+        (false, InPoolAtEvery { .. }) => Constraint::Bounds {
+            lo: None,
+            hi: None,
+            note: " (satisfied at every sweep P)",
+        },
+    }
+}
+
+impl Constraint {
+    fn describe(&self) -> String {
+        match self {
+            Constraint::Bounds { lo, hi, note } => {
+                let lo = lo.map_or(String::new(), |l| format!("P > {l}"));
+                let hi = hi.map_or(String::new(), |h| format!("P < {h}"));
+                let both = match (lo.is_empty(), hi.is_empty()) {
+                    (true, true) => "P unbounded".to_string(),
+                    (false, true) => lo,
+                    (true, false) => hi,
+                    (false, false) => format!("{lo} and {hi}"),
+                };
+                format!("{both}{note}")
+            }
+            Constraint::Unusable(why) => format!("cannot bound P — {why}"),
+        }
+    }
+}
+
+/// The arms: `pool_or_roster`, then `roster` at each P of `ps` (ascending).
+fn arms(ps: &[f64]) -> Vec<Arm> {
+    // Validated before any search runs (review round 2): a bad sweep entry must not panic mid-report.
+    for p in ps {
+        assert!(
+            p.is_finite() && *p >= 0.0,
+            "TIER_B_P: {p} is not a finite non-negative logit"
+        );
+    }
+    let mut sorted = ps.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite P"));
+    std::iter::once(Arm::PoolOrRoster)
+        .chain(sorted.into_iter().map(Arm::Roster))
+        .collect()
+}
+
+/// The report for `loaded`, as text (B-proper § 3): per position, one block per arm — the top three,
+/// each marked `[in-pool]` / `[off-pool n]` at a pick root, its value, ending and line, plus "searched
+/// k of N"; `actual_next`'s pool membership and rank per arm; the break-even from the roster sweep;
+/// the verdict's constraint on P; and a corpus summary with the verdict intersection (or the conflict,
+/// or "no verdicts" — never a green line for an empty corpus).
+fn render_report(
+    loaded: &[Result<engine_core::reference::tier_b::Loaded, TierBError>],
+    live: &LiveUniverse,
+    mode: Mode,
+    shortlist: Shortlist,
+    ps: &[f64],
+) -> String {
+    use std::fmt::Write as _;
+    let u = &live.universe;
+    let mut out = String::new();
+    let arms = arms(ps);
+    // (id, verdict, constraint) per position with a verdict.
+    let mut constraints: Vec<(String, Verdict, Constraint)> = Vec::new();
+    for l in loaded {
+        let l = match l {
+            Ok(l) => l,
+            Err(e) => {
+                let _ = writeln!(out, "\nFAILED TO LOAD: {e}");
+                continue;
+            }
+        };
+        for w in &l.warnings {
+            let _ = writeln!(out, "  warning: {w}");
+        }
+        let fx = &l.fixture;
         let position = fx
             .root
             .position(u)
             .unwrap_or_else(|e| panic!("{}: {e}", fx.id));
-        let out = search(
-            &OracleInput {
-                position: &position,
-                universe: u,
-                pools: &fx.root.pools,
-                objective: u,
-                feasibility: FeasibilityRule::PoolOrRoster,
-                mode: Mode::Horizon(2),
-                epsilon: 1e-9,
-                off_pool_cost: None,
-            },
-            &SearchParams {
-                node_budget: Some(20_000_000),
-                wall_budget: Duration::from_secs(60),
-                ..SearchParams::default()
-            },
-            &CancelHandle::new(),
-            |_| {},
-        )
-        .unwrap_or_else(|e| panic!("{}: {e}", fx.id));
+        let root = position
+            .next_slot()
+            .expect("a loaded position has a next slot");
+        let pick_root = root.action == ActionType::Pick;
+        let pool = fx.root.pools.for_side(root.side);
         let names = |a: &Action| {
             a.champions()
                 .map(|c| u.id(c).to_string())
                 .collect::<Vec<_>>()
                 .join("+")
         };
-        println!(
-            "\n{} [{:?}] mover {:?} depth {} (partial {}) — {}",
-            fx.id, fx.category, out.mover, out.depth, out.partial, fx.notes
+        let mark = |a: &Action| -> String {
+            if !pick_root {
+                return String::new();
+            }
+            let off = a.champions().filter(|c| !pool.contains(*c)).count();
+            if off == 0 {
+                " [in-pool]".to_string()
+            } else {
+                format!(" [off-pool {off}]")
+            }
+        };
+        let _ = writeln!(
+            out,
+            "\n{} [{:?}] mover {:?} at slot {} — {}",
+            fx.id,
+            fx.category,
+            root.side,
+            position.slot_index(),
+            fx.notes
         );
-        println!(
-            "  top set: {} action(s) within epsilon of the best",
-            out.top_set.len()
-        );
-        for r in out.ranked.iter().take(3) {
-            let padded = r
-                .action
-                .champions()
-                .any(|c| live.padded.iter().any(|p| p == u.id(c)));
-            // U10: a pick outside the mover's pool is legal only because the pool could not finish
-            // (bans are unrestricted, so the mark applies to pick roots only).
-            let off_pool = position
-                .next_slot()
-                .is_some_and(|slot| slot.action == engine_core::draft_state::ActionType::Pick)
-                && r.action
-                    .champions()
-                    .any(|c| !fx.root.pools.for_side(out.mover).contains(c));
-            println!(
-                "  {:<24} {:>9.4}{}{}  ends {:?} blue_feasible={} red_feasible={}  line {}",
-                names(&r.action),
-                r.value,
-                if padded { " [padded: no FM row]" } else { "" },
-                if off_pool {
-                    " [off-pool: the pool could not finish]"
-                } else {
-                    ""
+        let mut in_pool_at: Vec<f64> = Vec::new();
+        let mut off_pool_at: Vec<f64> = Vec::new();
+        let mut left_out: Vec<f64> = Vec::new();
+        let mut actual_ranks: Vec<String> = Vec::new();
+        for arm in &arms {
+            let (feasibility, off_pool_cost) = match arm {
+                Arm::PoolOrRoster => (FeasibilityRule::PoolOrRoster, None),
+                Arm::Roster(p) => (FeasibilityRule::Roster, Some(*p)),
+            };
+            let out_come = search(
+                &OracleInput {
+                    position: &position,
+                    universe: u,
+                    pools: &fx.root.pools,
+                    objective: u,
+                    feasibility,
+                    mode,
+                    epsilon: 1e-9,
+                    off_pool_cost,
                 },
-                r.ends.kind,
-                r.ends.blue_feasible,
-                r.ends.red_feasible,
-                r.continuation
-                    .iter()
-                    .map(names)
-                    .collect::<Vec<_>>()
-                    .join(" > ")
+                &SearchParams {
+                    node_budget: Some(20_000_000),
+                    wall_budget: Duration::from_secs(300),
+                    shortlist: Some(shortlist),
+                    ..SearchParams::default()
+                },
+                &CancelHandle::new(),
+                |_| {},
+            )
+            .unwrap_or_else(|e| panic!("{}: {e}", fx.id));
+            let _ = writeln!(
+                out,
+                "  rule {} depth {} (partial {}) searched {} of {} top set {}",
+                arm.label(u),
+                out_come.depth,
+                out_come.partial,
+                out_come.ranked.len(),
+                out_come.root_fan,
+                out_come.top_set.len()
             );
+            for r in out_come.ranked.iter().take(3) {
+                let padded = r
+                    .action
+                    .champions()
+                    .any(|c| live.padded.iter().any(|p| p == u.id(c)));
+                let _ = writeln!(
+                    out,
+                    "    {:<24} {:>10.4}{}{}  ends {:?} blue_feasible={} red_feasible={} off-pool blue {} red {}  line {}",
+                    names(&r.action),
+                    r.value,
+                    mark(&r.action),
+                    if padded { " [padded: no FM row]" } else { "" },
+                    r.ends.kind,
+                    r.ends.blue_feasible,
+                    r.ends.red_feasible,
+                    r.ends.blue_off_pool,
+                    r.ends.red_off_pool,
+                    r.continuation
+                        .iter()
+                        .map(names)
+                        .collect::<Vec<_>>()
+                        .join(" > ")
+                );
+            }
+            if let (Some(top), Arm::Roster(p)) = (out_come.ranked.first(), arm) {
+                if pick_root {
+                    let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+                    let mixed = out_come.top_set.iter().any(in_pool)
+                        && out_come.top_set.iter().any(|a| !in_pool(a));
+                    if out_come.partial {
+                        let _ = writeln!(out, "    (partial: excluded from the break-even)");
+                        left_out.push(*p);
+                    } else if mixed {
+                        let _ = writeln!(
+                            out,
+                            "    (top set mixes in-pool and off-pool actions — a tie broken canonically; excluded from the break-even)"
+                        );
+                        left_out.push(*p);
+                    } else if in_pool(&top.action) {
+                        in_pool_at.push(*p);
+                    } else {
+                        off_pool_at.push(*p);
+                    }
+                }
+            }
+            if let Some(actual) = &fx.actual_next {
+                // Rank = 1 + the number of STRICTLY better actions, so a tie reads as a tie.
+                let rank = out_come
+                    .ranked
+                    .iter()
+                    .find(|r| &r.action == actual)
+                    .map(|found| {
+                        1 + out_come
+                            .ranked
+                            .iter()
+                            .filter(|r| match out_come.mover {
+                                Side::Blue => r.value > found.value,
+                                Side::Red => r.value < found.value,
+                            })
+                            .count()
+                    });
+                actual_ranks.push(format!(
+                    "{} of {} ({})",
+                    rank.map_or("unsearched".to_string(), |r| r.to_string()),
+                    out_come.ranked.len(),
+                    arm.label(u)
+                ));
+            }
         }
         if let Some(actual) = &fx.actual_next {
-            // Rank = 1 + the number of STRICTLY better actions, so a tie reads as a tie.
-            let rank = out
-                .ranked
-                .iter()
-                .find(|r| &r.action == actual)
-                .map(|found| {
-                    1 + out
-                        .ranked
-                        .iter()
-                        .filter(|r| match out.mover {
-                            Side::Blue => r.value > found.value,
-                            Side::Red => r.value < found.value,
-                        })
-                        .count()
-                });
-            println!(
-                "  actual next {} ranked {} of {}",
+            let _ = writeln!(
+                out,
+                "  actual next {}{} ranked {}",
                 names(actual),
-                rank.map_or("not a legal action".to_string(), |r| r.to_string()),
-                out.ranked.len()
+                mark(actual),
+                actual_ranks.join(", ")
             );
         }
-        // The band, read off the top line's ending — the facts the value was built from. Under the
-        // live rule a magnitude test against L/2 would call a forced off-pool pick (P = L) a denial.
-        let band = match out.ranked.first().map(|r| r.ends) {
-            Some(e) if !e.blue_feasible && !e.red_feasible => {
-                "both sides broken: R1 cancels the bands and the value is the board net of the off-pool term (the S11 residual)"
-            }
-            Some(e) if !e.blue_feasible || !e.red_feasible => {
-                "the L' band: a side cannot finish even from the roster (a defect if it is the mover's, a denial if the opponent's)"
-            }
-            Some(e) if e.blue_off_pool != e.red_off_pool => {
-                "the off-pool band: forced off-pool picks, P each (a forced opponent is the live form of denial)"
-            }
-            _ => "the feasible band",
-        };
-        println!(
-            "  band: {band} (|value| = {:.4}; P = {:.1}, L'/2 = {:.1}; off-pool blue {} red {})",
-            out.value.abs(),
-            u.off_pool_cost(),
-            u.live_loss() / 2.0,
-            out.ranked.first().map_or(0, |r| r.ends.blue_off_pool),
-            out.ranked.first().map_or(0, |r| r.ends.red_off_pool)
-        );
+        let be = break_even(pick_root, &in_pool_at, &off_pool_at);
+        let _ = writeln!(out, "  break-even: {}", be.describe());
+        if !left_out.is_empty() {
+            let _ = writeln!(
+                out,
+                "  (roster arms left out of the break-even, which widens any bracket across them: P = {left_out:?})"
+            );
+        }
+        // Every verdict is classified — a ban root's is `Unusable`, so the summary counts and names it
+        // (the loader already warned; review round 2, Codex E).
+        if let Some(v) = fx.verdict {
+            let c = constraint(v.off_pool, &be);
+            let _ = writeln!(
+                out,
+                "  verdict off_pool = {} → {}",
+                v.off_pool,
+                c.describe()
+            );
+            constraints.push((fx.id.clone(), v, c));
+        }
         if !fx.review.is_empty() {
-            println!("  review: {}", fx.review);
+            let _ = writeln!(out, "  review: {}", fx.review);
         }
     }
+    // The intersection over every verdict: lo = the largest "P >", hi = the smallest "P <".
+    let _ = writeln!(out);
+    if constraints.is_empty() {
+        let _ = writeln!(out, "summary: no verdicts — nothing to calibrate against");
+    } else {
+        let usable: Vec<&(String, Verdict, Constraint)> = constraints
+            .iter()
+            .filter(|(_, _, c)| matches!(c, Constraint::Bounds { .. }))
+            .collect();
+        let unusable: Vec<String> = constraints
+            .iter()
+            .filter_map(|(id, _, c)| match c {
+                Constraint::Unusable(why) => Some(format!("{id} ({why})")),
+                Constraint::Bounds { .. } => None,
+            })
+            .collect();
+        if !unusable.is_empty() {
+            let _ = writeln!(
+                out,
+                "summary: {} verdict(s) could not bound P: {}",
+                unusable.len(),
+                unusable.join("; ")
+            );
+        }
+        let lo = usable
+            .iter()
+            .filter_map(|(_, _, c)| match c {
+                Constraint::Bounds { lo, .. } => *lo,
+                Constraint::Unusable(_) => None,
+            })
+            .fold(None, |acc: Option<f64>, x| {
+                Some(acc.map_or(x, |a| a.max(x)))
+            });
+        let hi = usable
+            .iter()
+            .filter_map(|(_, _, c)| match c {
+                Constraint::Bounds { hi, .. } => *hi,
+                Constraint::Unusable(_) => None,
+            })
+            .fold(None, |acc: Option<f64>, x| {
+                Some(acc.map_or(x, |a| a.min(x)))
+            });
+        let empty = matches!((lo, hi), (Some(l), Some(h)) if l >= h);
+        if usable.is_empty() {
+            let _ = writeln!(
+                out,
+                "summary: no usable verdict — nothing to calibrate against"
+            );
+        } else if empty {
+            let _ = writeln!(
+                out,
+                "summary: verdict interval over {} position(s) is EMPTY — P > {} and P < {} conflict; the positions: {}",
+                usable.len(),
+                lo.expect("empty needs both bounds"),
+                hi.expect("empty needs both bounds"),
+                usable
+                    .iter()
+                    .map(|(id, v, c)| format!("{id} (off_pool = {}, {})", v.off_pool, c.describe()))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "summary: verdict interval over {} position(s): {} and {} (sweep points; refine the sweep inside it)",
+                usable.len(),
+                lo.map_or("P ≥ 0".to_string(), |l| format!("P > {l}")),
+                hi.map_or("P unbounded above".to_string(), |h| format!("P < {h}")),
+            );
+        }
+    }
+    out
+}
+
+/// Review round 1: the break-even and the verdict's constraint as pure functions of the sweep's
+/// classes, on synthetic sweeps — the monotone flip, in-pool everywhere, off-pool everywhere, a
+/// NON-MONOTONE sweep (no bound), a ban root and no arm.
+#[test]
+fn the_break_even_and_the_constraint_read_every_sweep_shape() {
+    use BreakEven::*;
+    let mono = break_even(true, &[0.15, 0.25], &[0.05]);
+    assert_eq!(
+        mono,
+        Monotone {
+            largest_off: 0.05,
+            smallest_in: 0.15
+        }
+    );
+    assert_eq!(constraint(true, &mono).describe(), "P < 0.15");
+    assert_eq!(constraint(false, &mono).describe(), "P > 0.05");
+    let in_every = break_even(true, &[0.05, 0.15], &[]);
+    assert_eq!(in_every, InPoolAtEvery { smallest: 0.05 });
+    assert_eq!(
+        constraint(true, &in_every).describe(),
+        "P < 0.05 (below the whole sweep: widen it downward)"
+    );
+    assert_eq!(
+        constraint(false, &in_every).describe(),
+        "P unbounded (satisfied at every sweep P)"
+    );
+    let off_every = break_even(true, &[], &[0.05, 0.15]);
+    assert_eq!(off_every, OffPoolAtEvery { largest: 0.15 });
+    assert_eq!(
+        constraint(false, &off_every).describe(),
+        "P > 0.15 (above the whole sweep: widen it upward)"
+    );
+    // In-pool at 0.05, off-pool at 0.25: the top flipped the wrong way — no single bound.
+    let non_mono = break_even(true, &[0.05, 0.15], &[0.25]);
+    assert!(matches!(non_mono, NonMonotone { .. }), "{non_mono:?}");
+    assert!(non_mono.describe().starts_with("NON-MONOTONE"));
+    assert_eq!(
+        constraint(true, &non_mono),
+        Constraint::Unusable("the sweep is non-monotone; refine it".into())
+    );
+    assert_eq!(
+        constraint(false, &non_mono).describe(),
+        "cannot bound P — the sweep is non-monotone; refine it"
+    );
+    // A flip back and forth is non-monotone too.
+    assert!(matches!(
+        break_even(true, &[0.15], &[0.05, 0.25]),
+        NonMonotone { .. }
+    ));
+    assert_eq!(break_even(false, &[0.05], &[]), BanRoot);
+    assert_eq!(break_even(true, &[], &[]), NoArm);
+    assert!(matches!(constraint(true, &NoArm), Constraint::Unusable(_)));
+    // Review round 2: "leave the pool" where the top was in-pool even at P = 0 has no P to offer.
+    assert_eq!(
+        constraint(true, &break_even(true, &[0.0, 0.15], &[])),
+        Constraint::Unusable("the top was in-pool even at P = 0; no P meets this verdict".into())
+    );
+    // A bad sweep entry is refused before any search runs.
+    assert!(std::panic::catch_unwind(|| arms(&[-0.1])).is_err());
+    assert!(std::panic::catch_unwind(|| arms(&[f64::NAN])).is_err());
+    assert_eq!(arms(&[0.15, 0.05]).len(), 3);
+}
+
+/// D7: a report read by a human, never a gate (B-proper § 3: the calibration instrument). Env:
+/// `TIER_B_P` (comma list of logits, default `0.05,0.15,0.25`), `TIER_B_WIDTHS`
+/// (`singles,pairs,root_off_pool`, default `30,60,100`), `TIER_B_HORIZON` (default 2).
+#[test]
+#[ignore = "Tier B report, not a gate (D7): cargo test --release --test tier_b -- --ignored --nocapture"]
+fn tier_b_report() {
+    let live = live();
+    let corpus = dir("fixtures/tier-b");
+    let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
+    let ps: Vec<f64> = env_list("TIER_B_P", "0.05,0.15,0.25");
+    let widths: Vec<usize> = env_list("TIER_B_WIDTHS", "30,60,100");
+    let horizon: Vec<usize> = env_list("TIER_B_HORIZON", "2");
+    assert_eq!(
+        widths.len(),
+        3,
+        "TIER_B_WIDTHS = singles,pairs,root_off_pool"
+    );
+    let shortlist = Shortlist {
+        singles: widths[0],
+        pairs: widths[1],
+        root_off_pool: widths[2],
+    };
+    println!(
+        "{} Tier B position(s) in {} — P sweep {:?}, widths {:?}, horizon {}",
+        loaded.len(),
+        corpus.display(),
+        ps,
+        shortlist,
+        horizon[0]
+    );
+    print!(
+        "{}",
+        render_report(&loaded, &live, Mode::Horizon(horizon[0]), shortlist, &ps)
+    );
+}
+
+/// B-proper § 7 test 11: the sweep report on the four sample files with synthetic verdicts — one
+/// block per arm, the marks, the break-evens and the verdict interval; then a contradictory pair of
+/// verdicts prints the conflict. Horizon 1 and narrow widths keep it inside a debug-build budget;
+/// the default list contains the shipped default P.
+#[test]
+fn the_report_sweeps_p_and_states_the_verdict_interval() {
+    let live = live();
+    let default_ps: Vec<f64> = env_list("TIER_B_P_UNSET_", "0.05,0.15,0.25");
+    assert!(default_ps.contains(&DEFAULT_OFF_POOL_COST));
+    // `verdict` spliced in before `review` (the smoke files carry review text).
+    let load = |name: &str, verdict: Option<bool>| {
+        let edit = verdict.map_or(String::new(), |v| {
+            format!("\"verdict\": {{\"off_pool\": {v}}}, ")
+        });
+        TierBFixture::from_json(
+            &sample_json(name).replace("\"review\":", &format!("{edit}\"review\":")),
+            name,
+            &live,
+        )
+    };
+    let loaded = vec![
+        load("2026-09-27-smoke-1-blue-first-pick", Some(false)),
+        load("2026-09-27-smoke-2-red-pair-no-adc", Some(true)),
+        load("sample-fce65eb1-slot-11", None),
+        load("sample-skip-at-slot-1", None),
+    ];
+    let narrow = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.15, 0.05]);
+    println!("{text}");
+    for needle in [
+        "rule pool_or_roster (P = L = 1026.4)",
+        "rule roster P = 0.05",
+        "rule roster P = 0.15",
+        "searched 67 of 167",
+        "searched 78 of 13695",
+        "[in-pool]",
+        "[off-pool 1]",
+        "actual next Jinx [in-pool] ranked",
+        "break-even: no off-pool question at a ban root",
+        "break-even: top off-pool at every P",
+        "verdict off_pool = true → P unbounded (satisfied at every sweep P)",
+        "summary: verdict interval over 2 position(s)",
+    ] {
+        assert!(text.contains(needle), "missing {needle:?} in:\n{text}");
+    }
+    // Smoke-1 (Blue's first pick at P = 0.05 and 0.15): whichever way its top goes, the verdict
+    // "stay in pool" yields a lower bound or "unbounded below" — both are stated, never silent.
+    assert!(
+        text.contains("verdict off_pool = false → P > ")
+            || text.contains("verdict off_pool = false → P unbounded (satisfied at every sweep P)"),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("rule roster P = ").count(),
+        8,
+        "two roster arms on four positions"
+    );
+    // A bracket: the sample's slot 11 goes off-pool (Syndra) at P = 0.05 and stays in pool (Hwei)
+    // at 0.15, so "leave the pool" there means P < 0.15 and "stay" means P > 0.05; both verdicts on
+    // that one position bracket P between the two sweep points.
+    let loaded = vec![
+        load("sample-fce65eb1-slot-11", Some(true)),
+        load("sample-fce65eb1-slot-11", Some(false)),
+    ];
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05, 0.15]);
+    println!("{text}");
+    assert!(
+        text.contains("verdict off_pool = true → P < 0.15"),
+        "{text}"
+    );
+    assert!(
+        text.contains("verdict off_pool = false → P > 0.05"),
+        "{text}"
+    );
+    assert!(
+        text.contains("summary: verdict interval over 2 position(s): P > 0.05 and P < 0.15"),
+        "{text}"
+    );
+    // A conflict: "stay in pool" on smoke-2, whose top is off-pool at every P (P > 0.15), against
+    // "leave the pool" on the sample's slot 11 (P < 0.15) — an empty interval, named.
+    let loaded = vec![
+        load("sample-fce65eb1-slot-11", Some(true)),
+        load("2026-09-27-smoke-2-red-pair-no-adc", Some(false)),
+    ];
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05, 0.15]);
+    assert!(
+        text.contains(
+            "verdict off_pool = false → P > 0.15 (above the whole sweep: widen it upward)"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("is EMPTY — P > 0.15 and P < 0.15 conflict"),
+        "{text}"
+    );
+    // Review focus (B-proper plan): an `actual_next` the root shortlist cut prints "unsearched", under
+    // every arm — Zac is off-pool for Red at slot 11 and not among the best off-pool candidates.
+    let zac = TierBFixture::from_json(
+        &sample_json("sample-fce65eb1-slot-11")
+            .replace("\"actual_next\": \"Jinx\"", "\"actual_next\": \"Zac\""),
+        "zac",
+        &live,
+    );
+    let text = render_report(
+        &[zac],
+        &live,
+        Mode::Horizon(1),
+        Shortlist {
+            singles: 15,
+            pairs: 25,
+            root_off_pool: 1,
+        },
+        &[0.15],
+    );
+    assert!(
+        text.contains("actual next Zac [off-pool 1] ranked unsearched of 93 (pool_or_roster (P = L = 1026.4)), unsearched of 94 (roster P = 0.15)"),
+        "{text}"
+    );
+    // No verdicts at all: said so, never green.
+    let loaded = vec![load("sample-skip-at-slot-1", None)];
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    assert!(text.contains("summary: no verdicts"), "{text}");
+    // A verdict at a ban root is counted as unusable, never silently dropped (round 2, Codex E).
+    let loaded = vec![load("sample-skip-at-slot-1", Some(true))];
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    assert!(
+        text.contains(
+            "verdict off_pool = true → cannot bound P — no off-pool question at a ban root"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("summary: 1 verdict(s) could not bound P: sample-skip-at-slot-1 (no off-pool question at a ban root)"),
+        "{text}"
+    );
+    assert!(text.contains("summary: no usable verdict"), "{text}");
+    // A malformed entry is reported in its place and the rest still render.
+    let loaded = vec![
+        Err(TierBError::Invalid {
+            id: "broken".into(),
+            field: "x".into(),
+            reason: "synthetic".into(),
+        }),
+        load("sample-skip-at-slot-1", None),
+    ];
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    assert!(
+        text.contains("FAILED TO LOAD: broken: x: synthetic"),
+        "{text}"
+    );
+    assert!(text.contains("sample-skip-at-slot-1"), "{text}");
 }

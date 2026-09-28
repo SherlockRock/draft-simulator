@@ -17,7 +17,7 @@ use crate::draft_state::{ActionType, Side};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// D7's tags.
+/// D7's tags, plus B-proper's calibration subset.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
@@ -26,6 +26,18 @@ pub enum Category {
     FlexRetention,
     PairCoherence,
     EdgeCase,
+    /// A position where an off-pool pick tempts: the calibration subset for P (B-proper § 3).
+    OffPool,
+}
+
+/// The user's structured verdict on a position (B-proper § 3): would they leave the pool here. Each
+/// verdict is an interval constraint on P that the report intersects — `true`: P must sit below the
+/// smallest sweep P at which the top action is in-pool; `false`: above the largest at which it is
+/// off-pool. Free-text `review` stays beside it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Verdict {
+    pub off_pool: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -58,6 +70,8 @@ struct TierBFile {
     actual_next: Option<ActionSpec>,
     #[serde(default)]
     review: String,
+    #[serde(default)]
+    verdict: Option<Verdict>,
     /// The raw captured request (the wire `EngineRequest`, when the capture button exists), kept
     /// opaque so nothing the loader does not model (display pools, tiers) is lost. Must be an object
     /// with a string `protocolVersion`; the top-level fields win when the two disagree (warned).
@@ -101,6 +115,8 @@ pub struct TierBFixture {
     /// The soft comparison point (D7): what was actually played next. Never truth.
     pub actual_next: Option<Action>,
     pub review: String,
+    /// B-proper § 3: the calibration verdict, when the user has given one.
+    pub verdict: Option<Verdict>,
     pub capture: Option<serde_json::Value>,
     pub path: Option<PathBuf>,
 }
@@ -123,8 +139,13 @@ impl TierBFixture {
         Ok(loaded)
     }
 
-    /// Every `*.json` in `dir`, sorted by file name.
-    pub fn load_dir(dir: &Path, live: &LiveUniverse) -> Result<Vec<Loaded>, TierBError> {
+    /// Every `*.json` in `dir`, sorted by file name, each with its own result: one malformed file is
+    /// reported in its place and the rest still load (B-proper § 3 — a report run must not stop on
+    /// one bad file). The outer error is the directory's.
+    pub fn load_dir(
+        dir: &Path,
+        live: &LiveUniverse,
+    ) -> Result<Vec<Result<Loaded, TierBError>>, TierBError> {
         let entries = std::fs::read_dir(dir).map_err(|source| TierBError::Io {
             path: dir.to_path_buf(),
             source,
@@ -134,7 +155,7 @@ impl TierBFixture {
             .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
             .collect();
         paths.sort();
-        paths.iter().map(|p| Self::load_file(p, live)).collect()
+        Ok(paths.iter().map(|p| Self::load_file(p, live)).collect())
     }
 
     pub fn from_json(raw: &str, label: &str, live: &LiveUniverse) -> Result<Loaded, TierBError> {
@@ -240,12 +261,14 @@ impl TierBFixture {
         // An `actual_next` the reference would never generate is still recorded (it is what was
         // played), but the reader should know the rank it prints is against a list that lacks it.
         if let Some(action) = actual_next {
-            // Legality under the live rule (U10), the one the report searches with.
+            // Legality under `roster` (B-proper), the widest rule the report searches with: every
+            // available champion is a pick, so only a champion on the board or excluded fails here
+            // (an off-pool `actual_next` is legal, and the report says whether it was in the pool).
             let legal = legal_actions_under(
                 &position,
                 universe,
                 &pools,
-                FeasibilityRule::PoolOrRoster,
+                FeasibilityRule::Roster,
                 &mut FeasibilityMemo::default(),
             );
             if !legal.contains(&action) {
@@ -254,16 +277,20 @@ impl TierBFixture {
                     "already on the board"
                 } else if action.champions().any(|c| excluded.contains(c)) {
                     "excluded"
-                } else if root.action == ActionType::Pick {
-                    "outside the mover's pool, which can still finish"
                 } else {
-                    "not available"
+                    "not generated at this root"
                 };
                 warnings.push(format!(
                     "{id}: actual_next {} is not a legal action here ({why})",
                     names.join("+")
                 ));
             }
+        }
+        // A verdict answers "would you leave the pool here": at a ban root there is no such question.
+        if file.verdict.is_some() && root.action == ActionType::Ban {
+            warnings.push(format!(
+                "{id}: verdict: no off-pool question at a ban root; the report ignores it"
+            ));
         }
         // `capture` is provenance; the top-level fields are the position. Say so when they disagree.
         if let Some(capture) = &file.capture {
@@ -325,6 +352,7 @@ impl TierBFixture {
                 our_side: file.our_side,
                 actual_next,
                 review: file.review,
+                verdict: file.verdict,
                 capture: file.capture,
                 path: None,
             },
