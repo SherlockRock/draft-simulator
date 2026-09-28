@@ -3169,14 +3169,16 @@ fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
     assert_eq!(value_of("RS"), 1.0);
 }
 
-/// B-proper § 7 tests 5–6, on the probe above under `roster`: the roster is always legal, so a self-ban
-/// can only remove an option and the road to SX is open to both sides. Printed, then asserted from
-/// the engine (oracle-checked at every P): the self-ban BS ranks at or below the harmless ban K10;
-/// denying Red's support ranks at or above it; the harmless ban's value is what the contest over SX
-/// leaves — Red takes SX off-pool (−1 to Blue, +P back) and Blue keeps its pool — so `ban SX` is the
-/// top action: the roster champion the opponent would fetch is the thing to deny.
+/// B-proper § 7 tests 5–6, on the probe above under `roster`: on this probe the self-ban does not pay
+/// — the general case is the snipe probe, where it can — and the road to SX is open to both sides.
+/// Printed, then asserted from the engine (oracle-checked at every P): the self-ban BS ranks at or
+/// below the harmless ban K10; denying Red's support ranks at or above it; the harmless ban's value is
+/// what the contest over SX leaves — Red takes SX off-pool (−1 to Blue, +P back) and Blue keeps its
+/// pool — so `ban SX` is the top action: the roster champion the opponent would fetch is the thing to
+/// deny.
 #[test]
-fn under_roster_a_self_ban_never_pays_and_denying_the_roster_champion_is_top() {
+fn on_the_round5_probe_under_roster_the_self_ban_does_not_pay_and_denying_the_roster_champion_is_top(
+) {
     use engine_core::reference::oracle::evaluate;
     use engine_core::reference::state::Action;
     let u = band_universe(&[
@@ -3513,7 +3515,7 @@ fn an_empty_pool_under_roster_charges_every_remaining_pick() {
         Mode::Horizon(1),
         &params(None),
         FeasibilityRule::Roster,
-        Some(0.15), // DEFAULT_OFF_POOL_COST, as a literal: this test predates the constant's import
+        Some(DEFAULT_OFF_POOL_COST),
     );
     assert_eq!(out.mover, Side::Red);
     assert_eq!(out.ranked.len(), 162);

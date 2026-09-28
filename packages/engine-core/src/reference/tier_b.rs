@@ -289,7 +289,7 @@ impl TierBFixture {
         // A verdict answers "would you leave the pool here": at a ban root there is no such question.
         if file.verdict.is_some() && root.action == ActionType::Ban {
             warnings.push(format!(
-                "{id}: verdict: no off-pool question at a ban root; the report ignores it"
+                "{id}: verdict: no off-pool question at a ban root; the report counts it as unusable"
             ));
         }
         // `capture` is provenance; the top-level fields are the position. Say so when they disagree.

@@ -172,8 +172,8 @@ impl Fixture {
             return Err(invalid(
                 "feasibility",
                 format!(
-                    "Tier A declares \"on\" or \"off\"; {:?} is a live rule (Tier B files and the wire), whose band the Tier A harness does not check",
-                    file.feasibility
+                    "Tier A declares \"on\" or \"off\"; {} is a live rule (Tier B files and the wire), whose band the Tier A harness does not check",
+                    file.feasibility.wire_name()
                 ),
             ));
         }

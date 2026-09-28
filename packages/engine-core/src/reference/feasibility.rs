@@ -40,6 +40,17 @@ impl FeasibilityRule {
             FeasibilityRule::PoolOrRoster | FeasibilityRule::Roster
         )
     }
+
+    /// The wire's lowercase spelling (`#[serde(rename_all = "snake_case")]` above), for messages that
+    /// otherwise read the rule alongside "on" and "off" — never Debug's `PoolOrRoster`/`Roster`.
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            FeasibilityRule::On => "on",
+            FeasibilityRule::Off => "off",
+            FeasibilityRule::PoolOrRoster => "pool_or_roster",
+            FeasibilityRule::Roster => "roster",
+        }
+    }
 }
 
 /// Memo keyed on `(side, locked set, candidate set)` — the candidates are the pool net of the board,
