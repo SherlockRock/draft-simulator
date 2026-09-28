@@ -4,19 +4,41 @@
 //! nodes prune with static move ordering and memoise exact values in the transposition table. Depth
 //! iteration, node budget, deadline, cancel and per-depth partials go through the incumbent's
 //! `iterative_deepening::deepen_with_hook` and `cancellation::CancelHandle`, unchanged — the target note's
-//! § 2 contract, met by reuse.
+//! § 2 contract, met by reuse. B-proper (design `engine-b-proper-design.md` § 2) adds the static
+//! shortlist: with `SearchParams::shortlist` set, a pick node's children are the best `width` by the
+//! same static ordering (`static_order`, `truncate_children`), the root keeps every in-pool action plus
+//! the best off-pool ones (`root_shortlist`), and `SearchOutcome::root_fan` says what was left out.
+//! Truncation is not exact; `None` is the exact search of slice 4.
 
-use super::feasibility::{side_feasible, FeasibilityMemo};
+use super::feasibility::{locked_matchable, side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::format::Slot;
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
-use super::objective::Leaf;
+use super::objective::{Leaf, Objective};
 use super::oracle::{resolve_off_pool_cost, Mode, OracleError, OracleInput};
 use super::state::{Action, Position};
 use super::transposition::{Entry, Key, TranspositionTable};
+use super::universe::{ChampionSet, Universe};
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
 use crate::draft_state::{ActionType, Side};
 use crate::engine::EngineError;
 use crate::iterative_deepening::{deepen_with_hook, SearchResult};
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
+
+/// B-proper § 2: the static shortlist's widths. `None` on `SearchParams::shortlist` = no truncation
+/// anywhere (Tier A, the oracle-equality tests, the exact search of slice 4). Every width ≥ 1
+/// (`search` refuses 0). Truncation is NOT exact: `SearchOutcome::root_fan` says how many root
+/// actions were legal beside how many were ranked. The oracle never shortlists (D8 1). Bans are never
+/// truncated (no static term; a ban fan is ≤ 173).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shortlist {
+    /// Children kept at an interior single-pick node.
+    pub singles: usize,
+    /// Children kept at an interior pair node.
+    pub pairs: usize,
+    /// Off-pool actions kept at a pick root beside EVERY in-pool action (design B6).
+    pub root_off_pool: usize,
+}
 
 #[derive(Clone, Debug)]
 pub struct SearchParams {
@@ -32,6 +54,8 @@ pub struct SearchParams {
     pub wall_budget: Duration,
     /// `deepen_with_hook`'s floor on the bail heuristic.
     pub min_completed_depth: usize,
+    /// B-proper § 2: `Some` truncates every pick fan (see `Shortlist`); `None` is exact.
+    pub shortlist: Option<Shortlist>,
 }
 
 impl Default for SearchParams {
@@ -42,6 +66,7 @@ impl Default for SearchParams {
             transposition: true,
             wall_budget: Duration::from_secs(86_400),
             min_completed_depth: 1,
+            shortlist: None,
         }
     }
 }
@@ -82,6 +107,9 @@ pub struct SearchOutcome {
     pub ranked: Vec<RankedAction>,
     /// Within `epsilon` of the best, canonical order (as the oracle).
     pub top_set: Vec<Action>,
+    /// Legal root actions (B-proper § 2): `ranked.len()` of them were searched; the rest were cut by
+    /// `SearchParams::shortlist` (never any without it, and never at a ban root).
+    pub root_fan: usize,
     /// This depth's iteration alone, with the oracle's definitions: `nodes` = positions visited below the
     /// root, `leaves` = objective calls at leaves. `orderings` = objective calls spent ordering children;
     /// `table_hits` = lookups answered from the table during this iteration.
@@ -115,6 +143,140 @@ fn invalid(err: impl std::fmt::Display) -> EngineError {
     EngineError::InvalidInput {
         path: vec![err.to_string()],
     }
+}
+
+/// R4's static ordering as a free function (B-proper § 2): `actions` by the static utility of the
+/// child position, best first for `side`, equal values in canonical order. `off_pool` is `(the mover's
+/// pool, P)` where the caller charges the off-pool term — under `Roster` always, under `PoolOrRoster`
+/// when a shortlist is set (`Iteration::order` decides) — and each champion an action names outside
+/// the pool then costs P in the KEY (Blue subtracts, Red adds), so an off-pool child is ordered net of
+/// its cost; `None` gives the board alone, as slice 4 built it.
+/// Neither the forced term nor the feasibility flags enter the key (cost; both stay leaf-priced). A
+/// pure function of its arguments: the purity the transposition table needs (slice-5 § 8).
+pub fn static_order(
+    objective: &dyn Objective,
+    position: &Position<'_>,
+    side: Side,
+    actions: Vec<Action>,
+    off_pool: Option<(ChampionSet, f64)>,
+) -> Vec<Action> {
+    let mut keyed: Vec<(f64, Action)> = actions
+        .into_iter()
+        .map(|a| {
+            let child = position.apply(a);
+            let mut v = objective.value(&Leaf {
+                blue: child.picks(Side::Blue),
+                red: child.picks(Side::Red),
+                blue_feasible: true,
+                red_feasible: true,
+            });
+            if let Some((pool, p)) = off_pool {
+                let made = a.champions().filter(|c| !pool.contains(*c)).count();
+                if made > 0 {
+                    // ≤ 2 champions per action, so the conversion is exact.
+                    let charge = f64::from(u8::try_from(made).unwrap_or(u8::MAX)) * p;
+                    v = match side {
+                        Side::Blue => v - charge,
+                        Side::Red => v + charge,
+                    };
+                }
+            }
+            (v, a)
+        })
+        .collect();
+    keyed.sort_by(|x, y| {
+        let by_value = match side {
+            Side::Blue => y.0.partial_cmp(&x.0),
+            Side::Red => x.0.partial_cmp(&y.0),
+        };
+        by_value
+            .expect("objective values are finite (Objective contract)")
+            .then(x.1.cmp(&y.1))
+    });
+    keyed.into_iter().map(|(_, a)| a).collect()
+}
+
+/// What the shortlist's feasibility filter reads (B-proper § 2): the rule (the filter runs under the
+/// live rules only), the search's feasibility memo (`FeasibilityMemo.locked`) and the universe.
+pub struct Filter<'a> {
+    pub rule: FeasibilityRule,
+    pub memo: &'a mut FeasibilityMemo,
+    pub universe: &'a Universe,
+}
+
+/// B-proper § 2: the shortlist's truncation, a pure function of its arguments. `ordered` is a pick
+/// node's children best first (`static_order`). Under a live rule the first `width` children whose
+/// locked picks (the parent's plus the action's) still form a role matching are kept, in order
+/// (`feasibility::locked_matchable`, ≤ 5 names); if fewer than `width` pass, the best failures fill
+/// the width, so a side whose comp is already broken still has moves (L' ranks them). Under `On` /
+/// `Off` the first `width`. A list no longer than `width` is returned as is.
+pub fn truncate_children(
+    position: &Position<'_>,
+    side: Side,
+    ordered: Vec<Action>,
+    width: usize,
+    filter: &mut Filter<'_>,
+) -> Vec<Action> {
+    if ordered.len() <= width {
+        return ordered;
+    }
+    if !filter.rule.is_live() {
+        let mut ordered = ordered;
+        ordered.truncate(width);
+        return ordered;
+    }
+    let mut keep = vec![false; ordered.len()];
+    let mut kept = 0;
+    for (i, a) in ordered.iter().enumerate() {
+        if kept == width {
+            break;
+        }
+        let child = position.apply(*a);
+        if locked_matchable(filter.memo, side, child.picks(side), filter.universe) {
+            keep[i] = true;
+            kept += 1;
+        }
+    }
+    if kept < width {
+        for k in keep.iter_mut() {
+            if kept == width {
+                break;
+            }
+            if !*k {
+                *k = true;
+                kept += 1;
+            }
+        }
+    }
+    ordered
+        .into_iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(a, _)| a)
+        .collect()
+}
+
+/// B-proper § 2 (B6): a pick root's fan under a shortlist — EVERY in-pool action (each champion it
+/// names in the mover's pool; a mixed pair is off-pool) plus the best `off_pool_width` off-pool ones,
+/// chosen as `truncate_children` chooses (feasible first under a live rule, failures fill). Order is
+/// `ordered`'s. Under the gate no off-pool action is legal, so the root is the full gate fan.
+pub fn root_shortlist(
+    position: &Position<'_>,
+    side: Side,
+    ordered: Vec<Action>,
+    pool: ChampionSet,
+    off_pool_width: usize,
+    filter: &mut Filter<'_>,
+) -> Vec<Action> {
+    let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+    let off: Vec<Action> = ordered.iter().copied().filter(|a| !in_pool(a)).collect();
+    let kept: HashSet<Action> = truncate_children(position, side, off, off_pool_width, filter)
+        .into_iter()
+        .collect();
+    ordered
+        .into_iter()
+        .filter(|a| in_pool(a) || kept.contains(a))
+        .collect()
 }
 
 /// Shared across iterations of one `search` call.
@@ -175,42 +337,61 @@ impl Iteration<'_, '_> {
     }
 
     /// R4: children by the static utility of the child position, best first for the mover; equal values
-    /// keep canonical order. Bans have no term (D3 iii), so a ban slot's children are all equal: they are
-    /// returned in canonical order without evaluating anything.
-    fn order(
-        &mut self,
-        position: &Position<'_>,
-        slot_side: Side,
-        slot_action: ActionType,
-        actions: Vec<Action>,
-    ) -> Vec<Action> {
-        if slot_action == ActionType::Ban {
+    /// keep canonical order (`static_order`; under `Roster` the key carries the off-pool term). Bans have
+    /// no term (D3 iii), so a ban slot's children are all equal: they are returned in canonical order
+    /// without evaluating anything.
+    fn order(&mut self, position: &Position<'_>, slot: Slot, actions: Vec<Action>) -> Vec<Action> {
+        if slot.action == ActionType::Ban {
             return actions;
         }
-        let mut keyed: Vec<(f64, Action)> = actions
-            .into_iter()
-            .map(|a| {
-                self.orderings += 1;
-                let child = position.apply(a);
-                let v = self.input.objective.value(&Leaf {
-                    blue: child.picks(Side::Blue),
-                    red: child.picks(Side::Red),
-                    blue_feasible: true,
-                    red_feasible: true,
-                });
-                (v, a)
-            })
-            .collect();
-        keyed.sort_by(|x, y| {
-            let by_value = match slot_side {
-                Side::Blue => y.0.partial_cmp(&x.0),
-                Side::Red => x.0.partial_cmp(&y.0),
-            };
-            by_value
-                .expect("objective values are finite (Objective contract)")
-                .then(x.1.cmp(&y.1))
+        self.orderings += u64::try_from(actions.len()).unwrap_or(u64::MAX);
+        // The off-pool term rides the key under `Roster` always, and under `PoolOrRoster` whenever a
+        // shortlist is set (review round 1): at a widened node the board-best children can all be
+        // count-suboptimal, and a truncation that dropped the count-minimal child would move values by
+        // whole multiples of L and could flip the root. Without a shortlist nothing is dropped, and
+        // the board-only key keeps `pool_or_roster`'s counts byte-identical to slice 5.
+        let charged = match self.input.feasibility {
+            FeasibilityRule::Roster => true,
+            FeasibilityRule::PoolOrRoster => self.params.shortlist.is_some(),
+            FeasibilityRule::On | FeasibilityRule::Off => false,
+        };
+        let off_pool = charged.then(|| {
+            (
+                self.input.pools.for_side(slot.side),
+                self.shared.off_pool_cost,
+            )
         });
-        keyed.into_iter().map(|(_, a)| a).collect()
+        static_order(self.input.objective, position, slot.side, actions, off_pool)
+    }
+
+    /// An interior pick node's children under the shortlist (B-proper § 2); every child without one.
+    fn shortlisted(
+        &mut self,
+        position: &Position<'_>,
+        slot: Slot,
+        ordered: Vec<Action>,
+    ) -> Vec<Action> {
+        match self.params.shortlist {
+            Some(sl) if slot.action == ActionType::Pick => {
+                let width = if slot.pair_start {
+                    sl.pairs
+                } else {
+                    sl.singles
+                };
+                truncate_children(
+                    position,
+                    slot.side,
+                    ordered,
+                    width,
+                    &mut Filter {
+                        rule: self.input.feasibility,
+                        memo: &mut self.shared.memo,
+                        universe: self.input.universe,
+                    },
+                )
+            }
+            _ => ordered,
+        }
     }
 
     /// Alpha-beta value of `position` and its principal continuation. `turns_used` turns below the root.
@@ -251,7 +432,8 @@ impl Iteration<'_, '_> {
                 return Ok((entry.value, entry.continuation.clone()));
             }
         }
-        let ordered = self.order(position, slot.side, slot.action, actions);
+        let ordered = self.order(position, slot, actions);
+        let ordered = self.shortlisted(position, slot, ordered);
         let (mut alpha, mut beta) = (alpha0, beta0);
         let mut best: Option<(f64, Vec<Action>)> = None;
         for action in ordered {
@@ -343,7 +525,25 @@ impl Iteration<'_, '_> {
         // Root children are searched with a full window each, so their order changes no value and no ranking.
         // With the table off it changes no count either; with the table on it decides which subtree populates
         // the table first, so node, cutoff and hit counts are root-order dependent while values are not.
-        let ordered = self.order(root, slot.side, slot.action, actions);
+        let ordered = self.order(root, slot, actions);
+        let root_fan = ordered.len();
+        // B-proper § 2 (B6): under a shortlist a pick root keeps every in-pool action plus the best
+        // off-pool ones; a ban root and an unshortlisted search keep the whole fan.
+        let ordered = match self.params.shortlist {
+            Some(sl) if slot.action == ActionType::Pick => root_shortlist(
+                root,
+                slot.side,
+                ordered,
+                self.input.pools.for_side(slot.side),
+                sl.root_off_pool,
+                &mut Filter {
+                    rule: self.input.feasibility,
+                    memo: &mut self.shared.memo,
+                    universe: self.input.universe,
+                },
+            ),
+            _ => ordered,
+        };
         let mut ranked = Vec::with_capacity(ordered.len());
         for action in ordered {
             let child = root.apply(action);
@@ -383,6 +583,7 @@ impl Iteration<'_, '_> {
             value,
             ranked,
             top_set,
+            root_fan,
             nodes: self.nodes,
             leaves: self.leaves,
             orderings: self.orderings,
@@ -412,6 +613,14 @@ pub fn search(
     }
     if input.mode == Mode::Horizon(0) {
         return Err(invalid(OracleError::HorizonZero));
+    }
+    if let Some(sl) = params.shortlist {
+        if sl.singles == 0 || sl.pairs == 0 || sl.root_off_pool == 0 {
+            return Err(invalid(format!(
+                "shortlist: every width must be at least 1 (singles {}, pairs {}, root_off_pool {})",
+                sl.singles, sl.pairs, sl.root_off_pool
+            )));
+        }
     }
     let off_pool_cost = resolve_off_pool_cost(input).map_err(invalid)?;
     let mut shared = Shared {

@@ -9,7 +9,9 @@ use engine_core::reference::fixture::{Fixture, Mode};
 use engine_core::reference::node::LeafKind;
 use engine_core::reference::objective::{Leaf, Objective};
 use engine_core::reference::oracle::{evaluate, Evaluation, OracleError, OracleInput};
-use engine_core::reference::search::{max_depth_for, search, SearchOutcome, SearchParams};
+use engine_core::reference::search::{
+    max_depth_for, search, SearchOutcome, SearchParams, Shortlist,
+};
 use engine_core::reference::state::{Action, Entry, Position};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -72,6 +74,7 @@ fn unbudgeted(prune: bool, transposition: bool) -> SearchParams {
         transposition,
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
+        shortlist: None,
     }
 }
 
@@ -359,6 +362,196 @@ fn off_pool_cost_under_roster_is_required_finite_and_at_most_l() {
         )
         .unwrap_or_else(|e| panic!("P = {p}: {e}"));
     }
+}
+
+/// B-proper § 7 test 2: widths at or above every fan change nothing — values, continuations and every
+/// count bit-equal to the untruncated search, on every Tier A fixture and probe at its own mode, and
+/// the root fan is the ranked list. (An off-by-one in the truncation fails this on 07b's 171-wide fan.)
+#[test]
+fn a_shortlist_at_or_above_every_fan_is_the_untruncated_search() {
+    let names: Vec<(&str, &str)> = [
+        "01-pair-completion",
+        "02-profitable-denial",
+        "03-declining-denial",
+        "04-partner-protection",
+        "05-comp-breaking-pair",
+        "06a-ban-truncated",
+        "06b-ban-horizon",
+        "07-slot6-bound",
+        "07b-slot6-full-fan",
+    ]
+    .iter()
+    .map(|n| ("fixtures/tier-a", *n))
+    .chain(
+        [
+            "probe-ban-breaks-role",
+            "probe-ban-only-tie-h3",
+            "probe-dry-pool",
+            "probe-immediate-vs-delayed-h2",
+            "probe-mutual-infeasibility",
+            "probe-red-double-turn-standard",
+        ]
+        .iter()
+        .map(|n| ("tests/data/reference-probes", *n)),
+    )
+    .collect();
+    let wide = SearchParams {
+        shortlist: Some(Shortlist {
+            singles: 200,
+            pairs: 20_000,
+            root_off_pool: 20_000,
+        }),
+        ..unbudgeted(true, true)
+    };
+    for (sub, name) in names {
+        let fx = Fixture::load_file(&dir(sub).join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let exact = candidate(&fx, fx.mode, &unbudgeted(true, true));
+        let shortlisted = candidate(&fx, fx.mode, &wide);
+        let bits = |o: &SearchOutcome| -> Vec<(Action, u64, Vec<Action>)> {
+            o.ranked
+                .iter()
+                .map(|r| (r.action, r.value.to_bits(), r.continuation.clone()))
+                .collect()
+        };
+        assert_eq!(bits(&exact), bits(&shortlisted), "{name}");
+        assert_eq!(
+            (
+                exact.nodes,
+                exact.leaves,
+                exact.cutoffs,
+                exact.table_hits_total
+            ),
+            (
+                shortlisted.nodes,
+                shortlisted.leaves,
+                shortlisted.cutoffs,
+                shortlisted.table_hits_total
+            ),
+            "{name}"
+        );
+        assert_eq!(
+            exact.root_fan,
+            exact.ranked.len(),
+            "{name}: nothing cut without a shortlist"
+        );
+        assert_eq!(
+            shortlisted.root_fan,
+            shortlisted.ranked.len(),
+            "{name}: nothing cut at these widths"
+        );
+    }
+}
+
+/// B-proper § 7 test 10: a width of 0 is refused before any search runs.
+#[test]
+fn a_zero_shortlist_width_is_refused() {
+    let fx = fixture("01-pair-completion");
+    for sl in [
+        Shortlist {
+            singles: 0,
+            pairs: 5,
+            root_off_pool: 5,
+        },
+        Shortlist {
+            singles: 5,
+            pairs: 0,
+            root_off_pool: 5,
+        },
+        Shortlist {
+            singles: 5,
+            pairs: 5,
+            root_off_pool: 0,
+        },
+    ] {
+        let params = SearchParams {
+            shortlist: Some(sl),
+            ..unbudgeted(true, true)
+        };
+        let position = fx.position();
+        let err = search(
+            &input(&fx, &position, fx.mode),
+            &params,
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .err();
+        assert!(
+            matches!(err, Some(EngineError::InvalidInput { ref path }) if path[0].starts_with("shortlist:")),
+            "{sl:?}: {err:?}"
+        );
+    }
+}
+
+/// Review focus (B-proper plan): a node budget cut inside a SHORTLISTED iteration returns the previous
+/// depth as `partial`, exact at its own horizon under the same widths.
+#[test]
+fn a_budget_cut_inside_a_shortlisted_iteration_returns_the_previous_depth_as_partial() {
+    let fx = fixture("07b-slot6-full-fan");
+    let position = fx.position();
+    let d_max = max_depth_for(&input(&fx, &position, fx.mode));
+    let sl = Shortlist {
+        singles: 3,
+        pairs: 5,
+        root_off_pool: 5,
+    };
+    let with = |node_budget: Option<u64>| SearchParams {
+        shortlist: Some(sl),
+        node_budget,
+        ..unbudgeted(true, true)
+    };
+    let control = candidate(&fx, fx.mode, &with(None));
+    assert!(!control.partial && control.depth == d_max);
+    let cut = candidate(&fx, fx.mode, &with(Some(control.nodes_total - 1)));
+    assert!(cut.partial);
+    assert_eq!(cut.depth, d_max - 1);
+    let shallower = candidate(&fx, Mode::Horizon(d_max - 1), &with(None));
+    assert_eq!(pairs(&cut), pairs(&shallower));
+    assert_eq!(cut.root_fan, control.root_fan);
+}
+
+/// Review focus (B-proper plan): a mid-pair root (fixture 01: Blue's completing pick at slot 18) is a
+/// single-pick root under the shortlist — every in-pool action is ranked plus the best off-pool one
+/// (Red's S3 is the only off-pool champion), and `root_fan` is the whole available set.
+#[test]
+fn a_mid_pair_root_under_a_shortlist_keeps_every_in_pool_action() {
+    let fx = fixture("01-pair-completion");
+    let position = fx.position();
+    assert!(position.is_mid_pair());
+    let input = OracleInput {
+        position: &position,
+        universe: &fx.universe,
+        pools: &fx.pools,
+        objective: &fx.universe,
+        feasibility: FeasibilityRule::Roster,
+        mode: fx.mode,
+        epsilon: fx.epsilon,
+        off_pool_cost: Some(fx.universe.loss()),
+    };
+    let narrow = SearchParams {
+        shortlist: Some(Shortlist {
+            singles: 1,
+            pairs: 1,
+            root_off_pool: 1,
+        }),
+        ..unbudgeted(true, true)
+    };
+    let out =
+        search(&input, &narrow, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"));
+    let in_pool = out
+        .ranked
+        .iter()
+        .filter(|r| r.action.champions().all(|c| fx.pools.blue.contains(c)))
+        .count();
+    assert_eq!((out.root_fan, out.ranked.len(), in_pool), (4, 4, 3));
+    let exact = search(
+        &input,
+        &unbudgeted(true, true),
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(out.ranked[0].action, exact.ranked[0].action);
 }
 
 fn budgeted(node_budget: u64) -> SearchParams {

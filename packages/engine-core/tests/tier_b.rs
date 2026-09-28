@@ -288,7 +288,15 @@ fn load_dir_walks_the_samples_in_name_order() {
     let loaded =
         TierBFixture::load_dir(&dir("tests/data/tier-b"), &live).unwrap_or_else(|e| panic!("{e}"));
     let ids: Vec<&str> = loaded.iter().map(|l| l.fixture.id.as_str()).collect();
-    assert_eq!(ids, ["sample-fce65eb1-slot-11", "sample-skip-at-slot-1"]);
+    assert_eq!(
+        ids,
+        [
+            "2026-09-27-smoke-1-blue-first-pick",
+            "2026-09-27-smoke-2-red-pair-no-adc",
+            "sample-fce65eb1-slot-11",
+            "sample-skip-at-slot-1"
+        ]
+    );
 }
 
 /// D7: a report read by a human, never a gate. Prints the ranked top three, how each continuation

@@ -18,8 +18,12 @@ use engine_core::reference::live::{
 use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::objective::{Leaf, Objective};
 use engine_core::reference::oracle::{Mode, OracleInput};
-use engine_core::reference::search::{search, SearchOutcome, SearchParams};
-use engine_core::reference::state::{Entry, Pools, Position};
+use engine_core::reference::search::{
+    search, static_order, truncate_children, Filter, SearchOutcome, SearchParams, Shortlist,
+};
+use engine_core::reference::state::{Action, Entry, Pools, Position};
+use engine_core::reference::tier_b::TierBFixture;
+use engine_core::reference::universe::DEFAULT_OFF_POOL_COST;
 use engine_core::reference::universe::{
     Champion, ChampionIdx, ChampionSet, Universe, UniverseError, MAX_CHAMPIONS,
 };
@@ -596,6 +600,7 @@ fn params(node_budget: Option<u64>) -> SearchParams {
         transposition: true,
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
+        shortlist: None,
     }
 }
 
@@ -1632,6 +1637,622 @@ fn roster_at_p_equal_l_reproduces_the_gate_on_every_in_pool_line() {
             "{label}: every gate line is present"
         );
     }
+}
+
+fn with_shortlist(sl: Shortlist) -> SearchParams {
+    SearchParams {
+        shortlist: Some(sl),
+        ..params(None)
+    }
+}
+
+fn smoke(live: &LiveUniverse, name: &str) -> TierBFixture {
+    TierBFixture::load_file(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/tier-b")
+            .join(format!("{name}.json")),
+        live,
+    )
+    .unwrap_or_else(|e| panic!("{name}: {e}"))
+    .fixture
+}
+
+/// B-proper § 7 test 3: the shortlist is a pure function of the position, so table hits stay sound.
+/// A Red-ban root at horizon 3 (Red ban, Blue ban, Red pick) on a twelve-champion universe with two
+/// roster champions worth having (X1, X2) under `roster`: the two bans commute, so every Red-pick node
+/// is reached twice and the second visit is a table hit; with the singles width at 2 the pick fan is
+/// truncated, and table on and table off must still agree bit for bit. At a width above the fan the
+/// search is the oracle's (eight available, three turns: inside the oracle's bound).
+#[test]
+fn the_shortlist_is_a_pure_function_of_the_position() {
+    use engine_core::reference::oracle::evaluate;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("X1", Role::Adc, -0.5),
+        ("X2", Role::Support, 0.4),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    // Slots 0–13: six bans, B pick, R pair, B pair, R pick, R ban, B ban — Red's ban at 14 next.
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (
+            position.mover(),
+            position.slot_index(),
+            position.available(&u).len()
+        ),
+        (Some(Side::Red), 14, 8)
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::Roster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: Some(0.1),
+    };
+    let run_at = |sl: Shortlist, transposition: bool| -> SearchOutcome {
+        let p = SearchParams {
+            transposition,
+            ..with_shortlist(sl)
+        };
+        search(&input, &p, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let narrow = Shortlist {
+        singles: 2,
+        pairs: 2,
+        root_off_pool: 2,
+    };
+    let with_table = run_at(narrow, true);
+    let without = run_at(narrow, false);
+    assert!(
+        with_table.table_hits_total > 0,
+        "the bans must commute into a hit"
+    );
+    assert_eq!(bits(&with_table), bits(&without));
+    let lines = |o: &SearchOutcome| {
+        o.ranked
+            .iter()
+            .map(|r| r.continuation.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(lines(&with_table), lines(&without));
+    assert_eq!(with_table.root_fan, 8, "a ban root is never truncated");
+    assert_eq!(with_table.ranked.len(), 8);
+    // Width above the fan: the exact search, oracle-checked.
+    let wide = run_at(
+        Shortlist {
+            singles: 6,
+            pairs: 6,
+            root_off_pool: 6,
+        },
+        true,
+    );
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&wide), oracle_ranked);
+    assert_ne!(
+        bits(&wide),
+        bits(&with_table),
+        "the narrow width must actually cut something here"
+    );
+}
+
+/// B-proper § 7 test 7: the lazy filter keeps the feasible children first and fills from the best
+/// failures. Red's pair at slot 7 on a roster of four ADC-only champions worth 5 to Red, a support, a
+/// mid and four junk tops: by the board the six double-ADC pairs come first and break Red's comp
+/// (two sole-ADCs), so at width 4 none of them survives; at width 40 the thirty-three feasible pairs
+/// pass and the first seven failures fill — the six double-ADC pairs and the canonical-first pair
+/// of two tops. Under the gate rule the truncation is the plain top-k, double-ADC pairs included.
+#[test]
+fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("A1", Role::Adc, 5.0),
+        ("A2", Role::Adc, 5.0),
+        ("A3", Role::Adc, 5.0),
+        ("A4", Role::Adc, 5.0),
+        ("S1", Role::Support, 0.0),
+        ("X1", Role::Middle, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
+        .iter()
+        .map(|id| Entry::Ban(idx(id)))
+        .chain(std::iter::once(Entry::Pick(idx("BT"))))
+        .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Red), 7)
+    );
+    let mut memo = FeasibilityMemo::default();
+    let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
+    assert_eq!(actions.len(), 45);
+    let ordered = static_order(&u, &position, Side::Red, actions, None);
+    let adc = |c: ChampionIdx| u.champion_meta()[u.id(c)].positions == [Role::Adc];
+    let top = |c: ChampionIdx| u.champion_meta()[u.id(c)].positions == [Role::Top];
+    let breaks = |a: &Action| {
+        let cs: Vec<ChampionIdx> = a.champions().collect();
+        (adc(cs[0]) && adc(cs[1])) || (top(cs[0]) && top(cs[1]))
+    };
+    assert!(
+        ordered[..6].iter().all(|a| a.champions().all(adc)),
+        "the double-ADC pairs lead by the board"
+    );
+    let feasible: Vec<Action> = ordered.iter().copied().filter(|a| !breaks(a)).collect();
+    assert_eq!(feasible.len(), 33);
+
+    let four = truncate_children(
+        &position,
+        Side::Red,
+        ordered.clone(),
+        4,
+        &mut Filter {
+            rule: FeasibilityRule::Roster,
+            memo: &mut memo,
+            universe: &u,
+        },
+    );
+    assert_eq!(
+        four,
+        feasible[..4].to_vec(),
+        "the first four feasible children, in order"
+    );
+
+    let forty = truncate_children(
+        &position,
+        Side::Red,
+        ordered.clone(),
+        40,
+        &mut Filter {
+            rule: FeasibilityRule::Roster,
+            memo: &mut memo,
+            universe: &u,
+        },
+    );
+    assert_eq!(forty.len(), 40);
+    assert!(
+        feasible.iter().all(|a| forty.contains(a)),
+        "every feasible child passes"
+    );
+    let filled: Vec<Action> = forty.iter().copied().filter(breaks).collect();
+    assert_eq!(filled.len(), 7);
+    assert!(filled[..6].iter().all(|a| a.champions().all(adc)));
+    assert_eq!(
+        filled[6],
+        Action::pair(idx("K7"), idx("K8")),
+        "the canonical-first failure after the six"
+    );
+    let order_kept: Vec<Action> = ordered
+        .iter()
+        .copied()
+        .filter(|a| forty.contains(a))
+        .collect();
+    assert_eq!(forty, order_kept, "the ordering is preserved");
+
+    let gate = truncate_children(
+        &position,
+        Side::Red,
+        ordered.clone(),
+        4,
+        &mut Filter {
+            rule: FeasibilityRule::On,
+            memo: &mut memo,
+            universe: &u,
+        },
+    );
+    assert_eq!(gate, ordered[..4].to_vec(), "the gate rules truncate blind");
+    assert_eq!(
+        truncate_children(
+            &position,
+            Side::Red,
+            ordered.clone(),
+            45,
+            &mut Filter {
+                rule: FeasibilityRule::Roster,
+                memo: &mut memo,
+                universe: &u
+            }
+        ),
+        ordered,
+        "a width at the fan returns the list as is"
+    );
+}
+
+/// B-proper § 7 (the ordering key): under `roster` an off-pool champion is ordered net of its P.
+/// Blue's first pick with a one-champion pool {BA} and a roster ADC X worth 0.2: at P = 0.15 X leads
+/// (0.05 net), at P = 0.3 BA leads (X is −0.1 net); without the term X leads by the board.
+#[test]
+fn the_ordering_key_charges_off_pool_champions_under_roster() {
+    let u = band_universe(&[("BA", Role::Adc, 0.0), ("X", Role::Adc, 0.2)]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let pool: ChampionSet = [idx("BA")].into_iter().collect();
+    let pools = Pools {
+        blue: pool,
+        red: u.all(),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
+        .iter()
+        .map(|id| Entry::Ban(idx(id)))
+        .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let mut memo = FeasibilityMemo::default();
+    let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
+    assert_eq!(actions.len(), 6, "BA X K7 K8 K9 K10");
+    let first_two = |off_pool: Option<(ChampionSet, f64)>| -> Vec<Action> {
+        static_order(&u, &position, Side::Blue, actions.clone(), off_pool)[..2].to_vec()
+    };
+    assert_eq!(
+        first_two(None),
+        [Action::Pick(idx("X")), Action::Pick(idx("BA"))]
+    );
+    assert_eq!(
+        first_two(Some((pool, 0.15))),
+        [Action::Pick(idx("X")), Action::Pick(idx("BA"))]
+    );
+    assert_eq!(
+        first_two(Some((pool, 0.3))),
+        [Action::Pick(idx("BA")), Action::Pick(idx("X"))]
+    );
+}
+
+/// Review round 1 (Opus judgement, Important 1): under `pool_or_roster` a shortlist must order by the
+/// off-pool term too, or a widened node's truncation keeps the board-best child and drops the
+/// count-minimal one — values off by whole multiples of L. Blue's pool has no ADC (BT BJ BM locked,
+/// BS left), the roster holds a support SX worth 0.5 and two ADCs; at Blue's pair the board-best
+/// pair is SX + A1 (0.5, two off-pool picks, −2L) while the count-minimal BS + A1 is 0 with one
+/// (−L). A second spare support SY keeps every line's comps alive (review round 2: without it the
+/// SX ban's exact line was a both-broken S11 tie). Blue's ban at slot 15, horizon 3, widths
+/// (1, 1, 1), oracle-checked. Engine-printed facts (two hand derivations were wrong before the lines
+/// were read): banning Red's ADC or support is a denial worth +L (Red is forced off-pool), so RA / RS
+/// sit at 0 and every other ban at −L; with the made term in the key, width 1 reproduces the exact
+/// value on every ban but one. **The residual:**
+/// after the self-ban BS the exact best line is a SNIPE — Blue takes Red's only support RS (two
+/// off-pool picks, −2L) and Red's forced count pays one back (+L), −L in all — which the key cannot
+/// see: it carries the mover's made count, not the opponent's forced term (a matching per candidate,
+/// unaffordable at 13 695-wide fans), so width 1 keeps SX + A1 at 0.5 − 2L instead. Under
+/// `pool_or_roster` that error is L-sized; under `roster` it is P-sized. Recorded in the design
+/// (§ 2, § 9): the lexicographic arm of the report runs at width B or wider for this reason.
+#[test]
+fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
+    use engine_core::reference::oracle::evaluate;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("SX", Role::Support, 0.5),
+        ("SY", Role::Support, 0.0),
+        ("A1", Role::Adc, 0.0),
+        ("A2", Role::Adc, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(u.loss(), 2.0);
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (
+            position.mover(),
+            position.slot_index(),
+            position.available(&u).len()
+        ),
+        (Some(Side::Blue), 15, 8)
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: None,
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&exact), oracle_ranked);
+    let show = |tag: &str, o: &SearchOutcome| {
+        for r in &o.ranked {
+            println!(
+                "ordering-term probe {tag}: ban {:>3} {:+.2}  line {:?}",
+                r.action
+                    .champions()
+                    .map(|c| u.id(c))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                r.value,
+                r.continuation
+                    .iter()
+                    .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                    .collect::<Vec<_>>()
+            );
+        }
+    };
+    show("exact", &exact);
+    let value_in = |o: &SearchOutcome, id: &str| -> f64 {
+        o.ranked
+            .iter()
+            .find(|r| r.action == Action::Ban(idx(id)))
+            .map(|r| r.value)
+            .unwrap_or_else(|| panic!("{id} not ranked"))
+    };
+    for id in ["RA", "RS"] {
+        assert_eq!(
+            value_in(&exact, id),
+            0.0,
+            "{id}: denial, +L against Blue's −L"
+        );
+    }
+    for id in ["BS", "SX", "SY", "A1", "A2", "K10"] {
+        assert_eq!(
+            value_in(&exact, id),
+            -u.loss(),
+            "{id}: Blue fetches one ADC off-pool"
+        );
+    }
+    assert!(
+        exact
+            .ranked
+            .iter()
+            .all(|r| r.ends.blue_feasible && r.ends.red_feasible),
+        "every exact line keeps both comps alive (the spare supports keep S11 out)"
+    );
+    let narrow = search(
+        &input,
+        &with_shortlist(Shortlist {
+            singles: 1,
+            pairs: 1,
+            root_off_pool: 1,
+        }),
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    show("width 1", &narrow);
+    for id in ["RA", "RS", "SX", "SY", "A1", "A2", "K10"] {
+        assert_eq!(
+            value_in(&narrow, id).to_bits(),
+            value_in(&exact, id).to_bits(),
+            "{id}: the made term keeps the count-minimal child at width 1"
+        );
+    }
+    // The residual (doc above): the snipe line RS + A1 is dropped, SX + A1 kept — 0.5 − 2L.
+    assert_eq!(value_in(&narrow, "BS"), 0.5 - 2.0 * u.loss());
+    assert_ne!(value_in(&narrow, "BS"), value_in(&exact, "BS"));
+    assert_eq!(
+        narrow.ranked[0].action, exact.ranked[0].action,
+        "the top action survives"
+    );
+}
+
+/// B-proper § 7 test 8 (B6): a pick root ranks every in-pool action plus exactly `root_off_pool`
+/// off-pool ones, and `root_fan` counts what was legal. Smoke-1 (Blue's first pick, a 20-champion pool
+/// with three of them banned): 17 in-pool singles + 50 off-pool of 167 available. Smoke-2 (Red's pair
+/// with three of its eleven banned): the 28 in-pool pairs + 60 off-pool of 13 695. A width above the
+/// fan is the untruncated search bit for bit.
+#[test]
+fn a_pick_root_ranks_every_in_pool_action_plus_the_best_off_pool() {
+    let live = live_universe();
+    let u = &live.universe;
+    let one = smoke(&live, "2026-09-27-smoke-1-blue-first-pick");
+    let sl = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let out = run_with(
+        &one.root,
+        u,
+        Mode::Horizon(1),
+        &with_shortlist(sl),
+        FeasibilityRule::Roster,
+        Some(DEFAULT_OFF_POOL_COST),
+    );
+    let pool = one.root.pools.blue;
+    let in_pool = out
+        .ranked
+        .iter()
+        .filter(|r| r.action.champions().all(|c| pool.contains(c)))
+        .count();
+    assert_eq!(
+        (out.root_fan, out.ranked.len(), in_pool),
+        (167, 17 + 50, 17)
+    );
+    let position = one.root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let available = position.available(u);
+    assert_eq!(
+        pool.intersect(available).len(),
+        17,
+        "every in-pool single is ranked"
+    );
+    let wide = run_with(
+        &one.root,
+        u,
+        Mode::Horizon(1),
+        &with_shortlist(Shortlist {
+            root_off_pool: 1000,
+            ..sl
+        }),
+        FeasibilityRule::Roster,
+        Some(DEFAULT_OFF_POOL_COST),
+    );
+    let exact = run_with(
+        &one.root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::Roster,
+        Some(DEFAULT_OFF_POOL_COST),
+    );
+    assert_eq!((wide.root_fan, wide.ranked.len()), (167, 167));
+    assert_eq!(bits(&wide), bits(&exact));
+
+    let two = smoke(&live, "2026-09-27-smoke-2-red-pair-no-adc");
+    let out = run_with(
+        &two.root,
+        u,
+        Mode::Horizon(1),
+        &with_shortlist(Shortlist {
+            root_off_pool: 60,
+            ..sl
+        }),
+        FeasibilityRule::Roster,
+        Some(DEFAULT_OFF_POOL_COST),
+    );
+    let pool = two.root.pools.red;
+    let in_pool = out
+        .ranked
+        .iter()
+        .filter(|r| r.action.champions().all(|c| pool.contains(c)))
+        .count();
+    assert_eq!(
+        (out.root_fan, out.ranked.len(), in_pool),
+        (13_695, 28 + 60, 28)
+    );
+}
+
+/// B-proper § 7 test 12: smoke-2 under `roster` at the default P — Red's pool has no ADC left, so
+/// every line that keeps Red's comp alive carries at least one Red off-pool pick (made now, or forced
+/// at the last pick) and Blue none; a pair that breaks Red's own comp (two tops) sits in the L' band
+/// with nothing to charge. The top action is a feasible line that reaches for the roster.
+#[test]
+fn an_exhausted_pool_goes_off_pool_under_roster() {
+    let live = live_universe();
+    let u = &live.universe;
+    let two = smoke(&live, "2026-09-27-smoke-2-red-pair-no-adc");
+    let out = run_with(
+        &two.root,
+        u,
+        Mode::Horizon(1),
+        &with_shortlist(Shortlist {
+            singles: 30,
+            pairs: 60,
+            root_off_pool: 60,
+        }),
+        FeasibilityRule::Roster,
+        Some(DEFAULT_OFF_POOL_COST),
+    );
+    assert_eq!(out.mover, Side::Red);
+    for r in &out.ranked {
+        assert!(
+            r.ends.red_off_pool >= 1 || !r.ends.red_feasible,
+            "{:?}: {:?}",
+            r.action,
+            r.ends
+        );
+        assert_eq!(r.ends.blue_off_pool, 0, "{:?}", r.action);
+    }
+    let top = &out.ranked[0];
+    assert!(
+        top.ends.red_feasible && top.ends.red_off_pool >= 1,
+        "{:?}",
+        top.ends
+    );
+    let names: Vec<&str> = top.action.champions().map(|c| u.id(c)).collect();
+    println!(
+        "smoke-2 under roster at P = {DEFAULT_OFF_POOL_COST}: top {:?} value {:.4} ends {:?}",
+        names, top.value, top.ends
+    );
+    assert!(
+        top.action
+            .champions()
+            .any(|c| !two.root.pools.red.contains(c)),
+        "the top action reaches for the roster"
+    );
 }
 
 /// A universe for the band tests: bans `K1..K10` (junk tops), the named champions with the linear

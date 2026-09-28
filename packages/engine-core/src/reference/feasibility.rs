@@ -3,7 +3,7 @@
 //! any other total); `FeasibilityRule::Off` is how a fixture on a shorter format says so.
 
 use super::state::{Pools, Position};
-use super::universe::{ChampionSet, Universe};
+use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::Side;
 use crate::feasibility::{can_complete_roles, max_role_matching};
 use serde::Deserialize;
@@ -169,6 +169,25 @@ fn role_rank(
     rank
 }
 
+/// Can `locked` be matched to distinct roles at all? The predicate's own first test, and the whole
+/// answer when it fails; memoised on the locked set alone (`FeasibilityMemo.locked`). Public for the
+/// shortlist's lazy filter (B-proper § 2, `search::truncate_children`), which asks it of a child's
+/// locked picks — at most five names, no candidate set.
+pub fn locked_matchable(
+    memo: &mut FeasibilityMemo,
+    side: Side,
+    locked: &[ChampionIdx],
+    universe: &Universe,
+) -> bool {
+    let locked_set: ChampionSet = locked.iter().copied().collect();
+    if let Some(&ok) = memo.locked.get(&(side, locked_set)) {
+        return ok;
+    }
+    let ok = max_role_matching(&universe.names(locked), universe.champion_meta()) == locked.len();
+    memo.locked.insert((side, locked_set), ok);
+    ok
+}
+
 /// The predicate on an explicit candidate set, memoised on `(side, locked set, candidate set)`.
 fn can_complete_from(
     memo: &mut FeasibilityMemo,
@@ -194,20 +213,9 @@ fn can_complete_from(
     // infeasible whatever the candidates (the predicate's own first test, `can_complete_roles`), so
     // the answer is memoised on the locked set alone and the candidates are never named. Exactly the
     // predicate's result; only its cost changes.
-    if locked.len() + remaining == 5 {
-        let locked_ok = match memo.locked.get(&(side, locked_set)) {
-            Some(&ok) => ok,
-            None => {
-                let ok = max_role_matching(&universe.names(locked), universe.champion_meta())
-                    == locked.len();
-                memo.locked.insert((side, locked_set), ok);
-                ok
-            }
-        };
-        if !locked_ok {
-            memo.memo.insert(key, false);
-            return false;
-        }
+    if locked.len() + remaining == 5 && !locked_matchable(memo, side, locked, universe) {
+        memo.memo.insert(key, false);
+        return false;
     }
     let feasible = can_complete_roles(
         &universe.names(locked),

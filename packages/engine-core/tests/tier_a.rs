@@ -66,6 +66,7 @@ fn params(prune: bool, transposition: bool, node_budget: Option<u64>) -> SearchP
         transposition,
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
+        shortlist: None,
     }
 }
 
