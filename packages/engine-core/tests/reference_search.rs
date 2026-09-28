@@ -309,6 +309,58 @@ fn an_off_pool_cost_under_a_rule_that_does_not_read_it_is_refused() {
     }
 }
 
+/// B-proper design § 1: under `roster` P is required, finite and in `[0, L]`; the search and the oracle
+/// refuse anything else with the reason named.
+#[test]
+fn off_pool_cost_under_roster_is_required_finite_and_at_most_l() {
+    let fx = fixture("01-pair-completion");
+    let position = fx.position();
+    let l = fx.universe.loss();
+    let input = |p: Option<f64>| OracleInput {
+        position: &position,
+        universe: &fx.universe,
+        pools: &fx.pools,
+        objective: &fx.universe,
+        feasibility: FeasibilityRule::Roster,
+        mode: fx.mode,
+        epsilon: fx.epsilon,
+        off_pool_cost: p,
+    };
+    for (p, word) in [
+        (None, "required"),
+        (Some(-0.1), "negative"),
+        (Some(f64::NAN), "not finite"),
+        (Some(f64::INFINITY), "not finite"),
+        (Some(l + 1.0), "exceeds L"),
+    ] {
+        let err = search(
+            &input(p),
+            &unbudgeted(true, true),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .err();
+        assert!(
+            matches!(err, Some(EngineError::InvalidInput { ref path }) if path[0].starts_with("off_pool_cost:") && path[0].contains(word)),
+            "{p:?}: {err:?}"
+        );
+        assert!(
+            matches!(evaluate(&input(p)), Err(OracleError::OffPoolCost { ref reason }) if reason.contains(word)),
+            "{p:?}: the oracle must refuse it too"
+        );
+    }
+    // The bounds are inclusive: 0 (the pool prices nothing) and L (pool_or_roster's own P) both run.
+    for p in [0.0, l] {
+        search(
+            &input(Some(p)),
+            &unbudgeted(true, true),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("P = {p}: {e}"));
+    }
+}
+
 fn budgeted(node_budget: u64) -> SearchParams {
     SearchParams {
         node_budget: Some(node_budget),

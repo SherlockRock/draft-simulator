@@ -23,6 +23,23 @@ pub enum FeasibilityRule {
     /// charged at the leaf from `off_pool_count`). Infeasible only when the roster cannot complete it either, priced with
     /// the wider band L' (`Universe::live_loss`) so that no comp is worth breaking to save P.
     PoolOrRoster,
+    /// B-proper (design `engine-b-proper-design.md` § 1, D4 amended a second time): the pool PRICES
+    /// and never gates. Every pick node fans to everything available; each off-pool pick — made, or
+    /// forced still to come — costs the search's P (`OracleInput::off_pool_cost`, board-scale, so a
+    /// strong roster champion can be worth its cost); a side is infeasible only when the roster
+    /// cannot complete it, priced at L'. The rule the calibration report sweeps P under.
+    Roster,
+}
+
+impl FeasibilityRule {
+    /// The two live rules — the ones with an off-pool term, an L' band and a ranked (never refused)
+    /// root; `On` and `Off` are Tier A's gate.
+    pub fn is_live(self) -> bool {
+        matches!(
+            self,
+            FeasibilityRule::PoolOrRoster | FeasibilityRule::Roster
+        )
+    }
 }
 
 /// Memo keyed on `(side, locked set, candidate set)` — the candidates are the pool net of the board,
@@ -46,7 +63,8 @@ pub struct FeasibilityMemo {
 }
 
 /// Can `side` still complete five roles? locked = its picks; `On`: from its pool net of everything
-/// on the board; `PoolOrRoster`: from that pool, or failing that from everything available (U10).
+/// on the board; `PoolOrRoster`: from that pool, or failing that from everything available (U10);
+/// `Roster`: from everything available (the pool never gates).
 pub fn side_feasible(
     memo: &mut FeasibilityMemo,
     rule: FeasibilityRule,
@@ -61,6 +79,9 @@ pub fn side_feasible(
         FeasibilityRule::PoolOrRoster => {
             pool_can_complete(memo, side, position, pools, universe)
                 || can_complete_from(memo, side, position, position.available(universe), universe)
+        }
+        FeasibilityRule::Roster => {
+            can_complete_from(memo, side, position, position.available(universe), universe)
         }
     }
 }
@@ -89,7 +110,8 @@ pub fn pool_can_complete(
 /// remove pool champions; exact once the side's picks are complete. Charged at the leaf so a short
 /// horizon cannot hide the cost of a pool that can no longer finish. Zero under `On` / `Off`; the
 /// forced part is zero wherever the pool suffices (picks already made off-pool stay charged), so the
-/// live rule and the gate give identical values until a pool actually runs out.
+/// live rule and the gate give identical values until a pool actually runs out. Under `Roster` the
+/// same count: the pool prices instead of gating, so `made` also holds picks the search CHOSE off-pool.
 pub fn off_pool_count(
     memo: &mut FeasibilityMemo,
     rule: FeasibilityRule,
@@ -98,7 +120,7 @@ pub fn off_pool_count(
     pools: &Pools,
     universe: &Universe,
 ) -> usize {
-    if rule != FeasibilityRule::PoolOrRoster {
+    if !rule.is_live() {
         return 0;
     }
     let pool = pools.for_side(side);

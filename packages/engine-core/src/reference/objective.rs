@@ -148,7 +148,7 @@ impl Objective for Universe {
                 );
                 self.value(leaf)
             }
-            FeasibilityRule::PoolOrRoster => {
+            FeasibilityRule::PoolOrRoster | FeasibilityRule::Roster => {
                 self.live_leaf_value(leaf, off_pool_cost, blue_off, red_off)
             }
         }

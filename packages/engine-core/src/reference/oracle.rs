@@ -101,17 +101,33 @@ pub struct OracleInput<'a> {
 }
 
 /// The P this search prices off-pool picks at, from the rule and `OracleInput::off_pool_cost`
-/// (B-proper design § 1): `PoolOrRoster` → `Universe::off_pool_cost()` (= L, lexicographic);
-/// `On` / `Off` → 0 (the counts are 0); a value under any of these is refused.
+/// (B-proper design § 1): `Roster` → the input's value, required, finite, in `[0, L]` (L' = L + 10·L
+/// separates the bands for every P up to L, and above L the cost would exceed Tier A's own
+/// infeasibility band); `PoolOrRoster` → `Universe::off_pool_cost()` (= L, lexicographic); `On` /
+/// `Off` → 0 (the counts are 0); a value under any of these three is refused.
 pub fn resolve_off_pool_cost(input: &OracleInput<'_>) -> Result<f64, OracleError> {
+    let refuse = |reason: String| OracleError::OffPoolCost { reason };
     match (input.feasibility, input.off_pool_cost) {
+        (FeasibilityRule::Roster, Some(p)) => {
+            let l = input.universe.loss();
+            if !p.is_finite() {
+                Err(refuse(format!("{p} is not finite")))
+            } else if p < 0.0 {
+                Err(refuse(format!("{p} is negative")))
+            } else if p > l {
+                Err(refuse(format!("{p} exceeds L = {l}")))
+            } else {
+                Ok(p)
+            }
+        }
+        (FeasibilityRule::Roster, None) => Err(refuse(
+            "required under roster (DEFAULT_OFF_POOL_COST is the B5 assumption)".to_string(),
+        )),
         (FeasibilityRule::PoolOrRoster, None) => Ok(input.universe.off_pool_cost()),
         (FeasibilityRule::On | FeasibilityRule::Off, None) => Ok(0.0),
-        (rule, Some(_)) => Err(OracleError::OffPoolCost {
-            reason: format!(
-                "not read under {rule:?}: pool_or_roster prices at P = L itself and the gate rules have no off-pool picks"
-            ),
-        }),
+        (rule, Some(_)) => Err(refuse(format!(
+            "not read under {rule:?}: pool_or_roster prices at P = L itself and the gate rules have no off-pool picks"
+        ))),
     }
 }
 
@@ -221,13 +237,14 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
     };
     // A root where a side is already infeasible has nothing to rank under the gate (R1 keeps this as an
     // error). Checked before action generation: a starved root is "infeasible", not "no legal action".
-    // Under the live rule (U10) a broken locked side is a fact on the board and the root is ranked, that
-    // side priced at L' on every leaf (search.rs says why).
+    // Under a live rule (U10, B-proper) a broken locked side is a fact on the board and the root is
+    // ranked, that side priced at L' on every leaf (search.rs says why).
     let (blue_feasible, red_feasible) = (
         search.feasible(Side::Blue, position),
         search.feasible(Side::Red, position),
     );
-    if input.feasibility != FeasibilityRule::PoolOrRoster && !(blue_feasible && red_feasible) {
+    let gated = !input.feasibility.is_live();
+    if gated && !(blue_feasible && red_feasible) {
         return Err(OracleError::RootInfeasible {
             blue_feasible,
             red_feasible,

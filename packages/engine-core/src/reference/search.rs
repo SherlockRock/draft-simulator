@@ -6,7 +6,7 @@
 //! `iterative_deepening::deepen_with_hook` and `cancellation::CancelHandle`, unchanged — the target note's
 //! § 2 contract, met by reuse.
 
-use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::feasibility::{side_feasible, FeasibilityMemo};
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::Leaf;
 use super::oracle::{resolve_off_pool_cost, Mode, OracleError, OracleInput};
@@ -434,11 +434,13 @@ pub fn search(
         feasible(&mut shared.memo, Side::Blue),
         feasible(&mut shared.memo, Side::Red),
     );
-    // The gate refuses a root a side cannot finish from (slice 4, R3). Under the live rule (U10)
-    // only locked picks that cannot fill five roles are infeasible — a fact on the board, often the
-    // OPPONENT's (a pair of two ADC-only champions), and the draft goes on: that side is priced at L'
-    // on every leaf, a constant, so the ranking is the board's and the off-pool term's (round 5).
-    if input.feasibility != FeasibilityRule::PoolOrRoster && !(blue_feasible && red_feasible) {
+    // The gate refuses a root a side cannot finish from (slice 4, R3). Under a live rule (U10,
+    // B-proper) only locked picks that cannot fill five roles are infeasible — a fact on the board,
+    // often the OPPONENT's (a pair of two ADC-only champions), and the draft goes on: that side is
+    // priced at L' on every leaf, a constant, so the ranking is the board's and the off-pool term's
+    // (round 5).
+    let gated = !input.feasibility.is_live();
+    if gated && !(blue_feasible && red_feasible) {
         return Err(invalid(OracleError::RootInfeasible {
             blue_feasible,
             red_feasible,

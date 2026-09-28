@@ -165,12 +165,16 @@ impl Fixture {
             FormatSpec::Explicit { turns } => Format::explicit(turns),
         };
 
-        // Tier A declares the gate or nothing. The live rule (slice-5 U10) is the wire's and Tier B's:
-        // its band is L', which the Tier A harness's L/2 band check does not read (review round 5).
-        if file.feasibility == FeasibilityRule::PoolOrRoster {
+        // Tier A declares the gate or nothing. The live rules (slice-5 U10, B-proper) are the wire's and
+        // Tier B's: their band is L', which the Tier A harness's L/2 band check does not read (review
+        // round 5), and `roster` needs a P the fixture format does not carry.
+        if file.feasibility.is_live() {
             return Err(invalid(
                 "feasibility",
-                "Tier A declares \"on\" or \"off\"; \"pool_or_roster\" is the live rule (Tier B files and the wire), whose band the Tier A harness does not check".into(),
+                format!(
+                    "Tier A declares \"on\" or \"off\"; {:?} is a live rule (Tier B files and the wire), whose band the Tier A harness does not check",
+                    file.feasibility
+                ),
             ));
         }
         let five_picks =

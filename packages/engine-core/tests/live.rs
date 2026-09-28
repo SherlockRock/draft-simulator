@@ -606,6 +606,18 @@ fn run(
     params: &SearchParams,
     feasibility: FeasibilityRule,
 ) -> SearchOutcome {
+    run_with(root, u, mode, params, feasibility, None)
+}
+
+/// `run` with an explicit P (`roster` requires one; every other rule refuses one).
+fn run_with(
+    root: &LiveRoot,
+    u: &Universe,
+    mode: Mode,
+    params: &SearchParams,
+    feasibility: FeasibilityRule,
+    off_pool_cost: Option<f64>,
+) -> SearchOutcome {
     let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
     search(
         &OracleInput {
@@ -616,7 +628,7 @@ fn run(
             feasibility,
             mode,
             epsilon: 1e-9,
-            off_pool_cost: None,
+            off_pool_cost,
         },
         params,
         &CancelHandle::new(),
@@ -1527,6 +1539,101 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
     );
 }
 
+/// B-proper § 7 test 4: under `roster` with P = L every in-pool line is priced exactly as under
+/// `pool_or_roster` (same board, same zero counts), the off-pool lines carry ±P on top and cannot
+/// win, so the top action is the gate's. Horizon 1 at the ban root (bans never widen: identical
+/// lists) and at the single-pick root (the fan is the roster: every available champion). A fact
+/// about THIS position (review round 1): it holds because no champion here is the opponent's sole
+/// pool champion for a role — taking such a champion is P-neutral under `roster` (the taker's made
+/// count and the victim's forced count cancel), which the gate forbids; see the snipe probe below.
+#[test]
+fn roster_at_p_equal_l_reproduces_the_gate_on_every_in_pool_line() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    for (events, label) in [(2usize, "slot 2 Blue ban"), (11, "slot 11 Red pick")] {
+        let root =
+            LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
+                .unwrap_or_else(|e| panic!("{e}"));
+        let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+        let gate = run(
+            &root,
+            u,
+            Mode::Horizon(1),
+            &params(None),
+            FeasibilityRule::PoolOrRoster,
+        );
+        let roster = run_with(
+            &root,
+            u,
+            Mode::Horizon(1),
+            &params(None),
+            FeasibilityRule::Roster,
+            Some(u.loss()),
+        );
+        let mover = position.mover().expect("a root");
+        let pool = root.pools.for_side(mover);
+        if position.next_slot().map(|s| s.action) == Some(engine_core::draft_state::ActionType::Ban)
+        {
+            // Bans are unrestricted under every rule: the same fan, bit-equal values.
+            assert_eq!(bits(&roster), bits(&gate), "{label}");
+            continue;
+        }
+        assert_eq!(
+            roster.ranked.len(),
+            position.available(u).len(),
+            "{label}: the fan is the roster"
+        );
+        assert_eq!(
+            roster.ranked[0].action, gate.ranked[0].action,
+            "{label}: top action"
+        );
+        assert_eq!(roster.top_set, gate.top_set, "{label}");
+        let mut in_pool = 0;
+        for r in &roster.ranked {
+            let g = gate.ranked.iter().find(|g| g.action == r.action);
+            if r.action.champions().all(|c| pool.contains(c)) {
+                let g = g.unwrap_or_else(|| {
+                    panic!(
+                        "{label}: {:?} is in-pool but not in the gate's list",
+                        r.action
+                    )
+                });
+                assert_eq!(
+                    g.value.to_bits(),
+                    r.value.to_bits(),
+                    "{label} {:?}",
+                    r.action
+                );
+                assert_eq!((r.ends.blue_off_pool, r.ends.red_off_pool), (0, 0));
+                in_pool += 1;
+            } else {
+                assert!(
+                    g.is_none(),
+                    "{label}: {:?} is off-pool yet the gate generated it",
+                    r.action
+                );
+                let made = r.action.champions().filter(|c| !pool.contains(*c)).count();
+                let (blue_off, red_off) = (r.ends.blue_off_pool, r.ends.red_off_pool);
+                assert_eq!(
+                    match mover {
+                        Side::Blue => blue_off,
+                        Side::Red => red_off,
+                    },
+                    made,
+                    "{label} {:?}: made off-pool picks are charged",
+                    r.action
+                );
+            }
+        }
+        assert_eq!(
+            in_pool,
+            gate.ranked.len(),
+            "{label}: every gate line is present"
+        );
+    }
+}
+
 /// A universe for the band tests: bans `K1..K10` (junk tops), the named champions with the linear
 /// term given, every pairwise table zero — so Σ is the sum of the linear terms and L, P, L' are
 /// small integers the assertions can name.
@@ -2270,6 +2377,364 @@ fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
     assert_eq!(value_of("RS"), 1.0);
 }
 
+/// B-proper § 7 tests 5–6, on the probe above under `roster`: the roster is always legal, so a self-ban
+/// can only remove an option and the road to SX is open to both sides. Printed, then asserted from
+/// the engine (oracle-checked at every P): the self-ban BS ranks at or below the harmless ban K10;
+/// denying Red's support ranks at or above it; the harmless ban's value is what the contest over SX
+/// leaves — Red takes SX off-pool (−1 to Blue, +P back) and Blue keeps its pool — so `ban SX` is the
+/// top action: the roster champion the opponent would fetch is the thing to deny.
+#[test]
+fn under_roster_a_self_ban_never_pays_and_denying_the_roster_champion_is_top() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("SX", Role::Support, 1.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(u.loss(), 3.0);
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Blue), 15)
+    );
+    for p in [0.3, 0.15] {
+        let input = OracleInput {
+            position: &position,
+            universe: &u,
+            pools: &pools,
+            objective: &u,
+            feasibility: FeasibilityRule::Roster,
+            mode: Mode::Horizon(3),
+            epsilon: 1e-9,
+            off_pool_cost: Some(p),
+        };
+        let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+        let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+            .unwrap_or_else(|e| panic!("{e}"));
+        let oracle_ranked: Vec<(Action, u64)> = oracle
+            .ranked
+            .iter()
+            .map(|r| (r.action, r.value.to_bits()))
+            .collect();
+        assert_eq!(bits(&engine), oracle_ranked, "P = {p}");
+        let value_of = |id: &str| -> f64 {
+            engine
+                .ranked
+                .iter()
+                .find(|r| r.action == Action::Ban(idx(id)))
+                .map(|r| r.value)
+                .unwrap_or_else(|| panic!("{id} not ranked"))
+        };
+        for r in &engine.ranked {
+            println!(
+                "roster probe P = {p}: ban {:>3} {:+.2}  line {:?}",
+                r.action
+                    .champions()
+                    .map(|c| u.id(c))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                r.value,
+                r.continuation
+                    .iter()
+                    .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                    .collect::<Vec<_>>()
+            );
+        }
+        assert!(
+            value_of("BS") <= value_of("K10"),
+            "P = {p}: a self-ban can only remove an option"
+        );
+        assert!(
+            value_of("RS") >= value_of("K10"),
+            "P = {p}: denial is never below a harmless ban"
+        );
+        assert!(
+            value_of("RS") - value_of("K10") <= p + 1.0,
+            "P = {p}: denial is worth at most P plus the roster replacement's board delta"
+        );
+        assert_eq!(engine.ranked[0].action, Action::Ban(idx("SX")), "P = {p}");
+        assert_eq!(
+            value_of("SX"),
+            0.0,
+            "P = {p}: with SX gone Red takes BA and Blue takes RA — one off-pool pick each, the costs cancel (review round 1: not 'everyone picks in pool')"
+        );
+        assert_eq!(value_of("K10"), -1.0 + p, "P = {p}: Red fetches SX");
+        assert_eq!(
+            value_of("BS"),
+            -1.0,
+            "P = {p}: Red fetches SX and Blue must fetch a support too"
+        );
+    }
+}
+
+/// Review round 1 (Opus judgement) — the general incentive under `roster`, oracle-checked: taking the
+/// opponent's ONLY pool champion for a role is P-neutral (the taker's made count and the victim's
+/// forced count cancel), so it costs the board alone. Blue's support BS is worth +1 and Blue's pool
+/// has no other support; spare SX and AX sit on the roster so no line breaks a comp (S11 stays
+/// dormant). Blue's ban at slot 15, horizon 3: on every line that leaves BS on the board Red snipes
+/// it (−1 for Blue, the P terms cancel), so the harmless ban is −1.0; the SELF-BAN of BS is the top
+/// action at −P (Blue fetches SX off-pool and keeps the +1 out of Red's hands). Under the lexicographic
+/// rule the snipe is illegal: the harmless ban is +1.0 and the self-ban −L. "A self-ban can only
+/// remove an option" is therefore false under `roster`; a champion in your pool is an option for the
+/// opponent too. Printed, then asserted from the engine.
+#[test]
+fn under_roster_a_snipe_of_a_sole_role_champion_is_p_neutral_and_a_self_ban_can_pay() {
+    use engine_core::reference::oracle::evaluate;
+    use engine_core::reference::state::Action;
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 1.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("SX", Role::Support, 0.0),
+        ("AX", Role::Adc, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    assert_eq!(u.loss(), 3.0);
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = [
+        ("K1", true),
+        ("K2", true),
+        ("K3", true),
+        ("K4", true),
+        ("K5", true),
+        ("K6", true),
+        ("BT", false),
+        ("RT", false),
+        ("RJ", false),
+        ("BJ", false),
+        ("BM", false),
+        ("RM", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+    ]
+    .iter()
+    .map(|(id, ban)| {
+        if *ban {
+            Entry::Ban(idx(id))
+        } else {
+            Entry::Pick(idx(id))
+        }
+    })
+    .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (
+            position.mover(),
+            position.slot_index(),
+            position.available(&u).len()
+        ),
+        (Some(Side::Blue), 15, 7)
+    );
+    let run_rule = |rule: FeasibilityRule, p: Option<f64>| -> SearchOutcome {
+        let input = OracleInput {
+            position: &position,
+            universe: &u,
+            pools: &pools,
+            objective: &u,
+            feasibility: rule,
+            mode: Mode::Horizon(3),
+            epsilon: 1e-9,
+            off_pool_cost: p,
+        };
+        let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+        let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
+            .unwrap_or_else(|e| panic!("{e}"));
+        let oracle_ranked: Vec<(Action, u64)> = oracle
+            .ranked
+            .iter()
+            .map(|r| (r.action, r.value.to_bits()))
+            .collect();
+        assert_eq!(bits(&engine), oracle_ranked, "{rule:?} P = {p:?}");
+        for r in &engine.ranked {
+            println!(
+                "snipe probe {rule:?} P = {p:?}: ban {:>3} {:+.2}  line {:?}",
+                r.action
+                    .champions()
+                    .map(|c| u.id(c))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                r.value,
+                r.continuation
+                    .iter()
+                    .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                    .collect::<Vec<_>>()
+            );
+        }
+        engine
+    };
+    let value_of = |o: &SearchOutcome, id: &str| -> f64 {
+        o.ranked
+            .iter()
+            .find(|r| r.action == Action::Ban(idx(id)))
+            .map(|r| r.value)
+            .unwrap_or_else(|| panic!("{id} not ranked"))
+    };
+    for p in [0.15, 0.3] {
+        let roster = run_rule(FeasibilityRule::Roster, Some(p));
+        // The two lines the claim is about keep both comps alive (among the −1.0 ties the canonical
+        // tie-break may print a both-broken continuation — the S11 artefact of a small roster).
+        for id in ["BS", "K10"] {
+            let r = roster
+                .ranked
+                .iter()
+                .find(|r| r.action == Action::Ban(idx(id)))
+                .unwrap_or_else(|| panic!("{id}"));
+            assert!(
+                r.ends.blue_feasible && r.ends.red_feasible,
+                "{id}: {:?}",
+                r.ends
+            );
+        }
+        assert_eq!(
+            roster.ranked[0].action,
+            Action::Ban(idx("BS")),
+            "P = {p}: the self-ban is top"
+        );
+        assert_eq!(
+            value_of(&roster, "BS"),
+            -p,
+            "P = {p}: Blue fetches SX off-pool"
+        );
+        assert_eq!(
+            value_of(&roster, "K10"),
+            -1.0,
+            "P = {p}: Red snipes BS, the P terms cancel"
+        );
+    }
+    let gate = run_rule(FeasibilityRule::PoolOrRoster, None);
+    assert_eq!(value_of(&gate, "K10"), 1.0, "the gate: BS stays Blue's");
+    assert_eq!(
+        value_of(&gate, "BS"),
+        -u.loss(),
+        "the gate: a self-ban means an off-pool support at P = L"
+    );
+    assert_ne!(
+        bits(&run_rule(FeasibilityRule::Roster, Some(u.loss()))),
+        bits(&gate),
+        "at P = L the two rules differ here — the snipe exists under roster only"
+    );
+}
+
+/// Review focus (B-proper plan): P = 0 under `roster` prices the pool at nothing, so the search is the
+/// gate's on a whole-roster pool — the same ranked list, bit for bit, at the sample's pick root.
+#[test]
+fn p_zero_under_roster_is_the_gate_on_the_whole_roster() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let pooled = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let all: Vec<String> = (0..u.len())
+        .map(|i| {
+            u.id(ChampionIdx(u8::try_from(i).expect("≤ 256")))
+                .to_string()
+        })
+        .collect();
+    let whole_roster = LiveRoot::from_draft_state(&state_at(&s, 11), &all, &all, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let free = run_with(
+        &pooled,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::Roster,
+        Some(0.0),
+    );
+    let gate = run(
+        &whole_roster,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::On,
+    );
+    assert_eq!(bits(&free), bits(&gate));
+    assert_eq!(free.ranked.len(), 162, "the whole available set");
+}
+
+/// Review focus (B-proper plan): an EMPTY pool under `roster` (the side's board picks only, U5) is
+/// charged every remaining pick — the one made now plus the two still to come — on every line.
+#[test]
+fn an_empty_pool_under_roster_charges_every_remaining_pick() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let root = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &[], &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let out = run_with(
+        &root,
+        u,
+        Mode::Horizon(1),
+        &params(None),
+        FeasibilityRule::Roster,
+        Some(0.15), // DEFAULT_OFF_POOL_COST, as a literal: this test predates the constant's import
+    );
+    assert_eq!(out.mover, Side::Red);
+    assert_eq!(out.ranked.len(), 162);
+    for r in &out.ranked {
+        assert_eq!(
+            (r.ends.red_off_pool, r.ends.blue_off_pool),
+            (3, 0),
+            "{:?}: one made, two forced",
+            r.action
+        );
+    }
+}
+
 /// Review round 5 (judgement, verified by running it): under the live rule a board where a side's
 /// LOCKED picks cannot fill five roles — the sample's slot 7 with Red pairing Aphelios and Ashe, a
 /// real play that champion-meta lists as BOTTOM-only — used to REFUSE at every later root for both
@@ -2401,16 +2866,18 @@ fn the_tier_a_loader_refuses_the_live_rule() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/tier-a/01-pair-completion.json");
     let raw = std::fs::read_to_string(&path).expect("fixture 01");
     assert_eq!(raw.matches("\"feasibility\": \"on\"").count(), 1);
-    let live_rule = raw.replace(
-        "\"feasibility\": \"on\"",
-        "\"feasibility\": \"pool_or_roster\"",
-    );
-    match Fixture::from_json(&live_rule, "01-live") {
-        Err(FixtureError::Invalid { field, reason, .. }) => {
-            assert_eq!(field, "feasibility");
-            assert!(reason.contains("Tier B"), "{reason}");
+    for rule in ["pool_or_roster", "roster"] {
+        let live_rule = raw.replace(
+            "\"feasibility\": \"on\"",
+            &format!("\"feasibility\": \"{rule}\""),
+        );
+        match Fixture::from_json(&live_rule, "01-live") {
+            Err(FixtureError::Invalid { field, reason, .. }) => {
+                assert_eq!(field, "feasibility");
+                assert!(reason.contains("Tier B"), "{rule}: {reason}");
+            }
+            other => panic!("{rule}: expected the loader to refuse: {other:?}"),
         }
-        other => panic!("expected the loader to refuse: {other:?}"),
     }
     assert!(Fixture::from_json(&raw, "01").is_ok());
 }

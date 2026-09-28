@@ -10,6 +10,13 @@ use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
+/// The off-pool cost P under `FeasibilityRule::Roster` until calibration replaces it (B-proper design
+/// B5): blue-win logits, about 3.7 percentage points of win probability — the one anchor about the
+/// phenomenon itself (a player on an unpracticed champion runs a few points below their usual rate).
+/// The Tier B report's sweep and its verdict interval are what set the next value; change it in one
+/// commit that quotes the interval.
+pub const DEFAULT_OFF_POOL_COST: f64 = 0.15;
+
 pub const MAX_CHAMPIONS: usize = 256;
 const WORDS: usize = 4;
 
@@ -383,22 +390,24 @@ impl Universe {
         self.loss
     }
 
-    /// The off-pool cost P (slice-5 U10, the user's flat choice): `P = L > 2Σ`, so one off-pool
-    /// pick outweighs any board difference and the rule is LEXICOGRAPHIC — the engine never prefers
-    /// an off-pool pick while the pool can finish, however strong the champion; breaking one's own
-    /// pool never pays; forcing the opponent off-pool is worth P per pick. A board-comparable P is
-    /// NOT a constant change: legality stays gated while the pool can finish, so a lower P only
-    /// makes breaking one's own pool the way to a strong roster champion (round 5 measured it:
-    /// at P = 0.1·L "ban your own support" is the top action and denial inverts) — a real
-    /// board-comparable rule needs always-widened legality, a Tier B question (D4).
+    /// `pool_or_roster`'s off-pool cost P (slice-5 U10, the user's flat choice): `P = L > 2Σ`, so one
+    /// off-pool pick outweighs any board difference and that rule is LEXICOGRAPHIC — the engine never
+    /// prefers an off-pool pick while the pool can finish, however strong the champion; breaking
+    /// one's own pool never pays; forcing the opponent off-pool is worth P per pick. A board-comparable
+    /// P is NOT a constant change to that rule: legality stays gated while the pool can finish, so a
+    /// lower P only makes breaking one's own pool the way to a strong roster champion (round 5
+    /// measured it: at P = 0.1·L "ban your own support" is the top action and denial inverts). The
+    /// board-comparable rule is `FeasibilityRule::Roster` (B-proper): always-widened legality with a
+    /// P the caller passes per search (`OracleInput::off_pool_cost`, `DEFAULT_OFF_POOL_COST`).
     pub fn off_pool_cost(&self) -> f64 {
         self.off_pool_cost
     }
 
-    /// `L'` (slice-5 U10): the infeasibility band under `FeasibilityRule::PoolOrRoster`, `L + 10·P`
-    /// — strictly larger than the gap between any two feasible live leaves, off-pool term included
-    /// (`objective.rs`, `live_leaf_value`); `from_tables` also guarantees that the largest live leaf,
-    /// `Σ + 5P + L'`, is finite. Tier A's `loss` is unchanged.
+    /// `L'` (slice-5 U10): the infeasibility band under the live rules, `L + 10·L` — strictly larger
+    /// than the gap between any two feasible live leaves, off-pool term included, for every P ≤ L
+    /// (`objective.rs`, `live_leaf_value`; feasible live leaves span `board ± 5P ⊂ board ± 5L`);
+    /// `from_tables` also guarantees that the largest live leaf, `Σ + 5L + L'`, is finite. Tier A's
+    /// `loss` is unchanged.
     pub fn live_loss(&self) -> f64 {
         self.live_loss
     }

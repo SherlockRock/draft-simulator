@@ -47,10 +47,11 @@ pub enum ClassifyError {
     NoLegalAction { slot: usize },
 }
 
-/// The legal actions under `rule` (slice-5 U10): `Position::legal_actions` (the D4 gate), except that
-/// under `PoolOrRoster` a pick slot whose mover's pool can no longer complete its comp draws from
-/// everything available instead. The one place the widening happens; the oracle's and the search's
-/// root checks and `classify` all go through it.
+/// The legal actions under `rule` (slice-5 U10; B-proper § 1): `Position::legal_actions` (the D4 gate),
+/// except that under `PoolOrRoster` a pick slot whose mover's pool can no longer complete its comp
+/// draws from everything available instead, and under `Roster` every pick slot does (the pool prices,
+/// never gates). The one place the widening happens; the oracle's and the search's root checks and
+/// `classify` all go through it.
 pub fn legal_actions_under(
     position: &Position<'_>,
     universe: &Universe,
@@ -59,10 +60,15 @@ pub fn legal_actions_under(
     memo: &mut FeasibilityMemo,
 ) -> Vec<Action> {
     if let Some(slot) = position.next_slot() {
-        if rule == FeasibilityRule::PoolOrRoster
-            && slot.action == ActionType::Pick
-            && !pool_can_complete(memo, slot.side, position, pools, universe)
-        {
+        let widened = match rule {
+            FeasibilityRule::On | FeasibilityRule::Off => false,
+            FeasibilityRule::PoolOrRoster => {
+                slot.action == ActionType::Pick
+                    && !pool_can_complete(memo, slot.side, position, pools, universe)
+            }
+            FeasibilityRule::Roster => slot.action == ActionType::Pick,
+        };
+        if widened {
             return position.pick_actions_from(position.available(universe));
         }
     }
@@ -70,8 +76,8 @@ pub fn legal_actions_under(
 }
 
 /// Fixed order: (1) draft complete → leaf; (2) horizon reached → leaf; (3) no legal action → leaf when
-/// feasibility is `on` or `pool_or_roster` (under the latter only an exhausted roster gets here), error
-/// when `off` (an authoring mistake, as in slice 3); (4) interior. `turns_used` counts turns below the
+/// feasibility is `on` or a live rule (under those only an exhausted roster gets here), error when
+/// `off` (an authoring mistake, as in slice 3); (4) interior. `turns_used` counts turns below the
 /// search root (a pair is one); `horizon = None` is the full remainder.
 pub fn classify(
     position: &Position<'_>,
@@ -104,8 +110,8 @@ pub fn classify(
     let actions = legal_actions_under(position, universe, pools, rule, memo);
     if actions.is_empty() {
         return match rule {
-            // Under `PoolOrRoster` only an exhausted ROSTER gets here: a leaf, both sides read off it.
-            FeasibilityRule::On | FeasibilityRule::PoolOrRoster => {
+            // Under a live rule only an exhausted ROSTER gets here: a leaf, both sides read off it.
+            FeasibilityRule::On | FeasibilityRule::PoolOrRoster | FeasibilityRule::Roster => {
                 Ok(leaf(LeafKind::DryPool, memo))
             }
             FeasibilityRule::Off => Err(ClassifyError::NoLegalAction {
