@@ -1142,6 +1142,177 @@ fn measure_depth_two_on_every_sample_root() {
     }
 }
 
+/// B-proper design § 6: the width grid. One configuration per run, from the environment —
+/// `B_PROPER_RULE` (`roster` | `pool_or_roster`), `B_PROPER_WIDTHS` (`singles,pairs,root_off_pool`
+/// or `none`), `B_PROPER_DEPTH` (the deepest horizon, default 3), `B_PROPER_BUDGET` (node budget per
+/// search, default 20 000 000; a cut iteration is reported `partial`) — on the sample's three roots
+/// and the four 2026-09-27 smoke positions, under `roster` at `DEFAULT_OFF_POOL_COST`. One `GRID |`
+/// row per completed depth: cumulative milliseconds, the counts, the root fan and searched count,
+/// the top action and top-set size. Peak RSS comes from the driver (`/usr/bin/time -v`), one process
+/// per configuration. `cargo test --release -p engine-core --test live -- --ignored --nocapture grid`
+#[test]
+#[ignore = "measurement, not a gate: cargo test --release --test live -- --ignored --nocapture grid"]
+fn measure_b_proper_width_grid() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let rule = match std::env::var("B_PROPER_RULE").as_deref() {
+        Ok("pool_or_roster") => FeasibilityRule::PoolOrRoster,
+        Ok("roster") | Err(_) => FeasibilityRule::Roster,
+        Ok(other) => panic!("B_PROPER_RULE {other:?}"),
+    };
+    let widths = std::env::var("B_PROPER_WIDTHS").unwrap_or_else(|_| "none".into());
+    let shortlist = if widths == "none" {
+        None
+    } else {
+        let w: Vec<usize> = widths
+            .split(',')
+            .map(|x| {
+                x.trim()
+                    .parse()
+                    .unwrap_or_else(|e| panic!("B_PROPER_WIDTHS {x:?}: {e}"))
+            })
+            .collect();
+        assert_eq!(
+            w.len(),
+            3,
+            "B_PROPER_WIDTHS = singles,pairs,root_off_pool | none"
+        );
+        Some(Shortlist {
+            singles: w[0],
+            pairs: w[1],
+            root_off_pool: w[2],
+        })
+    };
+    let max_depth: usize = std::env::var("B_PROPER_DEPTH")
+        .ok()
+        .map_or(3, |d| d.parse().expect("B_PROPER_DEPTH"));
+    let budget: u64 = std::env::var("B_PROPER_BUDGET")
+        .ok()
+        .map_or(20_000_000, |b| b.parse().expect("B_PROPER_BUDGET"));
+    let off_pool_cost = (rule == FeasibilityRule::Roster).then_some(DEFAULT_OFF_POOL_COST);
+    let mut roots: Vec<(String, LiveRoot)> = Vec::new();
+    for (events, label) in [
+        (2usize, "sample-slot-2-blue-ban"),
+        (7, "sample-slot-7-red-pair"),
+        (11, "sample-slot-11-red-pick"),
+    ] {
+        roots.push((
+            label.to_string(),
+            LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
+                .unwrap_or_else(|e| panic!("{e}")),
+        ));
+    }
+    for name in [
+        "2026-09-27-smoke-1-blue-first-pick",
+        "2026-09-27-smoke-2-red-pair-no-adc",
+        "2026-09-27-smoke-3-blue-ban-denial",
+        "2026-09-27-smoke-4-red-last-pick",
+    ] {
+        roots.push((name.to_string(), smoke(&live, name).root));
+    }
+    let rule_name = match rule {
+        FeasibilityRule::Roster => "roster",
+        FeasibilityRule::PoolOrRoster => "pool_or_roster",
+        _ => unreachable!(),
+    };
+    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top");
+    for (label, root) in &roots {
+        let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
+        let started = std::time::Instant::now();
+        let mover = position.mover().expect("a root");
+        let pool = root.pools.for_side(mover);
+        let pick_root = position
+            .next_slot()
+            .is_some_and(|s| s.action == ActionType::Pick);
+        let row = |o: &SearchOutcome, partial: bool| {
+            let name = |a: &Action| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+");
+            let top = o
+                .ranked
+                .first()
+                .map_or("-".to_string(), |r| name(&r.action));
+            // Review round 1: the margin between the top and the best action of the OTHER pool class
+            // (in-pool vs off-pool), positive for the mover — "stable" means nothing without it.
+            let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+            let (top_class, margin, other) = match (pick_root, o.ranked.first()) {
+                (true, Some(t)) => {
+                    let class = in_pool(&t.action);
+                    let other = o
+                        .ranked
+                        .iter()
+                        .filter(|r| in_pool(&r.action) != class)
+                        .fold(
+                            None,
+                            |best: Option<&engine_core::reference::search::RankedAction>, r| {
+                                Some(match best {
+                                    None => r,
+                                    Some(b) => match mover {
+                                        Side::Blue if r.value > b.value => r,
+                                        Side::Red if r.value < b.value => r,
+                                        _ => b,
+                                    },
+                                })
+                            },
+                        );
+                    let margin = other.map_or("-".to_string(), |b| {
+                        let m = match mover {
+                            Side::Blue => t.value - b.value,
+                            Side::Red => b.value - t.value,
+                        };
+                        format!("{m:.4}")
+                    });
+                    (
+                        if class { "in-pool" } else { "off-pool" }.to_string(),
+                        margin,
+                        other.map_or("-".to_string(), |b| name(&b.action)),
+                    )
+                }
+                _ => ("-".to_string(), "-".to_string(), "-".to_string()),
+            };
+            println!(
+                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other}",
+                o.depth,
+                partial,
+                started.elapsed().as_millis(),
+                o.nodes,
+                o.leaves,
+                o.orderings,
+                o.cutoffs,
+                o.table_hits,
+                o.table_entries,
+                o.root_fan,
+                o.ranked.len(),
+                top,
+                o.top_set.len()
+            );
+        };
+        let result = search(
+            &OracleInput {
+                position: &position,
+                universe: u,
+                pools: &root.pools,
+                objective: u,
+                feasibility: rule,
+                mode: Mode::Horizon(max_depth),
+                epsilon: 1e-9,
+                off_pool_cost,
+            },
+            &SearchParams {
+                node_budget: Some(budget),
+                shortlist,
+                wall_budget: Duration::from_secs(86_400),
+                ..SearchParams::default()
+            },
+            &CancelHandle::new(),
+            |o| row(o, false),
+        );
+        match result {
+            Ok(o) => row(&o, o.partial),
+            Err(e) => println!("GRID | {label} | {rule_name} | {widths} | ERROR {e}"),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // 8: pool or roster (U10) — an exhausted pool draws from the roster instead of refusing
 // ---------------------------------------------------------------------------------------------

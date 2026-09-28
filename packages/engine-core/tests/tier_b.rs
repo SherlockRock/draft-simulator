@@ -296,6 +296,8 @@ fn load_dir_walks_the_samples_in_name_order() {
         [
             "2026-09-27-smoke-1-blue-first-pick",
             "2026-09-27-smoke-2-red-pair-no-adc",
+            "2026-09-27-smoke-3-blue-ban-denial",
+            "2026-09-27-smoke-4-red-last-pick",
             "sample-fce65eb1-slot-11",
             "sample-skip-at-slot-1"
         ]

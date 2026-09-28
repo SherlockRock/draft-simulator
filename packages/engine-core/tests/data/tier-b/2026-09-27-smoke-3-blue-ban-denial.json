@@ -1,0 +1,131 @@
+{
+  "id": "2026-09-27-smoke-3-blue-ban-denial",
+  "category": "flex-retention",
+  "notes": "SMOKE. Blue banned Rakan in phase 1, so TL's only support left is Nautilus. TL has Aatrox/Vi/Sylas; still needs ADC + support. Blue ban at slot 13. Expect 'ban Nautilus' (denial: forces TL off-pool at support) at or near the top.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-09-27"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Rakan"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Viktor"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Azir"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Jhin"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "MonkeyKing"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Kindred"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "JarvanIV"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Aatrox"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Vi"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Syndra"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Alistar"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Sylas"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Varus"
+    }
+  ],
+  "pools": {
+    "blue": [
+      "Jhin",
+      "MissFortune",
+      "Sivir",
+      "Varus",
+      "Yasuo",
+      "Viktor",
+      "Syndra",
+      "Taliyah",
+      "Garen",
+      "Jax",
+      "Nasus",
+      "Udyr",
+      "JarvanIV",
+      "Kindred",
+      "Volibear",
+      "Alistar",
+      "Amumu",
+      "Bard",
+      "Shen",
+      "Rakan"
+    ],
+    "red": [
+      "Jinx",
+      "Kaisa",
+      "Azir",
+      "Sylas",
+      "Aatrox",
+      "KSante",
+      "Renekton",
+      "Vi",
+      "MonkeyKing",
+      "Nautilus",
+      "Rakan"
+    ]
+  },
+  "our_side": "Blue",
+  "actual_next": "Nautilus",
+  "review": "2026-09-27: ban Nautilus ranked 1/160, +P denial as designed (not contested)."
+}
