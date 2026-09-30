@@ -19,6 +19,7 @@ It is `#[ignore]` by design: a report, never a gate, and an empty directory must
 | `TIER_B_P` | `0.05,0.15,0.25` | the P values (blue-win logits) the `roster` arm sweeps; `0.15` is `DEFAULT_OFF_POOL_COST` |
 | `TIER_B_WIDTHS` | `30,60,100` | the shortlist as `singles,pairs,root_off_pool` (B-proper § 2); every arm runs at the same widths |
 | `TIER_B_HORIZON` | `2` | turns searched below the root (a pair is one) |
+| `TIER_B_TOP` | `3` | ranked actions printed per arm |
 
 Every position runs under two rules: **`pool_or_roster`** (slice-5 U10: a side picks from its pool while the pool can still complete its comp and from the whole roster once it cannot, each off-pool pick costing a flat P = L — lexicographic, the engine never leaves a pool that can finish) and **`roster`** at each P of the sweep (B-proper: the pool prices and never gates; every pick node fans to the roster; an off-pool pick costs P on the board's scale, so a strong roster champion can be worth its cost). Under both, a side that cannot finish even from the roster pays the wider L' = L + 10·L, so breaking one's own comp alone is never worth an off-pool pick saved (a line that breaks BOTH sides is R1's board plus the netted off-pool term — the S11 residual); a position where a side's LOCKED picks already cannot fill five roles is still ranked, that side in the L' band on every line; the gate would refuse it. A Tier A fixture may declare neither live rule.
 

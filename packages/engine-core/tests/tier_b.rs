@@ -554,8 +554,20 @@ impl Constraint {
     }
 }
 
-/// The report's node budget per search (cumulative across iterations; `SearchParams::node_budget`).
-const REPORT_NODE_BUDGET: u64 = 20_000_000;
+/// The report's per-search limits: the node budget (cumulative across iterations;
+/// `SearchParams::node_budget`) and how many ranked actions each arm prints (`TIER_B_TOP`).
+#[derive(Clone, Copy, Debug)]
+struct ReportLimits {
+    node_budget: u64,
+    top: usize,
+}
+
+impl ReportLimits {
+    const DEFAULT: ReportLimits = ReportLimits {
+        node_budget: 20_000_000,
+        top: 3,
+    };
+}
 
 /// The report's search mode, refused up front at 0 (the search would refuse every position with
 /// `HorizonZero`: a horizon of 0 decides nothing).
@@ -596,7 +608,7 @@ fn render_report(
     mode: Mode,
     shortlist: Shortlist,
     ps: &[f64],
-    node_budget: u64,
+    limits: ReportLimits,
 ) -> String {
     use std::fmt::Write as _;
     let u = &live.universe;
@@ -672,7 +684,7 @@ fn render_report(
                     off_pool_cost,
                 },
                 &SearchParams {
-                    node_budget: Some(node_budget),
+                    node_budget: Some(limits.node_budget),
                     wall_budget: Duration::from_secs(300),
                     shortlist: Some(shortlist),
                     ..SearchParams::default()
@@ -709,7 +721,7 @@ fn render_report(
                 out_come.root_fan,
                 out_come.top_set.len()
             );
-            for r in out_come.ranked.iter().take(3) {
+            for r in out_come.ranked.iter().take(limits.top) {
                 let padded = r
                     .action
                     .champions()
@@ -950,7 +962,8 @@ fn the_break_even_and_the_constraint_read_every_sweep_shape() {
 
 /// D7: a report read by a human, never a gate (B-proper § 3: the calibration instrument). Env:
 /// `TIER_B_P` (comma list of logits, default `0.05,0.15,0.25`), `TIER_B_WIDTHS`
-/// (`singles,pairs,root_off_pool`, default `30,60,100`), `TIER_B_HORIZON` (default 2).
+/// (`singles,pairs,root_off_pool`, default `30,60,100`), `TIER_B_HORIZON` (default 2), `TIER_B_TOP`
+/// (ranked actions printed per arm, default 3).
 #[test]
 #[ignore = "Tier B report, not a gate (D7): cargo test --release --test tier_b -- --ignored --nocapture"]
 fn tier_b_report() {
@@ -961,6 +974,7 @@ fn tier_b_report() {
     let widths: Vec<usize> = env_list("TIER_B_WIDTHS", "30,60,100");
     let horizon: Vec<usize> = env_list("TIER_B_HORIZON", "2");
     let mode = report_mode(horizon[0]);
+    let top: Vec<usize> = env_list("TIER_B_TOP", "3");
     assert_eq!(
         widths.len(),
         3,
@@ -981,7 +995,17 @@ fn tier_b_report() {
     );
     print!(
         "{}",
-        render_report(&loaded, &live, mode, shortlist, &ps, REPORT_NODE_BUDGET)
+        render_report(
+            &loaded,
+            &live,
+            mode,
+            shortlist,
+            &ps,
+            ReportLimits {
+                top: top[0],
+                ..ReportLimits::DEFAULT
+            }
+        )
     );
 }
 
@@ -1027,7 +1051,17 @@ fn a_failed_search_is_named_and_the_report_continues() {
         pairs: 25,
         root_off_pool: 50,
     };
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05], 1);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05],
+        ReportLimits {
+            node_budget: 1,
+            ..ReportLimits::DEFAULT
+        },
+    );
     println!("{text}");
     assert!(
         text.contains("SEARCH FAILED: 2026-09-27-smoke-1-blue-first-pick: "),
@@ -1050,6 +1084,39 @@ fn a_failed_search_is_named_and_the_report_continues() {
         text.contains("summary: 1 verdict(s) could not bound P"),
         "{text}"
     );
+}
+
+/// Tier B authoring pass (2026-09-29): `TIER_B_TOP` sets how many ranked actions each arm prints, so
+/// the reader sees the options behind the break-even, not just the top three.
+#[test]
+fn the_report_prints_the_requested_number_of_ranked_actions() {
+    let live = live();
+    let loaded = vec![with_verdict(
+        "2026-09-27-smoke-1-blue-first-pick",
+        None,
+        &live,
+    )];
+    let narrow = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05],
+        ReportLimits {
+            top: 5,
+            ..ReportLimits::DEFAULT
+        },
+    );
+    let ranked = text
+        .lines()
+        .filter(|l| l.starts_with("    ") && l.contains("  ends "))
+        .count();
+    assert_eq!(ranked, 10, "five per arm on two arms:\n{text}");
 }
 
 /// Execution-handoff parked item 2: the sweep is checked before any search runs — a P above L (which
@@ -1096,7 +1163,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.15, 0.05],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     println!("{text}");
     for needle in [
@@ -1140,7 +1207,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05, 0.15],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     println!("{text}");
     assert!(
@@ -1167,7 +1234,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05, 0.15],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     assert!(
         text.contains(
@@ -1197,7 +1264,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
             root_off_pool: 1,
         },
         &[0.15],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     assert!(
         text.contains("actual next Zac [off-pool 1] ranked unsearched of 93 (pool_or_roster (P = L = 1026.4)), unsearched of 94 (roster P = 0.15)"),
@@ -1211,7 +1278,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     assert!(text.contains("summary: no verdicts"), "{text}");
     // A verdict at a ban root is counted as unusable, never silently dropped (round 2, Codex E).
@@ -1222,7 +1289,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     assert!(
         text.contains(
@@ -1250,7 +1317,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
-        REPORT_NODE_BUDGET,
+        ReportLimits::DEFAULT,
     );
     assert!(
         text.contains("FAILED TO LOAD: broken: x: synthetic"),
