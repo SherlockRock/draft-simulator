@@ -459,7 +459,9 @@ impl BreakEven {
     fn describe(&self) -> String {
         match self {
             BreakEven::BanRoot => "no off-pool question at a ban root".into(),
-            BreakEven::NoArm => "no roster arm could speak (every arm partial or a mixed tie)".into(),
+            BreakEven::NoArm => {
+                "no roster arm could speak (every arm partial, a mixed tie or a failed search)".into()
+            }
             BreakEven::InPoolAtEvery { .. } => "top in-pool at every P".into(),
             BreakEven::OffPoolAtEvery { .. } => "top off-pool at every P".into(),
             BreakEven::Monotone {
@@ -552,14 +554,29 @@ impl Constraint {
     }
 }
 
+/// The report's node budget per search (cumulative across iterations; `SearchParams::node_budget`).
+const REPORT_NODE_BUDGET: u64 = 20_000_000;
+
+/// The report's search mode, refused up front at 0 (the search would refuse every position with
+/// `HorizonZero`: a horizon of 0 decides nothing).
+fn report_mode(horizon: usize) -> Mode {
+    assert!(
+        horizon >= 1,
+        "TIER_B_HORIZON: {horizon} decides nothing; the horizon must be at least 1"
+    );
+    Mode::Horizon(horizon)
+}
+
 /// The arms: `pool_or_roster`, then `roster` at each P of `ps` (ascending).
-fn arms(ps: &[f64]) -> Vec<Arm> {
+fn arms(ps: &[f64], loss: f64) -> Vec<Arm> {
     // Validated before any search runs (review round 2): a bad sweep entry must not panic mid-report.
+    // P ≤ L is `resolve_off_pool_cost`'s own bound.
     for p in ps {
         assert!(
             p.is_finite() && *p >= 0.0,
             "TIER_B_P: {p} is not a finite non-negative logit"
         );
+        assert!(*p <= loss, "TIER_B_P: {p} exceeds L = {loss}");
     }
     let mut sorted = ps.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite P"));
@@ -579,11 +596,12 @@ fn render_report(
     mode: Mode,
     shortlist: Shortlist,
     ps: &[f64],
+    node_budget: u64,
 ) -> String {
     use std::fmt::Write as _;
     let u = &live.universe;
     let mut out = String::new();
-    let arms = arms(ps);
+    let arms = arms(ps, u.loss());
     // (id, verdict, constraint) per position with a verdict.
     let mut constraints: Vec<(String, Verdict, Constraint)> = Vec::new();
     for l in loaded {
@@ -654,15 +672,33 @@ fn render_report(
                     off_pool_cost,
                 },
                 &SearchParams {
-                    node_budget: Some(20_000_000),
+                    node_budget: Some(node_budget),
                     wall_budget: Duration::from_secs(300),
                     shortlist: Some(shortlist),
                     ..SearchParams::default()
                 },
                 &CancelHandle::new(),
                 |_| {},
-            )
-            .unwrap_or_else(|e| panic!("{}: {e}", fx.id));
+            );
+            // One failed search is named in its place; the rest of the report still runs.
+            let out_come = match out_come {
+                Ok(o) => o,
+                Err(e) => {
+                    let _ = writeln!(
+                        out,
+                        "  rule {}\n    SEARCH FAILED: {}: {e}",
+                        arm.label(u),
+                        fx.id
+                    );
+                    if let (true, Arm::Roster(p)) = (pick_root, arm) {
+                        left_out.push(*p);
+                    }
+                    if fx.actual_next.is_some() {
+                        actual_ranks.push(format!("search failed ({})", arm.label(u)));
+                    }
+                    continue;
+                }
+            };
             let _ = writeln!(
                 out,
                 "  rule {} depth {} (partial {}) searched {} of {} top set {}",
@@ -907,9 +943,9 @@ fn the_break_even_and_the_constraint_read_every_sweep_shape() {
         Constraint::Unusable("the top was in-pool even at P = 0; no P meets this verdict".into())
     );
     // A bad sweep entry is refused before any search runs.
-    assert!(std::panic::catch_unwind(|| arms(&[-0.1])).is_err());
-    assert!(std::panic::catch_unwind(|| arms(&[f64::NAN])).is_err());
-    assert_eq!(arms(&[0.15, 0.05]).len(), 3);
+    assert!(std::panic::catch_unwind(|| arms(&[-0.1], 1.0)).is_err());
+    assert!(std::panic::catch_unwind(|| arms(&[f64::NAN], 1.0)).is_err());
+    assert_eq!(arms(&[0.15, 0.05], 1.0).len(), 3);
 }
 
 /// D7: a report read by a human, never a gate (B-proper § 3: the calibration instrument). Env:
@@ -924,6 +960,7 @@ fn tier_b_report() {
     let ps: Vec<f64> = env_list("TIER_B_P", "0.05,0.15,0.25");
     let widths: Vec<usize> = env_list("TIER_B_WIDTHS", "30,60,100");
     let horizon: Vec<usize> = env_list("TIER_B_HORIZON", "2");
+    let mode = report_mode(horizon[0]);
     assert_eq!(
         widths.len(),
         3,
@@ -944,8 +981,92 @@ fn tier_b_report() {
     );
     print!(
         "{}",
-        render_report(&loaded, &live, Mode::Horizon(horizon[0]), shortlist, &ps)
+        render_report(&loaded, &live, mode, shortlist, &ps, REPORT_NODE_BUDGET)
     );
+}
+
+/// A sample file with `verdict` spliced in before `review` (the smoke files carry review text).
+fn with_verdict(
+    name: &str,
+    verdict: Option<bool>,
+    live: &LiveUniverse,
+) -> Result<engine_core::reference::tier_b::Loaded, TierBError> {
+    let edit = verdict.map_or(String::new(), |v| {
+        format!("\"verdict\": {{\"off_pool\": {v}}}, ")
+    });
+    TierBFixture::from_json(
+        &sample_json(name).replace("\"review\":", &format!("{edit}\"review\":")),
+        name,
+        live,
+    )
+}
+
+/// The refusal text of a call that must panic.
+fn panic_text(f: impl FnOnce() + std::panic::UnwindSafe) -> String {
+    let payload = std::panic::catch_unwind(f).expect_err("expected a refusal");
+    payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+        .unwrap_or_default()
+}
+
+/// Execution-handoff parked item 1: one failed search must not kill the report. A node budget of 1
+/// cuts every search inside depth 1 (`Timeout`, the failure a wide pair root meets on a real corpus);
+/// each arm prints `SEARCH FAILED` in its place and the report goes on — the next arm, the next
+/// position, the verdict and the summary.
+#[test]
+fn a_failed_search_is_named_and_the_report_continues() {
+    let live = live();
+    let loaded = vec![
+        with_verdict("2026-09-27-smoke-1-blue-first-pick", Some(false), &live),
+        with_verdict("sample-skip-at-slot-1", None, &live),
+    ];
+    let narrow = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05], 1);
+    println!("{text}");
+    assert!(
+        text.contains("SEARCH FAILED: 2026-09-27-smoke-1-blue-first-pick: "),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("SEARCH FAILED: ").count(),
+        4,
+        "two arms on two positions:\n{text}"
+    );
+    assert!(
+        text.contains("SEARCH FAILED: sample-skip-at-slot-1: "),
+        "{text}"
+    );
+    assert!(
+        text.contains("verdict off_pool = false → cannot bound P — no roster arm could speak"),
+        "{text}"
+    );
+    assert!(
+        text.contains("summary: 1 verdict(s) could not bound P"),
+        "{text}"
+    );
+}
+
+/// Execution-handoff parked item 2: the sweep is checked before any search runs — a P above L (which
+/// the search refuses) and a horizon of 0 (which decides nothing) are refused up front, named.
+#[test]
+fn a_p_above_l_and_a_zero_horizon_are_refused_before_any_search() {
+    let l = live().universe.loss();
+    let text = panic_text(|| {
+        arms(&[0.15, 5000.0], l);
+    });
+    assert!(text.contains("TIER_B_P: 5000 exceeds L = "), "{text}");
+    assert_eq!(arms(&[l], l).len(), 2, "P = L itself is a legal arm");
+    let text = panic_text(|| {
+        report_mode(0);
+    });
+    assert!(text.contains("TIER_B_HORIZON: 0"), "{text}");
+    assert_eq!(report_mode(2), Mode::Horizon(2));
 }
 
 /// B-proper § 7 test 11: the sweep report on the four sample files with synthetic verdicts — one
@@ -957,17 +1078,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
     let live = live();
     let default_ps: Vec<f64> = env_list("TIER_B_P_UNSET_", "0.05,0.15,0.25");
     assert!(default_ps.contains(&DEFAULT_OFF_POOL_COST));
-    // `verdict` spliced in before `review` (the smoke files carry review text).
-    let load = |name: &str, verdict: Option<bool>| {
-        let edit = verdict.map_or(String::new(), |v| {
-            format!("\"verdict\": {{\"off_pool\": {v}}}, ")
-        });
-        TierBFixture::from_json(
-            &sample_json(name).replace("\"review\":", &format!("{edit}\"review\":")),
-            name,
-            &live,
-        )
-    };
+    let load = |name: &str, verdict: Option<bool>| with_verdict(name, verdict, &live);
     let loaded = vec![
         load("2026-09-27-smoke-1-blue-first-pick", Some(false)),
         load("2026-09-27-smoke-2-red-pair-no-adc", Some(true)),
@@ -979,7 +1090,14 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         pairs: 25,
         root_off_pool: 50,
     };
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.15, 0.05]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.15, 0.05],
+        REPORT_NODE_BUDGET,
+    );
     println!("{text}");
     for needle in [
         "rule pool_or_roster (P = L = 1026.4)",
@@ -1016,7 +1134,14 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         load("sample-fce65eb1-slot-11", Some(true)),
         load("sample-fce65eb1-slot-11", Some(false)),
     ];
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05, 0.15]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05, 0.15],
+        REPORT_NODE_BUDGET,
+    );
     println!("{text}");
     assert!(
         text.contains("verdict off_pool = true → P < 0.15"),
@@ -1036,7 +1161,14 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         load("sample-fce65eb1-slot-11", Some(true)),
         load("2026-09-27-smoke-2-red-pair-no-adc", Some(false)),
     ];
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05, 0.15]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05, 0.15],
+        REPORT_NODE_BUDGET,
+    );
     assert!(
         text.contains(
             "verdict off_pool = false → P > 0.15 (above the whole sweep: widen it upward)"
@@ -1065,6 +1197,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
             root_off_pool: 1,
         },
         &[0.15],
+        REPORT_NODE_BUDGET,
     );
     assert!(
         text.contains("actual next Zac [off-pool 1] ranked unsearched of 93 (pool_or_roster (P = L = 1026.4)), unsearched of 94 (roster P = 0.15)"),
@@ -1072,11 +1205,25 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
     );
     // No verdicts at all: said so, never green.
     let loaded = vec![load("sample-skip-at-slot-1", None)];
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05],
+        REPORT_NODE_BUDGET,
+    );
     assert!(text.contains("summary: no verdicts"), "{text}");
     // A verdict at a ban root is counted as unusable, never silently dropped (round 2, Codex E).
     let loaded = vec![load("sample-skip-at-slot-1", Some(true))];
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05],
+        REPORT_NODE_BUDGET,
+    );
     assert!(
         text.contains(
             "verdict off_pool = true → cannot bound P — no off-pool question at a ban root"
@@ -1097,7 +1244,14 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         }),
         load("sample-skip-at-slot-1", None),
     ];
-    let text = render_report(&loaded, &live, Mode::Horizon(1), narrow, &[0.05]);
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(1),
+        narrow,
+        &[0.05],
+        REPORT_NODE_BUDGET,
+    );
     assert!(
         text.contains("FAILED TO LOAD: broken: x: synthetic"),
         "{text}"
