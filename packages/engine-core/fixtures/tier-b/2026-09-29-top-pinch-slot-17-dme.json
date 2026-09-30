@@ -1,0 +1,201 @@
+{
+  "id": "2026-09-29-top-pinch-slot-17-dme",
+  "category": "off-pool",
+  "notes": "User's 'top pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. DME (Blue) pair at slot 17. Picks after slot 15 are the engine's in-pool continuation, user-vetted.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-09-29"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zilean"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Qiyana"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zaahen"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Naafiri"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Ivern"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ambessa"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "LeeSin"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Caitlyn"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Bard"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Yunara"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Lulu"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "MonkeyKing"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Camille"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Sion"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Riven"
+    },
+    {
+      "slot": 15,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "KSante"
+    },
+    {
+      "slot": 16,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Syndra"
+    }
+  ],
+  "pools": {
+    "blue": [
+      "Rumble",
+      "Riven",
+      "Camille",
+      "Ambessa",
+      "KSante",
+      "Aurora",
+      "Zaahen",
+      "Yone",
+      "Naafiri",
+      "Qiyana",
+      "LeeSin",
+      "JarvanIV",
+      "MonkeyKing",
+      "XinZhao",
+      "Vi",
+      "Shyvana",
+      "Locke",
+      "Syndra",
+      "Nasus",
+      "Ahri",
+      "Galio",
+      "Cassiopeia",
+      "Orianna",
+      "Ryze",
+      "Yunara",
+      "Ziggs",
+      "Aphelios",
+      "Ezreal",
+      "Kaisa",
+      "Kalista",
+      "Lucian",
+      "Zeri",
+      "Bard",
+      "Alistar",
+      "Lulu",
+      "Milio",
+      "Nautilus",
+      "Nami",
+      "Leona",
+      "Renata"
+    ],
+    "red": [
+      "Sion",
+      "KSante",
+      "Zaahen",
+      "Ornn",
+      "DrMundo",
+      "Aatrox",
+      "Malphite",
+      "Renekton",
+      "JarvanIV",
+      "Ivern",
+      "Shyvana",
+      "XinZhao",
+      "Vi",
+      "MonkeyKing",
+      "Zilean",
+      "Locke",
+      "Galio",
+      "Chogath",
+      "Orianna",
+      "Ryze",
+      "Syndra",
+      "Viktor",
+      "Ezreal",
+      "Caitlyn",
+      "Jhin",
+      "Jinx",
+      "Kaisa",
+      "Ashe",
+      "Sivir",
+      "Varus",
+      "Bard",
+      "Neeko",
+      "Seraphine",
+      "Rakan",
+      "Amumu",
+      "Alistar",
+      "Braum",
+      "Nami"
+    ]
+  },
+  "our_side": "Blue",
+  "review": "2026-09-29 PARKED, no verdict (user's blind answer: stay): the value hinges on Kittens' parked last pick at slot 19, off-role under set pools."
+}

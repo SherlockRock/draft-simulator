@@ -16,7 +16,7 @@ It is `#[ignore]` by design: a report, never a gate, and an empty directory must
 
 | variable | default | meaning |
 |---|---|---|
-| `TIER_B_P` | `0.05,0.15,0.25` | the P values (blue-win logits) the `roster` arm sweeps; `0.15` is `DEFAULT_OFF_POOL_COST` |
+| `TIER_B_P` | `0.05,0.1,0.15` | the P values (blue-win logits) the `roster` arm sweeps; `0.1` is `DEFAULT_OFF_POOL_COST` |
 | `TIER_B_WIDTHS` | `30,60,100` | the shortlist as `singles,pairs,root_off_pool` (B-proper § 2); every arm runs at the same widths |
 | `TIER_B_HORIZON` | `2` | turns searched below the root (a pair is one) |
 | `TIER_B_TOP` | `3` | ranked actions printed per arm |
@@ -53,7 +53,7 @@ The **summary** intersects every verdict: `off_pool: true` means P must sit belo
 
 ## Calibrating P (B-proper § 3)
 
-P is `engine_core::reference::universe::DEFAULT_OFF_POOL_COST` (0.15 blue-win logits, about 3.7 percentage points of win probability — an assumption, not a measurement). The procedure that replaces it:
+P is `engine_core::reference::universe::DEFAULT_OFF_POOL_COST`: 0.10 blue-win logits (about 2.5 percentage points of win probability), calibrated 2026-09-29 on the `2026-09-29-*` corpus (seven usable verdicts, interval P > 0.09 and P < 0.11 at a 0.01 sweep step; the user chose 0.10). It replaced the 0.15 assumption and is PROVISIONAL until pools are role-aware — pools are sets today, so a champion the pool lists for one role counts as in-pool in any role (the `PARKED` positions in the corpus). The procedure:
 
 1. Author positions where an off-pool pick tempts (`category: off-pool`), from your own prep; `docs/plans/2026-09-27-tier-b-smoke/gen_tierb.py` is the template. The four 2026-09-27 smoke positions are sweep inputs but keep `SMOKE` in `notes` — they are constructed, not corpus.
 2. Run the report (a wider `TIER_B_P` sweep narrows the brackets, e.g. `0.02,0.05,0.1,0.15,0.2,0.3`).

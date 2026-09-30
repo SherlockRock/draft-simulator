@@ -961,7 +961,7 @@ fn the_break_even_and_the_constraint_read_every_sweep_shape() {
 }
 
 /// D7: a report read by a human, never a gate (B-proper § 3: the calibration instrument). Env:
-/// `TIER_B_P` (comma list of logits, default `0.05,0.15,0.25`), `TIER_B_WIDTHS`
+/// `TIER_B_P` (comma list of logits, default `0.05,0.1,0.15`), `TIER_B_WIDTHS`
 /// (`singles,pairs,root_off_pool`, default `30,60,100`), `TIER_B_HORIZON` (default 2), `TIER_B_TOP`
 /// (ranked actions printed per arm, default 3).
 #[test]
@@ -970,7 +970,7 @@ fn tier_b_report() {
     let live = live();
     let corpus = dir("fixtures/tier-b");
     let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
-    let ps: Vec<f64> = env_list("TIER_B_P", "0.05,0.15,0.25");
+    let ps: Vec<f64> = env_list("TIER_B_P", "0.05,0.1,0.15");
     let widths: Vec<usize> = env_list("TIER_B_WIDTHS", "30,60,100");
     let horizon: Vec<usize> = env_list("TIER_B_HORIZON", "2");
     let mode = report_mode(horizon[0]);
@@ -1143,7 +1143,7 @@ fn a_p_above_l_and_a_zero_horizon_are_refused_before_any_search() {
 #[test]
 fn the_report_sweeps_p_and_states_the_verdict_interval() {
     let live = live();
-    let default_ps: Vec<f64> = env_list("TIER_B_P_UNSET_", "0.05,0.15,0.25");
+    let default_ps: Vec<f64> = env_list("TIER_B_P_UNSET_", "0.05,0.1,0.15");
     assert!(default_ps.contains(&DEFAULT_OFF_POOL_COST));
     let load = |name: &str, verdict: Option<bool>| with_verdict(name, verdict, &live);
     let loaded = vec![

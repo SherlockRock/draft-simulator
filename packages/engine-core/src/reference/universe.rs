@@ -10,12 +10,15 @@ use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-/// The off-pool cost P under `FeasibilityRule::Roster` until calibration replaces it (B-proper design
-/// B5): blue-win logits, about 3.7 percentage points of win probability — the one anchor about the
-/// phenomenon itself (a player on an unpracticed champion runs a few points below their usual rate).
-/// The Tier B report's sweep and its verdict interval are what set the next value; change it in one
-/// commit that quotes the interval.
-pub const DEFAULT_OFF_POOL_COST: f64 = 0.15;
+/// The off-pool cost P under `FeasibilityRule::Roster` (B-proper design B5, § 3): blue-win logits,
+/// about 2.5 percentage points of win probability near an even game. Calibrated 2026-09-29 on the
+/// Tier B authoring corpus (`fixtures/tier-b/2026-09-29-*`, the user's Kittens vs DME pinch drafts):
+/// seven usable verdicts put P > 0.09 and P < 0.11 at a 0.01 sweep step (report `docs/plans/
+/// 2026-09-28-tier-b-authoring/report-2.txt`; the coarse sweep, `report-1.txt`, read 0.08–0.12), and
+/// the user chose 0.10 after reading the scored options — lower than the 0.15 assumption it replaces. PROVISIONAL: pools are
+/// sets, not roles (design § 9, "Role-aware pools") — five of the twelve positions were parked for it,
+/// and making off-role count as off-pool re-prices every off-pool line; recalibrate after it lands.
+pub const DEFAULT_OFF_POOL_COST: f64 = 0.10;
 
 pub const MAX_CHAMPIONS: usize = 256;
 const WORDS: usize = 4;
