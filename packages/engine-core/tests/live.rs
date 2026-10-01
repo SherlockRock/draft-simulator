@@ -9,7 +9,9 @@ use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
-use engine_core::reference::feasibility::{off_pool_count, FeasibilityMemo, FeasibilityRule};
+use engine_core::reference::feasibility::{
+    critical_pool, off_pool_count, FeasibilityMemo, FeasibilityRule,
+};
 use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::live::{
     entries_from_draft_state, pools_from_search, DropReason, Dropped, LiveError, LiveRoot,
@@ -2445,6 +2447,132 @@ fn band_universe(named: &[(&str, Role, f64)]) -> Universe {
     let n = champions.len();
     let zero = vec![vec![0.0; n]; n];
     Universe::from_tables(champions, &zero, &zero).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// Snipe-key design § 3 test 3: `critical_pool` is the set of pool champions whose removal lowers the
+/// side's rank. Blue's pool: a sole jungler BJ, two supports BS / BS2 (each the other's backup), and
+/// three flex champions FA (top/mid), FB (mid/adc), FC (adc/top) — each of top, mid and ADC is covered
+/// twice, so none of the three is anybody's sole cover, yet removing any one leaves two champions for
+/// three roles. So the critical set is {BJ, FA, FB, FC}: not "sole cover of a role" (that misses the
+/// flex three), not "matched" (one of the supports is matched and neither is critical). Gates: locked
+/// picks that cannot be matched (two tops) give the empty set whatever the pool; a side with no pick
+/// left gives the empty set (a cost gate — five matched picks hold the rank at five anyway).
+#[test]
+fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
+    let mk = |id: &str, positions: &[Role]| Champion {
+        id: id.into(),
+        positions: positions.to_vec(),
+        linear: 0.0,
+    };
+    let mut champions = vec![
+        mk("BJ", &[Role::Jungle]),
+        mk("BS", &[Role::Support]),
+        mk("BS2", &[Role::Support]),
+        mk("FA", &[Role::Top, Role::Middle]),
+        mk("FB", &[Role::Middle, Role::Adc]),
+        mk("FC", &[Role::Adc, Role::Top]),
+        mk("BT", &[Role::Top]),
+        mk("BT2", &[Role::Top]),
+        mk("R1", &[Role::Top]),
+        mk("R2", &[Role::Jungle]),
+        mk("R3", &[Role::Middle]),
+        mk("R4", &[Role::Adc]),
+        mk("R5", &[Role::Support]),
+        mk("BM", &[Role::Middle]),
+        mk("BA", &[Role::Adc]),
+    ];
+    for i in 1..=10 {
+        champions.push(mk(&format!("K{i}"), &[Role::Top]));
+    }
+    let n = champions.len();
+    let zero = vec![vec![0.0; n]; n];
+    let u = Universe::from_tables(champions, &zero, &zero).unwrap_or_else(|e| panic!("{e}"));
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    let format = engine_core::reference::format::Format::standard();
+    let entries = |spec: &[(&str, bool)]| -> Vec<Entry> {
+        spec.iter()
+            .map(|(id, ban)| {
+                if *ban {
+                    Entry::Ban(idx(id))
+                } else {
+                    Entry::Pick(idx(id))
+                }
+            })
+            .collect()
+    };
+    let bans: Vec<(&str, bool)> = ["K1", "K2", "K3", "K4", "K5", "K6"]
+        .iter()
+        .map(|id| (*id, true))
+        .collect();
+
+    // Blue to pick first, nothing locked.
+    let pools = Pools {
+        blue: set(&["BJ", "BS", "BS2", "FA", "FB", "FC"]),
+        red: set(&["R1", "R2", "R3", "R4", "R5"]),
+    };
+    let first = entries(&bans);
+    let position = Position::new(&format, &first, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let mut memo = FeasibilityMemo::default();
+    assert_eq!(
+        critical_pool(&mut memo, Side::Blue, &position, &pools, &u),
+        set(&["BJ", "FA", "FB", "FC"]),
+        "the sole jungler and the three flex champions; neither support"
+    );
+    assert_eq!(
+        critical_pool(&mut memo, Side::Red, &position, &pools, &u),
+        set(&["R1", "R2", "R3", "R4", "R5"]),
+        "a pool of five sole covers is all critical"
+    );
+
+    // Blue has locked two tops (slots 6, 9): no matching, so nothing in the pool can move its count.
+    let mut broken_spec = bans.clone();
+    broken_spec.extend([("BT", false), ("R1", false), ("R2", false), ("BT2", false)]);
+    let broken_entries = entries(&broken_spec);
+    let broken_pools = Pools {
+        blue: set(&["BT", "BT2", "BJ", "BS", "FA", "FB"]),
+        red: pools.red,
+    };
+    let broken = Position::new(&format, &broken_entries, &broken_pools, &u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(broken.picks(Side::Blue).len(), 2);
+    assert_eq!(
+        critical_pool(&mut memo, Side::Blue, &broken, &broken_pools, &u),
+        ChampionSet::EMPTY,
+        "an unmatchable locked set is the empty set"
+    );
+
+    // Slot 19: Blue's five picks are in, Red's last pick is next.
+    let mut done_spec = bans.clone();
+    done_spec.extend([
+        ("BJ", false),
+        ("R1", false),
+        ("R2", false),
+        ("BS", false),
+        ("FA", false),
+        ("R3", false),
+        ("K7", true),
+        ("K8", true),
+        ("K9", true),
+        ("K10", true),
+        ("R4", false),
+        ("BM", false),
+        ("BA", false),
+    ]);
+    let done_entries = entries(&done_spec);
+    let done_pools = Pools {
+        blue: pools.blue.union(set(&["BM", "BA"])),
+        red: pools.red,
+    };
+    let done =
+        Position::new(&format, &done_entries, &done_pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!((done.slot_index(), done.picks(Side::Blue).len()), (19, 5));
+    assert!(!done_pools.blue.intersect(done.available(&u)).is_empty());
+    assert_eq!(
+        critical_pool(&mut memo, Side::Blue, &done, &done_pools, &u),
+        ChampionSet::EMPTY,
+        "no pick left, nothing forced"
+    );
 }
 
 /// Review round 4's reachable defect (the user's small-pool case at the last pick): five locked

@@ -65,6 +65,40 @@ pub(crate) fn max_role_matching(
     max_bipartite_matching(&masks)
 }
 
+/// Which of `champions` one maximum role assignment matches (`true` = assigned a role), in input order:
+/// the same augmenting-path pass as `max_role_matching`, so the count of `true` is exactly its size. A
+/// champion left `false` is not critical — the same assignment survives its removal — which is what lets
+/// `reference::feasibility::critical_pool` re-rank only the matched ones (snipe-key design, fact 2).
+pub(crate) fn max_role_assignment(
+    champions: &[String],
+    meta: &HashMap<String, ChampionMeta>,
+) -> Vec<bool> {
+    let masks: Vec<RoleMask> = champions
+        .iter()
+        .map(|c| champion_role_mask(c, meta))
+        .collect();
+    max_assignment(&masks)
+}
+
+fn max_assignment(champion_masks: &[RoleMask]) -> Vec<bool> {
+    let mut role_to_champ: [Option<usize>; 5] = [None; 5];
+    for (champ_idx, &mask) in champion_masks.iter().enumerate() {
+        let mut visited = [false; 5];
+        try_augment(
+            champ_idx,
+            mask,
+            champion_masks,
+            &mut role_to_champ,
+            &mut visited,
+        );
+    }
+    let mut matched = vec![false; champion_masks.len()];
+    for champ_idx in role_to_champ.into_iter().flatten() {
+        matched[champ_idx] = true;
+    }
+    matched
+}
+
 fn try_augment(
     champ_idx: usize,
     champ_mask: RoleMask,
@@ -136,4 +170,42 @@ pub fn can_complete_roles(
     all_masks.extend(pool.iter().map(|c| champion_role_mask(c, meta)));
 
     max_bipartite_matching(&all_masks) >= 5
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{max_assignment, max_bipartite_matching, RoleMask};
+
+    /// Snipe-key design § 3 test 4: on every combination of up to four role masks (each of the 32
+    /// masks, the empty one included) the assignment marks exactly as many champions as the maximum
+    /// matching has, and the marked champions alone still match that many — they sit on distinct
+    /// playable roles.
+    #[test]
+    fn max_assignment_marks_one_maximum_matching() {
+        let mut combos: Vec<Vec<RoleMask>> = vec![Vec::new()];
+        for _ in 0..4 {
+            combos = combos
+                .iter()
+                .flat_map(|c| {
+                    (0..32u8).map(move |m| {
+                        let mut next = c.clone();
+                        next.push(m);
+                        next
+                    })
+                })
+                .collect();
+            for masks in &combos {
+                let matched = max_assignment(masks);
+                let size = max_bipartite_matching(masks);
+                assert_eq!(matched.iter().filter(|m| **m).count(), size, "{masks:?}");
+                let kept: Vec<RoleMask> = masks
+                    .iter()
+                    .zip(&matched)
+                    .filter(|(_, m)| **m)
+                    .map(|(mask, _)| *mask)
+                    .collect();
+                assert_eq!(max_bipartite_matching(&kept), size, "{masks:?}");
+            }
+        }
+    }
 }

@@ -5,7 +5,7 @@
 use super::state::{Pools, Position};
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::Side;
-use crate::feasibility::{can_complete_roles, max_role_matching};
+use crate::feasibility::{can_complete_roles, max_role_assignment, max_role_matching};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -63,12 +63,14 @@ impl FeasibilityRule {
 /// test, and the whole answer when they cannot (round 5: at the sample's slot 7 the 238 Red pairs
 /// of two sole-ADCs are queried against the roster at every leaf below them, `available` differs
 /// per leaf, and each miss ran the string predicate over ≈ 165 names — the live rule cost 2× the
-/// gate's time and memory for that alone).
+/// gate's time and memory for that alone). `critical` memoises `critical_pool` on `(side, locked set,
+/// pool net)` (the snipe-aware key, design `engine-snipe-key-design.md` § 2).
 #[derive(Debug, Default)]
 pub struct FeasibilityMemo {
     memo: HashMap<(Side, ChampionSet, ChampionSet), bool>,
     ranks: HashMap<(Side, ChampionSet, ChampionSet), usize>,
     locked: HashMap<(Side, ChampionSet), bool>,
+    critical: HashMap<(Side, ChampionSet, ChampionSet), ChampionSet>,
     pub calls: u64,
     pub misses: u64,
 }
@@ -157,6 +159,56 @@ pub fn off_pool_count(
         remaining.saturating_sub(rank.saturating_sub(position.picks(side).len()))
     };
     made + forced
+}
+
+/// The snipe-aware key's input (design `engine-snipe-key-design.md` § 1): the champions of `side`'s pool
+/// net whose removal lowers `rank(locked ∪ pool net)` — each one the opponent takes adds exactly one to
+/// `side`'s forced off-pool count, since that count is `5 − rank` (the design's fact 1). Only a champion
+/// one maximum assignment matches can be critical (fact 2), so this is one assignment plus at most
+/// `5 − |locked|` re-ranks per distinct `(side, locked, pool net)`, memoised in `memo.critical`; two
+/// critical champions taken together lower the rank by exactly two (fact 3: they are coloops). Empty,
+/// without a matching, when the count cannot move: `side` has no pick left (a cost gate: five matched
+/// locked picks already hold the rank at five), or its locked picks cannot be matched (the comp is
+/// broken whatever the pool holds). `off_pool_count`'s third gate — the roster cannot complete
+/// either — is left out on purpose: its candidate set is everything available, which differs at every
+/// node and would miss the memo each time; it affects ordering only, never a leaf.
+pub fn critical_pool(
+    memo: &mut FeasibilityMemo,
+    side: Side,
+    position: &Position<'_>,
+    pools: &Pools,
+    universe: &Universe,
+) -> ChampionSet {
+    let locked = position.picks(side);
+    let remaining = position
+        .format()
+        .picks_remaining(side, position.slot_index());
+    if remaining == 0 || !locked_matchable(memo, side, locked, universe) {
+        return ChampionSet::EMPTY;
+    }
+    let pool_net = pools.for_side(side).intersect(position.available(universe));
+    let locked_set: ChampionSet = locked.iter().copied().collect();
+    let key = (side, locked_set, pool_net);
+    if let Some(&known) = memo.critical.get(&key) {
+        return known;
+    }
+    let pool: Vec<ChampionIdx> = pool_net.iter().collect();
+    let mut names = universe.names(locked);
+    names.extend(universe.names(&pool));
+    let matched = max_role_assignment(&names, universe.champion_meta());
+    let rank = matched.iter().filter(|m| **m).count();
+    let mut critical = ChampionSet::EMPTY;
+    for (&c, _) in pool
+        .iter()
+        .zip(&matched[locked.len()..])
+        .filter(|(_, m)| **m)
+    {
+        if role_rank(memo, side, position, pool_net.without(c), universe) < rank {
+            critical = critical.with(c);
+        }
+    }
+    memo.critical.insert(key, critical);
+    critical
 }
 
 /// The size of the largest role assignment over `locked ∪ candidates`, memoised like the predicate.
