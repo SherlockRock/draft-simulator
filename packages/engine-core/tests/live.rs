@@ -1149,10 +1149,19 @@ fn measure_depth_two_on_every_sample_root() {
 /// `B_PROPER_RULE` (`roster` | `pool_or_roster`), `B_PROPER_WIDTHS` (`singles,pairs,root_off_pool`
 /// or `none`), `B_PROPER_DEPTH` (the deepest horizon, default 3), `B_PROPER_BUDGET` (node budget per
 /// search, default 20 000 000; a cut iteration is reported `partial`) — on the sample's three roots
-/// and the four 2026-09-27 smoke positions, under `roster` at `DEFAULT_OFF_POOL_COST`. One `GRID |`
-/// row per completed depth: cumulative milliseconds, the counts, the root fan and searched count,
-/// the top action and top-set size. Peak RSS comes from the driver (`/usr/bin/time -v`), one process
-/// per configuration. `cargo test --release -p engine-core --test live -- --ignored --nocapture grid`
+/// and the four 2026-09-27 smoke positions, under `roster` at `B_PROPER_P` (default
+/// `DEFAULT_OFF_POOL_COST`; the 2026-09-27 grid ran at 0.15). `B_PROPER_SNIPE_KEY` (`on` | `off`,
+/// default `off`) sets `SearchParams::snipe_key` (snipe-key design § 4). One `GRID |` row per
+/// completed depth: cumulative milliseconds, the counts, the root fan and searched count, the top
+/// action and top-set size, the margin against the other pool class, then (appended, so the older
+/// columns keep their places) the key, the children it charged, and Blue's and Red's FORCED off-pool
+/// counts at the top line's leaf (each side's count less its own off-pool picks on the line); one
+/// `GRID-ACTION |` row per searched root action and completed depth: its value (shortest round-trip
+/// form, so the fidelity reading can compare at 1e-9), its continuation and the two forced counts at
+/// its leaf. `B_PROPER_ROOTS` (comma-separated labels, default all seven) restricts the roots — the
+/// exact `roster` reference at a larger budget runs only where its depth 2 can finish. Peak RSS comes from the
+/// driver (`/usr/bin/time -v`), one process per configuration.
+/// `cargo test --release -p engine-core --test live -- --ignored --nocapture grid`
 #[test]
 #[ignore = "measurement, not a gate: cargo test --release --test live -- --ignored --nocapture grid"]
 fn measure_b_proper_width_grid() {
@@ -1193,7 +1202,16 @@ fn measure_b_proper_width_grid() {
     let budget: u64 = std::env::var("B_PROPER_BUDGET")
         .ok()
         .map_or(20_000_000, |b| b.parse().expect("B_PROPER_BUDGET"));
-    let off_pool_cost = (rule == FeasibilityRule::Roster).then_some(DEFAULT_OFF_POOL_COST);
+    let p: f64 = std::env::var("B_PROPER_P")
+        .ok()
+        .map_or(DEFAULT_OFF_POOL_COST, |p| p.parse().expect("B_PROPER_P"));
+    let off_pool_cost = (rule == FeasibilityRule::Roster).then_some(p);
+    let snipe_key = match std::env::var("B_PROPER_SNIPE_KEY").as_deref() {
+        Ok("on") => true,
+        Ok("off") | Err(_) => false,
+        Ok(other) => panic!("B_PROPER_SNIPE_KEY {other:?}"),
+    };
+    let key_name = if snipe_key { "on" } else { "off" };
     let mut roots: Vec<(String, LiveRoot)> = Vec::new();
     for (events, label) in [
         (2usize, "sample-slot-2-blue-ban"),
@@ -1214,17 +1232,49 @@ fn measure_b_proper_width_grid() {
     ] {
         roots.push((name.to_string(), smoke(&live, name).root));
     }
+    if let Ok(only) = std::env::var("B_PROPER_ROOTS") {
+        let only: Vec<&str> = only.split(',').map(str::trim).collect();
+        roots.retain(|(label, _)| only.contains(&label.as_str()));
+        assert_eq!(
+            roots.len(),
+            only.len(),
+            "B_PROPER_ROOTS names an unknown root"
+        );
+    }
     let rule_name = match rule {
         FeasibilityRule::Roster => "roster",
         FeasibilityRule::PoolOrRoster => "pool_or_roster",
         _ => unreachable!(),
     };
-    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top");
+    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top | snipe_key | snipe_charged | top_blue_forced | top_red_forced");
+    println!("GRID-ACTION-HEADER | root | rule | widths | snipe_key | depth | partial | action | value | continuation | blue_forced | red_forced");
     for (label, root) in &roots {
         let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
         let started = std::time::Instant::now();
         let mover = position.mover().expect("a root");
         let pool = root.pools.for_side(mover);
+        // Each side's FORCED off-pool count at a line's leaf — its off-pool count less its own
+        // off-pool picks on the line (review round 1: a side that CHOSE the roster is not sniped; and
+        // either side can be sniped, whoever moves at the root): "blue red".
+        let forced = |r: &engine_core::reference::search::RankedAction| {
+            let leaf = r
+                .continuation
+                .iter()
+                .fold(position.apply(r.action), |p, a| p.apply(*a));
+            let of = |side: Side, off: usize| {
+                let made = leaf
+                    .picks(side)
+                    .iter()
+                    .filter(|c| !root.pools.for_side(side).contains(**c))
+                    .count();
+                off.saturating_sub(made)
+            };
+            format!(
+                "{} | {}",
+                of(Side::Blue, r.ends.blue_off_pool),
+                of(Side::Red, r.ends.red_off_pool)
+            )
+        };
         let pick_root = position
             .next_slot()
             .is_some_and(|s| s.action == ActionType::Pick);
@@ -1273,7 +1323,7 @@ fn measure_b_proper_width_grid() {
                 _ => ("-".to_string(), "-".to_string(), "-".to_string()),
             };
             println!(
-                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other}",
+                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other} | {key_name} | {} | {}",
                 o.depth,
                 partial,
                 started.elapsed().as_millis(),
@@ -1286,8 +1336,20 @@ fn measure_b_proper_width_grid() {
                 o.root_fan,
                 o.ranked.len(),
                 top,
-                o.top_set.len()
+                o.top_set.len(),
+                o.snipe_charged,
+                o.ranked.first().map_or("- | -".to_string(), forced)
             );
+            for r in &o.ranked {
+                println!(
+                    "GRID-ACTION | {label} | {rule_name} | {widths} | {key_name} | {} | {partial} | {} | {} | {} | {}",
+                    o.depth,
+                    name(&r.action),
+                    r.value,
+                    r.continuation.iter().map(name).collect::<Vec<_>>().join(" "),
+                    forced(r)
+                );
+            }
         };
         let result = search(
             &OracleInput {
@@ -1304,6 +1366,7 @@ fn measure_b_proper_width_grid() {
                 node_budget: Some(budget),
                 shortlist,
                 wall_budget: Duration::from_secs(86_400),
+                snipe_key,
                 ..SearchParams::default()
             },
             &CancelHandle::new(),
