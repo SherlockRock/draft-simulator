@@ -67,6 +67,7 @@ fn params(prune: bool, transposition: bool, node_budget: Option<u64>) -> SearchP
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
         shortlist: None,
+        snipe_key: false,
     }
 }
 
@@ -444,6 +445,46 @@ fn every_fixture_file_has_a_test() {
             .len(),
         FIXTURES.len()
     );
+}
+
+/// Snipe-key design § 3 test 5 (the gate half): under `On` / `Off` the off-pool term never rides the
+/// key, so the snipe-aware key changes nothing on any fixture — values, continuations and every count
+/// bit for bit, no child charged — and fixture 04 keeps its candidate counts (2500 nodes, 714
+/// cutoffs, 80 table hits).
+#[test]
+fn the_snipe_key_is_inert_on_every_fixture() {
+    for name in FIXTURES {
+        let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let off = candidate(&fx, fx.mode, &params(true, true, None));
+        let on = candidate(
+            &fx,
+            fx.mode,
+            &SearchParams {
+                snipe_key: true,
+                ..params(true, true, None)
+            },
+        );
+        let view = |o: &SearchOutcome| {
+            (
+                o.ranked
+                    .iter()
+                    .map(|r| (r.action, r.value.to_bits(), r.continuation.clone()))
+                    .collect::<Vec<_>>(),
+                o.nodes,
+                o.leaves,
+                o.orderings,
+                o.cutoffs,
+                o.table_hits,
+                o.snipe_charged,
+            )
+        };
+        assert_eq!(view(&on), view(&off), "{name}");
+        assert_eq!(on.snipe_charged, 0, "{name}");
+        if name == "04-partner-protection" {
+            assert_eq!((on.nodes, on.cutoffs, on.table_hits), (2500, 714, 80));
+        }
+    }
 }
 
 /// technique_vacuous_gate: a search that never prunes, or a table that never hits, passes every equality above.

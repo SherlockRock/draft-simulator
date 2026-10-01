@@ -10,7 +10,9 @@
 //! the best off-pool ones (`root_shortlist`), and `SearchOutcome::root_fan` says what was left out.
 //! Truncation is not exact; `None` is the exact search of slice 4.
 
-use super::feasibility::{locked_matchable, side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::feasibility::{
+    critical_pool, locked_matchable, side_feasible, FeasibilityMemo, FeasibilityRule,
+};
 use super::format::Slot;
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::{Leaf, Objective};
@@ -56,6 +58,12 @@ pub struct SearchParams {
     pub min_completed_depth: usize,
     /// B-proper § 2: `Some` truncates every pick fan (see `Shortlist`); `None` is exact.
     pub shortlist: Option<Shortlist>,
+    /// The snipe-aware ordering key (design `engine-snipe-key-design.md`): `false` = today's ordering,
+    /// byte for byte; `true` = wherever the off-pool term rides the key, each champion an action takes
+    /// from the opponent's critical pool (`feasibility::critical_pool`) adds P in the mover's favour —
+    /// the opponent's forced-term delta. An ordering heuristic: truncation is still not exact, and the
+    /// leaves are priced as before.
+    pub snipe_key: bool,
 }
 
 impl Default for SearchParams {
@@ -67,6 +75,7 @@ impl Default for SearchParams {
             wall_budget: Duration::from_secs(86_400),
             min_completed_depth: 1,
             shortlist: None,
+            snipe_key: false,
         }
     }
 }
@@ -118,6 +127,9 @@ pub struct SearchOutcome {
     pub orderings: u64,
     pub cutoffs: u64,
     pub table_hits: u64,
+    /// Children this iteration whose ordering key took the snipe term (`SearchParams::snipe_key`);
+    /// 0 with the flag off or where the key does not ride.
+    pub snipe_charged: u64,
     /// Every iteration so far — what `node_budget` is measured against.
     pub nodes_total: u64,
     /// Table lookups answered over the whole search (the table lives across iterations).
@@ -150,20 +162,32 @@ fn invalid(err: impl std::fmt::Display) -> EngineError {
 /// pool, P)` where the caller charges the off-pool term — under `Roster` always, under `PoolOrRoster`
 /// when a shortlist is set (`Iteration::order` decides) — and each champion an action names outside
 /// the pool then costs P in the KEY (Blue subtracts, Red adds), so an off-pool child is ordered net of
-/// its cost; `None` gives the board alone, as slice 4 built it.
-/// Neither the forced term nor the feasibility flags enter the key (cost; both stay leaf-priced). A
-/// pure function of its arguments: the purity the transposition table needs (slice-5 § 8).
+/// its cost; `None` gives the board alone, as slice 4 built it. `snipe` is the opponent's critical
+/// pool (`feasibility::critical_pool`) where the snipe-aware key applies: each champion of the action
+/// in it adds the same P in the mover's favour (Blue adds, Red subtracts) — the opponent's forced-term
+/// delta, exact for any two critical champions (design fact 3); it rides only with `off_pool`, whose P
+/// it reads, and `None` is the function as B-proper built it. With `snipe` set, equal keys order the
+/// child with fewer off-pool picks first, then canonically (the dry run, 2026-09-30): an off-pool
+/// snipe is P-neutral in the key (made P against the victim's forced P), so it ties an in-pool move of
+/// equal board, and the key cannot see the victim's roster replacement that makes the snipe weakly
+/// worse. The mover's own forced term and the feasibility flags stay out of the key (cost; both stay
+/// leaf-priced). A pure function of its arguments: the purity the transposition table needs (slice-5
+/// § 8).
 pub fn static_order(
     objective: &dyn Objective,
     position: &Position<'_>,
     side: Side,
     actions: Vec<Action>,
     off_pool: Option<(ChampionSet, f64)>,
+    snipe: Option<ChampionSet>,
 ) -> Vec<Action> {
-    let mut keyed: Vec<(f64, Action)> = actions
+    // (key, the snipe tie-break's off-pool count — 0 without `snipe`, so equal keys stay canonical —,
+    // the action).
+    let mut keyed: Vec<(f64, usize, Action)> = actions
         .into_iter()
         .map(|a| {
             let child = position.apply(a);
+            let mut tie = 0;
             let mut v = objective.value(&Leaf {
                 blue: child.picks(Side::Blue),
                 red: child.picks(Side::Red),
@@ -172,6 +196,9 @@ pub fn static_order(
             });
             if let Some((pool, p)) = off_pool {
                 let made = a.champions().filter(|c| !pool.contains(*c)).count();
+                if snipe.is_some() {
+                    tie = made;
+                }
                 if made > 0 {
                     // ≤ 2 champions per action, so the conversion is exact.
                     let charge = f64::from(u8::try_from(made).unwrap_or(u8::MAX)) * p;
@@ -180,8 +207,18 @@ pub fn static_order(
                         Side::Red => v + charge,
                     };
                 }
+                if let Some(critical) = snipe {
+                    let sniped = a.champions().filter(|c| critical.contains(*c)).count();
+                    if sniped > 0 {
+                        let gain = f64::from(u8::try_from(sniped).unwrap_or(u8::MAX)) * p;
+                        v = match side {
+                            Side::Blue => v + gain,
+                            Side::Red => v - gain,
+                        };
+                    }
+                }
             }
-            (v, a)
+            (v, tie, a)
         })
         .collect();
     keyed.sort_by(|x, y| {
@@ -192,8 +229,9 @@ pub fn static_order(
         by_value
             .expect("objective values are finite (Objective contract)")
             .then(x.1.cmp(&y.1))
+            .then(x.2.cmp(&y.2))
     });
-    keyed.into_iter().map(|(_, a)| a).collect()
+    keyed.into_iter().map(|(_, _, a)| a).collect()
 }
 
 /// What the shortlist's feasibility filter reads (B-proper § 2): the rule (the filter runs under the
@@ -301,6 +339,7 @@ struct Iteration<'i, 'a> {
     orderings: u64,
     cutoffs: u64,
     table_hits: u64,
+    snipe_charged: u64,
 }
 
 impl Iteration<'_, '_> {
@@ -337,8 +376,9 @@ impl Iteration<'_, '_> {
     }
 
     /// R4: children by the static utility of the child position, best first for the mover; equal values
-    /// keep canonical order (`static_order`; under `Roster` the key carries the off-pool term). Bans have
-    /// no term (D3 iii), so a ban slot's children are all equal: they are returned in canonical order
+    /// keep canonical order (`static_order`; under `Roster` the key carries the off-pool term, and with
+    /// `SearchParams::snipe_key` the opponent's critical pool wherever that term rides). Bans have no
+    /// term (D3 iii), so a ban slot's children are all equal: they are returned in canonical order
     /// without evaluating anything.
     fn order(&mut self, position: &Position<'_>, slot: Slot, actions: Vec<Action>) -> Vec<Action> {
         if slot.action == ActionType::Ban {
@@ -361,7 +401,32 @@ impl Iteration<'_, '_> {
                 self.shared.off_pool_cost,
             )
         });
-        static_order(self.input.objective, position, slot.side, actions, off_pool)
+        // The snipe-aware key (design `engine-snipe-key-design.md` § 1): once per node, the opponent's
+        // critical pool; memoised on the opponent's state, so the table is never read.
+        let snipe = (charged && self.params.snipe_key).then(|| {
+            critical_pool(
+                &mut self.shared.memo,
+                slot.side.opposite(),
+                position,
+                self.input.pools,
+                self.input.universe,
+            )
+        });
+        if let Some(critical) = snipe.filter(|c| !c.is_empty()) {
+            let sniping = actions
+                .iter()
+                .filter(|a| a.champions().any(|c| critical.contains(c)))
+                .count();
+            self.snipe_charged += u64::try_from(sniping).unwrap_or(u64::MAX);
+        }
+        static_order(
+            self.input.objective,
+            position,
+            slot.side,
+            actions,
+            off_pool,
+            snipe,
+        )
     }
 
     /// An interior pick node's children under the shortlist (B-proper § 2); every child without one.
@@ -589,6 +654,7 @@ impl Iteration<'_, '_> {
             orderings: self.orderings,
             cutoffs: self.cutoffs,
             table_hits: self.table_hits,
+            snipe_charged: self.snipe_charged,
             nodes_total: self.shared.nodes_total,
             table_hits_total: self.shared.table.hits(),
             table_entries: u64::try_from(self.shared.table.len()).unwrap_or(u64::MAX),
@@ -682,6 +748,7 @@ pub fn search(
                 orderings: 0,
                 cutoffs: 0,
                 table_hits: 0,
+                snipe_charged: 0,
             }
             .run()?;
             Ok(SearchResult {

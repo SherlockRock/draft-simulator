@@ -75,6 +75,7 @@ fn unbudgeted(prune: bool, transposition: bool) -> SearchParams {
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
         shortlist: None,
+        snipe_key: false,
     }
 }
 

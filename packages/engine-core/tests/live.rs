@@ -603,6 +603,7 @@ fn params(node_budget: Option<u64>) -> SearchParams {
         wall_budget: Duration::from_secs(86_400),
         min_completed_depth: 1,
         shortlist: None,
+        snipe_key: false,
     }
 }
 
@@ -1992,7 +1993,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
     let mut memo = FeasibilityMemo::default();
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 45);
-    let ordered = static_order(&u, &position, Side::Red, actions, None);
+    let ordered = static_order(&u, &position, Side::Red, actions, None, None);
     let adc = |c: ChampionIdx| u.champion_meta()[u.id(c)].positions == [Role::Adc];
     let top = |c: ChampionIdx| u.champion_meta()[u.id(c)].positions == [Role::Top];
     let breaks = |a: &Action| {
@@ -2105,7 +2106,7 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 6, "BA X K7 K8 K9 K10");
     let first_two = |off_pool: Option<(ChampionSet, f64)>| -> Vec<Action> {
-        static_order(&u, &position, Side::Blue, actions.clone(), off_pool)[..2].to_vec()
+        static_order(&u, &position, Side::Blue, actions.clone(), off_pool, None)[..2].to_vec()
     };
     assert_eq!(
         first_two(None),
@@ -2121,26 +2122,11 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
     );
 }
 
-/// Review round 1 (Opus judgement, Important 1): under `pool_or_roster` a shortlist must order by the
-/// off-pool term too, or a widened node's truncation keeps the board-best child and drops the
-/// count-minimal one — values off by whole multiples of L. Blue's pool has no ADC (BT BJ BM locked,
-/// BS left), the roster holds a support SX worth 0.5 and two ADCs; at Blue's pair the board-best
-/// pair is SX + A1 (0.5, two off-pool picks, −2L) while the count-minimal BS + A1 is 0 with one
-/// (−L). A second spare support SY keeps every line's comps alive (review round 2: without it the
-/// SX ban's exact line was a both-broken S11 tie). Blue's ban at slot 15, horizon 3, widths
-/// (1, 1, 1), oracle-checked. Engine-printed facts (two hand derivations were wrong before the lines
-/// were read): banning Red's ADC or support is a denial worth +L (Red is forced off-pool), so RA / RS
-/// sit at 0 and every other ban at −L; with the made term in the key, width 1 reproduces the exact
-/// value on every ban but one. **The residual:**
-/// after the self-ban BS the exact best line is a SNIPE — Blue takes Red's only support RS (two
-/// off-pool picks, −2L) and Red's forced count pays one back (+L), −L in all — which the key cannot
-/// see: it carries the mover's made count, not the opponent's forced term (a matching per candidate,
-/// unaffordable at 13 695-wide fans), so width 1 keeps SX + A1 at 0.5 − 2L instead. Under
-/// `pool_or_roster` that error is L-sized; under `roster` it is P-sized. Recorded in the design
-/// (§ 2, § 9): the lexicographic arm of the report runs at width B or wider for this reason.
-#[test]
-fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
-    use engine_core::reference::oracle::evaluate;
+/// The ordering-term probe's board (B-proper § 7 test 15; the snipe-key design's tests 1 and 2): Blue's
+/// ban at slot 15, Blue's pool without an ADC (BT BJ BM locked, BS left), Red's pool one champion per
+/// role (RT RJ RM locked, RA RS left), a roster support SX worth `sx`, a spare support SY and two
+/// roster ADCs. L = 2 at `sx` = 0.5.
+fn ordering_term_probe(sx: f64) -> (Universe, Pools, Vec<Entry>) {
     let u = band_universe(&[
         ("BT", Role::Top, 0.0),
         ("BJ", Role::Jungle, 0.0),
@@ -2151,19 +2137,17 @@ fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
         ("RM", Role::Middle, 0.0),
         ("RA", Role::Adc, 0.0),
         ("RS", Role::Support, 0.0),
-        ("SX", Role::Support, 0.5),
+        ("SX", Role::Support, sx),
         ("SY", Role::Support, 0.0),
         ("A1", Role::Adc, 0.0),
         ("A2", Role::Adc, 0.0),
     ]);
     let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
     let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
-    assert_eq!(u.loss(), 2.0);
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
     };
-    let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = [
         ("K1", true),
         ("K2", true),
@@ -2190,6 +2174,33 @@ fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
         }
     })
     .collect();
+    (u, pools, entries)
+}
+
+/// Review round 1 (Opus judgement, Important 1): under `pool_or_roster` a shortlist must order by the
+/// off-pool term too, or a widened node's truncation keeps the board-best child and drops the
+/// count-minimal one — values off by whole multiples of L. Blue's pool has no ADC (BT BJ BM locked,
+/// BS left), the roster holds a support SX worth 0.5 and two ADCs; at Blue's pair the board-best
+/// pair is SX + A1 (0.5, two off-pool picks, −2L) while the count-minimal BS + A1 is 0 with one
+/// (−L). A second spare support SY keeps every line's comps alive (review round 2: without it the
+/// SX ban's exact line was a both-broken S11 tie). Blue's ban at slot 15, horizon 3, widths
+/// (1, 1, 1), oracle-checked. Engine-printed facts (two hand derivations were wrong before the lines
+/// were read): banning Red's ADC or support is a denial worth +L (Red is forced off-pool), so RA / RS
+/// sit at 0 and every other ban at −L; with the made term in the key, width 1 reproduces the exact
+/// value on every ban but one. **The residual:**
+/// after the self-ban BS the exact best line is a SNIPE — Blue takes Red's only support RS (two
+/// off-pool picks, −2L) and Red's forced count pays one back (+L), −L in all — which the key cannot
+/// see: it carries the mover's made count, not the opponent's forced term (a matching per candidate,
+/// unaffordable at 13 695-wide fans), so width 1 keeps SX + A1 at 0.5 − 2L instead. Under
+/// `pool_or_roster` that error is L-sized; under `roster` it is P-sized. Recorded in the design
+/// (§ 2, § 9): the lexicographic arm of the report runs at width B or wider for this reason.
+#[test]
+fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
+    use engine_core::reference::oracle::evaluate;
+    let (u, pools, entries) = ordering_term_probe(0.5);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    assert_eq!(u.loss(), 2.0);
+    let format = engine_core::reference::format::Format::standard();
     let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
         (
@@ -2289,6 +2300,395 @@ fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
     assert_eq!(
         narrow.ranked[0].action, exact.ranked[0].action,
         "the top action survives"
+    );
+}
+
+/// A ban's value in the ordering-term probe's ranked list (the snipe-key tests).
+fn snipe_probe_value(o: &SearchOutcome, u: &Universe, id: &str) -> f64 {
+    let c = u.index(id).unwrap_or_else(|| panic!("{id}"));
+    o.ranked
+        .iter()
+        .find(|r| r.action == Action::Ban(c))
+        .map(|r| r.value)
+        .unwrap_or_else(|| panic!("{id} not ranked"))
+}
+
+/// A ban's continuation, champion ids joined by `+` per action.
+fn snipe_probe_line(o: &SearchOutcome, u: &Universe, id: &str) -> Vec<String> {
+    let c = u.index(id).unwrap_or_else(|| panic!("{id}"));
+    o.ranked
+        .iter()
+        .find(|r| r.action == Action::Ban(c))
+        .map(|r| {
+            r.continuation
+                .iter()
+                .map(|a| a.champions().map(|c| u.id(c)).collect::<Vec<_>>().join("+"))
+                .collect()
+        })
+        .unwrap_or_else(|| panic!("{id} not ranked"))
+}
+
+/// Widths (1, 1, 1), the snipe-aware key as given.
+fn width_one(snipe_key: bool) -> SearchParams {
+    SearchParams {
+        snipe_key,
+        ..with_shortlist(Shortlist {
+            singles: 1,
+            pairs: 1,
+            root_off_pool: 1,
+        })
+    }
+}
+
+/// Snipe-key design § 3 test 1: the ordering-term probe under `pool_or_roster` at widths (1, 1, 1)
+/// with the flag on. After the self-ban BS the key sees Red's sole support RS as critical and orders
+/// the snipe RS + A1 at −2L + L above SX + A1 at 0.5 − 2L, so BS reaches its exact value −L on the
+/// exact line (RA, then RS + A1); every other ban still equals the exact search bit for bit, and the
+/// top action survives. The flag-off residual (0.5 − 2L) stays pinned in
+/// `under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too`, so the pair shows the flag is
+/// what differs. Dry run (2026-09-30): without the key's tie-break Red's own OFF-pool snipe of BS
+/// (P-neutral: made +L against Blue's forced −L) tied Red's in-pool RA / RS at 0 and won canonically,
+/// and RA / RS came out +0.5 (Blue then took the roster's SX) — the tie-break orders fewer off-pool
+/// picks first at an equal key.
+#[test]
+fn the_snipe_aware_key_finds_the_width_one_snipe_line() {
+    let (u, pools, entries) = ordering_term_probe(0.5);
+    assert_eq!(u.loss(), 2.0);
+    let format = engine_core::reference::format::Format::standard();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: None,
+    };
+    let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let keyed = search(&input, &width_one(true), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    for r in &keyed.ranked {
+        let id = u.id(r
+            .action
+            .champions()
+            .next()
+            .expect("a ban names one champion"));
+        println!(
+            "snipe key, pool_or_roster, width 1: ban {id:>3} {:+.2} line {:?}",
+            r.value,
+            snipe_probe_line(&keyed, &u, id)
+        );
+    }
+    assert_eq!(snipe_probe_value(&keyed, &u, "BS"), -u.loss());
+    assert_eq!(snipe_probe_line(&keyed, &u, "BS"), ["RA", "RS+A1"]);
+    assert_eq!(
+        bits(&keyed),
+        bits(&exact),
+        "every ban equals the exact search"
+    );
+    assert_eq!(keyed.ranked[0].action, exact.ranked[0].action);
+    assert!(keyed.snipe_charged > 0, "the key ran");
+}
+
+/// Snipe-key design § 3 test 2: the same probe under `roster` at P = 0.15, width 1, flag off vs on.
+/// The roster support SX is worth 0.1 here, below P (dry run: at 0.5 it carries itself — SX + A1 at
+/// 0.5 − 2P beats the snipe's −P, so there is no residual to find). Flag off: after the self-ban BS
+/// the key keeps SX + A1 (0.1 − 2P = −0.20) and drops the snipe RS + A1 (−2P, with Red's forced +P
+/// = −P = −0.15): a residual of P − 0.1. Flag on: every ban equals the exact search, oracle-checked.
+/// And on the 0.5 board at the same P the flag-on key still reproduces the exact search on every ban
+/// — the dry run's mutation check: charged at L instead of P, the key's made term buries SX + A1 and
+/// that board comes out wrong (on the 0.1 board both terms scale together and nothing moves).
+#[test]
+fn under_roster_the_snipe_aware_key_finds_the_p_sized_snipe() {
+    use engine_core::reference::oracle::evaluate;
+    let (u, pools, entries) = ordering_term_probe(0.1);
+    let format = engine_core::reference::format::Format::standard();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let p = 0.15;
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::Roster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: Some(p),
+    };
+    let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+    let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let oracle_ranked: Vec<(Action, u64)> = oracle
+        .ranked
+        .iter()
+        .map(|r| (r.action, r.value.to_bits()))
+        .collect();
+    assert_eq!(bits(&exact), oracle_ranked);
+    assert_eq!(snipe_probe_value(&exact, &u, "BS"), -p);
+    assert_eq!(snipe_probe_line(&exact, &u, "BS"), ["RA", "RS+A1"]);
+
+    let off = search(&input, &width_one(false), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(snipe_probe_value(&off, &u, "BS"), 0.1 - 2.0 * p);
+    assert_eq!(snipe_probe_line(&off, &u, "BS"), ["RA", "SX+A1"]);
+    assert_eq!(off.snipe_charged, 0);
+
+    let on = search(&input, &width_one(true), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(bits(&on), bits(&exact), "every ban equals the exact search");
+    assert_eq!(snipe_probe_line(&on, &u, "BS"), ["RA", "RS+A1"]);
+    assert!(on.snipe_charged > 0);
+
+    let (u5, pools5, entries5) = ordering_term_probe(0.5);
+    let position5 =
+        Position::new(&format, &entries5, &pools5, &u5).unwrap_or_else(|e| panic!("{e}"));
+    let input5 = OracleInput {
+        position: &position5,
+        universe: &u5,
+        pools: &pools5,
+        objective: &u5,
+        ..input
+    };
+    let exact5 = search(&input5, &params(None), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    let on5 = search(&input5, &width_one(true), &CancelHandle::new(), |_| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(bits(&on5), bits(&exact5), "the 0.5 board: P-scaled");
+}
+
+/// Snipe-key design § 3 test 5 (the live half; Tier A's is in `tests/tier_a.rs`): under
+/// `pool_or_roster` without a shortlist the off-pool term does not ride the key, so the flag changes
+/// nothing — values, continuations and every count bit for bit, and no child charged. The same under
+/// the gate rule `on`, on the probe's board with overlapping pools (Blue's pool gains A1, Red's gains
+/// BS), where Red's in-pool pick of BS names a champion of Blue's critical pool — so a key that rode
+/// under the gate would charge it (the dry run's mutation check: no Tier A fixture has such a pick,
+/// and at the gate's P = 0 only the count can show it).
+#[test]
+fn without_a_shortlist_the_snipe_key_is_inert_under_pool_or_roster() {
+    let (u, pools, entries) = ordering_term_probe(0.5);
+    let format = engine_core::reference::format::Format::standard();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: None,
+    };
+    let run_with = |snipe_key: bool| {
+        let p = SearchParams {
+            snipe_key,
+            ..params(None)
+        };
+        search(&input, &p, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let (off, on) = (run_with(false), run_with(true));
+    let counts = |o: &SearchOutcome| {
+        (
+            o.nodes,
+            o.leaves,
+            o.orderings,
+            o.cutoffs,
+            o.table_hits,
+            o.table_entries,
+            o.snipe_charged,
+        )
+    };
+    assert_eq!(bits(&on), bits(&off));
+    assert_eq!(
+        on.ranked
+            .iter()
+            .map(|r| &r.continuation)
+            .collect::<Vec<_>>(),
+        off.ranked
+            .iter()
+            .map(|r| &r.continuation)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(counts(&on), counts(&off));
+    assert_eq!(on.snipe_charged, 0);
+
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let overlap = Pools {
+        blue: pools.blue.with(idx("A1")),
+        red: pools.red.with(idx("BS")),
+    };
+    let gated = Position::new(&format, &entries, &overlap, &u).unwrap_or_else(|e| panic!("{e}"));
+    let mut memo = FeasibilityMemo::default();
+    assert_eq!(
+        critical_pool(&mut memo, Side::Blue, &gated, &overlap, &u),
+        [idx("BS"), idx("A1")].into_iter().collect(),
+    );
+    let gate_input = OracleInput {
+        position: &gated,
+        pools: &overlap,
+        feasibility: FeasibilityRule::On,
+        ..input
+    };
+    let gate_with = |snipe_key: bool| {
+        let p = SearchParams {
+            snipe_key,
+            ..params(None)
+        };
+        search(&gate_input, &p, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let (gate_off, gate_on) = (gate_with(false), gate_with(true));
+    assert_eq!(bits(&gate_on), bits(&gate_off));
+    assert_eq!(counts(&gate_on), counts(&gate_off));
+    assert_eq!(gate_on.snipe_charged, 0);
+
+    // Review focus 2: under `roster` the key rides without a shortlist too, and there it may reorder
+    // but never change a value — nothing is dropped (design § 1). The 0.1 board, where the key runs.
+    let (u1, pools1, entries1) = ordering_term_probe(0.1);
+    let position1 =
+        Position::new(&format, &entries1, &pools1, &u1).unwrap_or_else(|e| panic!("{e}"));
+    let roster_input = OracleInput {
+        position: &position1,
+        universe: &u1,
+        pools: &pools1,
+        objective: &u1,
+        feasibility: FeasibilityRule::Roster,
+        off_pool_cost: Some(0.15),
+        ..input
+    };
+    let roster_with = |snipe_key: bool| {
+        let p = SearchParams {
+            snipe_key,
+            ..params(None)
+        };
+        search(&roster_input, &p, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let (roster_off, roster_on) = (roster_with(false), roster_with(true));
+    assert!(roster_on.snipe_charged > 0, "the key ran");
+    assert_eq!(bits(&roster_on), bits(&roster_off), "values cannot move");
+}
+
+/// Review focus 1 (design fact 3): a pair naming two of the opponent's critical champions takes the
+/// snipe term twice. Red's pair at slot 7 under `roster` (P = 0.15), every board value zero; Blue's
+/// pool is one champion per role (BT locked), so BJ BM BA BS are critical. Keys (Red minimises): an
+/// in-pool pair 0; BA + BS off-pool twice and critical twice, 2P − 2P = 0; RA + W (W off-pool, not
+/// critical) +P. So BA + BS sorts before RA + W; counted once it would be +P and sort after (equal
+/// keys order fewer off-pool picks first).
+#[test]
+fn a_pair_of_two_critical_champions_takes_the_snipe_term_twice() {
+    let u = band_universe(&[
+        ("BT", Role::Top, 0.0),
+        ("BJ", Role::Jungle, 0.0),
+        ("BM", Role::Middle, 0.0),
+        ("BA", Role::Adc, 0.0),
+        ("BS", Role::Support, 0.0),
+        ("RT", Role::Top, 0.0),
+        ("RJ", Role::Jungle, 0.0),
+        ("RM", Role::Middle, 0.0),
+        ("RA", Role::Adc, 0.0),
+        ("RS", Role::Support, 0.0),
+        ("W", Role::Top, 0.0),
+    ]);
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let set = |ids: &[&str]| -> ChampionSet { ids.iter().map(|id| idx(id)).collect() };
+    let pools = Pools {
+        blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
+        red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+    };
+    let format = engine_core::reference::format::Format::standard();
+    let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
+        .iter()
+        .map(|id| Entry::Ban(idx(id)))
+        .chain(std::iter::once(Entry::Pick(idx("BT"))))
+        .collect();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Red), 7)
+    );
+    let mut memo = FeasibilityMemo::default();
+    let critical = critical_pool(&mut memo, Side::Blue, &position, &pools, &u);
+    assert_eq!(critical, set(&["BJ", "BM", "BA", "BS"]));
+    let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
+    let ordered = static_order(
+        &u,
+        &position,
+        Side::Red,
+        actions,
+        Some((pools.red, 0.15)),
+        Some(critical),
+    );
+    let at = |a: &str, b: &str| {
+        ordered
+            .iter()
+            .position(|x| *x == Action::pair(idx(a), idx(b)))
+            .unwrap_or_else(|| panic!("{a}+{b}"))
+    };
+    assert!(
+        at("RA", "RS") < at("BA", "BS"),
+        "fewer off-pool picks first"
+    );
+    assert!(
+        at("BA", "BS") < at("RA", "W"),
+        "2P − 2P = 0 sorts before +P"
+    );
+}
+
+/// Snipe-key design § 3 test 6: the key is a function of the position, so the transposition table
+/// stays sound with it on. The ordering-term board one ply earlier — Red's ban at slot 14, then
+/// Blue's ban, Red's pick, Blue's pair (horizon 3 reaches Red's pick after both bans; the two bans
+/// commute, so pick nodes transpose) — under `pool_or_roster` at widths (1, 1, 1): table on and table
+/// off agree bit for bit, values and lines, with hits and charged children, and the flag-on result
+/// differs from flag-off (the key decides what survives here, so the equality is not vacuous). Dry
+/// run: B-proper's purity probe at width 2 could not see an impure key (a key skipped on odd node
+/// counts survived there); this board kills it and a key that reads the table.
+#[test]
+fn the_snipe_aware_key_is_a_pure_function_of_the_position() {
+    let (u, pools, mut entries) = ordering_term_probe(0.5);
+    let slot_14_ban = entries.pop();
+    assert!(matches!(slot_14_ban, Some(Entry::Ban(_))));
+    let format = engine_core::reference::format::Format::standard();
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.mover(), position.slot_index()),
+        (Some(Side::Red), 14)
+    );
+    let input = OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::PoolOrRoster,
+        mode: Mode::Horizon(3),
+        epsilon: 1e-9,
+        off_pool_cost: None,
+    };
+    let run_at = |snipe_key: bool, transposition: bool| {
+        let p = SearchParams {
+            transposition,
+            ..width_one(snipe_key)
+        };
+        search(&input, &p, &CancelHandle::new(), |_| {}).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let lines = |o: &SearchOutcome| {
+        o.ranked
+            .iter()
+            .map(|r| r.continuation.clone())
+            .collect::<Vec<_>>()
+    };
+    let (with_table, without) = (run_at(true, true), run_at(true, false));
+    assert!(
+        with_table.table_hits_total > 0,
+        "the bans commute into a hit"
+    );
+    assert!(with_table.snipe_charged > 0, "the key ran");
+    assert_eq!(bits(&with_table), bits(&without));
+    assert_eq!(lines(&with_table), lines(&without));
+    assert_ne!(
+        bits(&with_table),
+        bits(&run_at(false, true)),
+        "the key decides the width-1 result here"
     );
 }
 
