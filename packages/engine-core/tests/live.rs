@@ -2841,6 +2841,72 @@ fn a_pick_root_ranks_every_in_pool_action_plus_the_best_off_pool() {
     );
 }
 
+/// Snipe-key design § 3 test 8 (the smoke-1 Sylas prediction, held in the dry run 2026-09-30): at
+/// Blue's first pick on smoke-1 Sylas is TL's only remaining mid, so Red's critical pool is
+/// {MonkeyKing, Sylas}. Under `roster` at widths A the flag-off key (board − P) leaves Sylas outside
+/// the 50 off-pool root candidates (the B-proper grid's margin column: he appeared only at B); with
+/// the flag on his key is board − P + P and he enters the root set, at the value the untruncated
+/// root gives him (a root value does not depend on which other actions are searched).
+#[test]
+fn the_snipe_aware_key_brings_smoke_1_sylas_into_the_root_set_at_width_a() {
+    let live = live_universe();
+    let u = &live.universe;
+    let one = smoke(&live, "2026-09-27-smoke-1-blue-first-pick");
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let position = one.root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let mut memo = FeasibilityMemo::default();
+    assert_eq!(
+        critical_pool(&mut memo, Side::Red, &position, &one.root.pools, u),
+        [idx("MonkeyKing"), idx("Sylas")].into_iter().collect(),
+    );
+    let a = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let at = |shortlist: Shortlist, snipe_key: bool| {
+        run_with(
+            &one.root,
+            u,
+            Mode::Horizon(1),
+            &SearchParams {
+                snipe_key,
+                ..with_shortlist(shortlist)
+            },
+            FeasibilityRule::Roster,
+            Some(DEFAULT_OFF_POOL_COST),
+        )
+    };
+    let sylas = |o: &SearchOutcome| {
+        o.ranked
+            .iter()
+            .find(|r| r.action == Action::Pick(idx("Sylas")))
+            .map(|r| r.value.to_bits())
+    };
+    let off = at(a, false);
+    let on = at(a, true);
+    let wide = at(
+        Shortlist {
+            root_off_pool: 1000,
+            ..a
+        },
+        false,
+    );
+    assert_eq!(
+        sylas(&off),
+        None,
+        "flag off: outside the 50 off-pool candidates"
+    );
+    assert_eq!(on.ranked.len(), off.ranked.len(), "the same 17 + 50");
+    assert!(sylas(&wide).is_some());
+    assert_eq!(
+        sylas(&on),
+        sylas(&wide),
+        "flag on: searched, at his root value"
+    );
+    assert!(on.snipe_charged > 0);
+}
+
 /// B-proper § 7 test 12: smoke-2 under `roster` at the default P — Red's pool has no ADC left, so
 /// every line that keeps Red's comp alive carries at least one Red off-pool pick (made now, or forced
 /// at the last pick) and Blue none; a pair that breaks Red's own comp (two tops) sits in the L' band
