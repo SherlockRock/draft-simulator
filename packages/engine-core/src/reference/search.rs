@@ -11,7 +11,8 @@
 //! Truncation is not exact; `None` is the exact search of slice 4.
 
 use super::feasibility::{
-    critical_pool, locked_matchable, side_feasible, tags_for, FeasibilityMemo, FeasibilityRule,
+    action_charge, critical_pool, locked_matchable, side_feasible, tags_for, ActionCharge,
+    FeasibilityMemo, FeasibilityRule,
 };
 use super::format::Slot;
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
@@ -159,10 +160,12 @@ fn invalid(err: impl std::fmt::Display) -> EngineError {
 
 /// R4's static ordering as a free function (B-proper § 2): `actions` by the static utility of the
 /// child position, best first for `side`, equal values in canonical order. `off_pool` is `(the mover's
-/// pool, P)` where the caller charges the off-pool term — under `Roster` always, under `PoolOrRoster`
-/// when a shortlist is set (`Iteration::order` decides) — and each champion an action names outside
-/// the pool then costs P in the KEY (Blue subtracts, Red adds), so an off-pool child is ordered net of
-/// its cost; `None` gives the board alone, as slice 4 built it. `snipe` is the opponent's critical
+/// action charge, P)` where the caller charges the off-pool term — under `Roster` always, under
+/// `PoolOrRoster` when a shortlist is set (`Iteration::order` decides) — and each off-pool pick an
+/// action adds then costs P in the KEY (Blue subtracts, Red adds), so an off-pool child is ordered net
+/// of its cost: on a list pool one per champion the action names outside the pool, on a role-tagged
+/// one the rise in the mover's off-role count (`feasibility::ActionCharge`; role-aware pools design
+/// § 2); `None` gives the board alone, as slice 4 built it. `snipe` is the opponent's critical
 /// pool (`feasibility::critical_pool`) where the snipe-aware key applies: each champion of the action
 /// in it adds the same P in the mover's favour (Blue adds, Red subtracts) — the opponent's forced-term
 /// delta, exact for any two critical champions (design fact 3); it rides only with `off_pool`, whose P
@@ -178,7 +181,7 @@ pub fn static_order(
     position: &Position<'_>,
     side: Side,
     actions: Vec<Action>,
-    off_pool: Option<(ChampionSet, f64)>,
+    off_pool: Option<(ActionCharge<'_>, f64)>,
     snipe: Option<ChampionSet>,
 ) -> Vec<Action> {
     // (key, the snipe tie-break's off-pool count — 0 without `snipe`, so equal keys stay canonical —,
@@ -194,13 +197,14 @@ pub fn static_order(
                 blue_feasible: true,
                 red_feasible: true,
             });
-            if let Some((pool, p)) = off_pool {
-                let made = a.champions().filter(|c| !pool.contains(*c)).count();
+            if let Some((charge, p)) = off_pool {
+                let made = charge.of(a);
                 if snipe.is_some() {
                     tie = made;
                 }
                 if made > 0 {
-                    // ≤ 2 champions per action, so the conversion is exact.
+                    // A handful at most (≤ 2 on a list pool, ≤ 5 on a tagged one), so the conversion
+                    // is exact.
                     let charge = f64::from(u8::try_from(made).unwrap_or(u8::MAX)) * p;
                     v = match side {
                         Side::Blue => v - charge,
@@ -297,19 +301,21 @@ pub fn truncate_children(
         .collect()
 }
 
-/// B-proper § 2 (B6): a pick root's fan under a shortlist — EVERY in-pool action (each champion it
-/// names in the mover's pool; a mixed pair is off-pool) plus the best `off_pool_width` off-pool ones,
-/// chosen as `truncate_children` chooses (feasible first under a live rule, failures fill). Order is
-/// `ordered`'s. Under the gate no off-pool action is legal, so the root is the full gate fan.
+/// B-proper § 2 (B6): a pick root's fan under a shortlist — EVERY in-pool action (one that adds no
+/// off-pool pick, `ActionCharge::of` = 0: on a list pool each champion it names is in the mover's
+/// pool and a mixed pair is off-pool; on a role-tagged one it can be placed in-role beside the locked
+/// picks) plus the best `off_pool_width` off-pool ones, chosen as `truncate_children` chooses
+/// (feasible first under a live rule, failures fill). Order is `ordered`'s. Under the gate no off-pool
+/// action is legal, so the root is the full gate fan.
 pub fn root_shortlist(
     position: &Position<'_>,
     side: Side,
     ordered: Vec<Action>,
-    pool: ChampionSet,
+    charge: &ActionCharge<'_>,
     off_pool_width: usize,
     filter: &mut Filter<'_>,
 ) -> Vec<Action> {
-    let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+    let in_pool = |a: &Action| charge.of(*a) == 0;
     let off: Vec<Action> = ordered.iter().copied().filter(|a| !in_pool(a)).collect();
     let kept: HashSet<Action> = truncate_children(position, side, off, off_pool_width, filter)
         .into_iter()
@@ -398,12 +404,21 @@ impl Iteration<'_, '_> {
             FeasibilityRule::PoolOrRoster => self.params.shortlist.is_some(),
             FeasibilityRule::On | FeasibilityRule::Off => false,
         };
-        let off_pool = charged.then(|| {
-            (
-                self.input.pools.for_side(slot.side),
+        let off_pool = if charged {
+            Some((
+                action_charge(
+                    &mut self.shared.memo,
+                    self.input.feasibility,
+                    slot.side,
+                    position,
+                    self.input.pools,
+                    self.input.universe,
+                ),
                 self.shared.off_pool_cost,
-            )
-        });
+            ))
+        } else {
+            None
+        };
         // The snipe-aware key (design `engine-snipe-key-design.md` § 1): once per node, the opponent's
         // critical pool; memoised on the opponent's state, so the table is never read.
         let snipe = (charged && self.params.snipe_key).then(|| {
@@ -603,7 +618,14 @@ impl Iteration<'_, '_> {
                 root,
                 slot.side,
                 ordered,
-                self.input.pools.for_side(slot.side),
+                &action_charge(
+                    &mut self.shared.memo,
+                    self.input.feasibility,
+                    slot.side,
+                    root,
+                    self.input.pools,
+                    self.input.universe,
+                ),
                 sl.root_off_pool,
                 &mut Filter {
                     rule: self.input.feasibility,

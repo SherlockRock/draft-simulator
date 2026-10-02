@@ -13,18 +13,30 @@ use engine_core::reference::feasibility::{
 use engine_core::reference::format::{Format, Kind, Turn};
 use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::oracle::{evaluate, Mode, OracleError, OracleInput};
-use engine_core::reference::search::{search, SearchParams};
+use engine_core::reference::search::{
+    root_shortlist, search, static_order, truncate_children, Filter, SearchOutcome, SearchParams,
+    Shortlist,
+};
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 
-/// `(id, positions)` per champion, linear term 0, no tables: roles are all these tests read.
+/// `(id, positions)` per champion, linear term 0, no tables: roles are all most of these tests read.
 fn universe(champions: &[(&str, &[&str])]) -> Universe {
+    let valued: Vec<(&str, &[&str], f64)> = champions
+        .iter()
+        .map(|(id, positions)| (*id, *positions, 0.0))
+        .collect();
+    valued_universe(&valued)
+}
+
+/// `(id, positions, linear)` per champion, no tables.
+fn valued_universe(champions: &[(&str, &[&str], f64)]) -> Universe {
     let list: Vec<String> = champions
         .iter()
-        .map(|(id, positions)| {
+        .map(|(id, positions, linear)| {
             let positions: Vec<String> = positions.iter().map(|p| format!("\"{p}\"")).collect();
             format!(
-                r#"{{"id": "{id}", "positions": [{}], "linear": 0}}"#,
+                r#"{{"id": "{id}", "positions": [{}], "linear": {linear}}}"#,
                 positions.join(",")
             )
         })
@@ -44,6 +56,14 @@ fn set(u: &Universe, ids: &[&str]) -> ChampionSet {
 
 /// Two single-role champions per role (`T1 T2 J1 J2 M1 M2 A1 A2 S1 S2`) plus `extra`.
 fn band(extra: &[(&'static str, &'static [&'static str])]) -> Universe {
+    band_with(extra, &[])
+}
+
+/// `band`, with a linear term for the champions named in `linear` (0 for the rest).
+fn band_with(
+    extra: &[(&'static str, &'static [&'static str])],
+    linear: &[(&str, f64)],
+) -> Universe {
     let mut champions: Vec<(&str, &[&str])> = vec![
         ("T1", &["Top"]),
         ("T2", &["Top"]),
@@ -57,7 +77,17 @@ fn band(extra: &[(&'static str, &'static [&'static str])]) -> Universe {
         ("S2", &["Support"]),
     ];
     champions.extend_from_slice(extra);
-    universe(&champions)
+    let valued: Vec<(&str, &[&str], f64)> = champions
+        .iter()
+        .map(|(id, positions)| {
+            let value = linear
+                .iter()
+                .find(|(named, _)| named == id)
+                .map_or(0.0, |(_, value)| *value);
+            (*id, *positions, value)
+        })
+        .collect();
+    valued_universe(&valued)
 }
 
 /// Tags from `(role, ids)` rows.
@@ -227,6 +257,61 @@ fn a_pool_entry_makes_its_role_playable_for_that_side_only() {
     assert!(!feasible(&pools, FeasibilityRule::On, Side::Blue));
 }
 
+/// Design § 2: the shortlist's lazy filter asks `locked_matchable` with the mover's tags. `X` is
+/// Middle-only in the meta and Blue's pool lists it Top. Beside M1 + J1, taking X keeps Blue's comp
+/// arrangeable only through that entry: a role-tagged Blue keeps X as its one child; the same pool as
+/// a list drops it for the next arrangeable child.
+#[test]
+fn the_lazy_filter_matches_a_tagged_side_on_its_playable_roles() {
+    let u = band(&[("X", &["Middle"])]);
+    let format = Format::standard();
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1", "X"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let list = Pools {
+        blue: pools.blue,
+        red: pools.red,
+        ..Pools::default()
+    };
+    // Blue holds M1 + J1 and completes its pair at slot 10.
+    let entries = board(&format, &u, &["M1", "J1"], &["T2", "J2"]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    // A second mid (never arrangeable), then X, then a top.
+    let ordered = vec![
+        Action::Pick(idx(&u, "M2")),
+        Action::Pick(idx(&u, "X")),
+        Action::Pick(idx(&u, "T1")),
+    ];
+    let first = |pools: &Pools| {
+        truncate_children(
+            &root,
+            Side::Blue,
+            ordered.clone(),
+            1,
+            &mut Filter {
+                rule: FeasibilityRule::Roster,
+                memo: &mut FeasibilityMemo::default(),
+                universe: &u,
+                pools,
+            },
+        )
+    };
+    assert_eq!(first(&pools), vec![Action::Pick(idx(&u, "X"))]);
+    assert_eq!(first(&list), vec![Action::Pick(idx(&u, "T1"))]);
+}
+
 fn search_params() -> SearchParams {
     SearchParams {
         node_budget: None,
@@ -313,6 +398,12 @@ fn a_role_tagged_pool_is_refused_where_tags_are_not_read() {
         refusal(&short, &tagged, FeasibilityRule::Roster),
         &["Blue", "picks 1", "five-pick"],
     );
+    // The helpers agree: off five picks the tags are not read, whatever the rule.
+    let one_pick = Position::new(&short, &[], &tagged, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        tags_for(FeasibilityRule::Roster, Side::Blue, &one_pick, &tagged),
+        None
+    );
 
     // The same inputs in list form, and the tagged pool under the live rules: accepted.
     for (format, pools, rule) in [
@@ -362,7 +453,12 @@ fn count(
 /// Blue's pool has no ADC of its own; `V` is listed Middle and the meta lets it play Adc — the
 /// Viktor-at-ADC case. Red's pool is a plain list. Blue holds top, jungle, mid, support and picks last.
 fn off_role_probe() -> (Universe, Pools, Vec<Entry>) {
-    let u = band(&[("V", &["Middle", "Adc"])]);
+    off_role_probe_with(&[])
+}
+
+/// `off_role_probe` with linear terms (the search tests give the roster ADC an edge).
+fn off_role_probe_with(linear: &[(&str, f64)]) -> (Universe, Pools, Vec<Entry>) {
+    let u = band_with(&[("V", &["Middle", "Adc"])], linear);
     let blue = tags(
         &u,
         &[
@@ -1081,4 +1177,491 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
     assert!(broken_cases > 50, "broken {broken_cases}");
     assert!(widened_cases > 50, "widened {widened_cases}");
     assert!(critical_cases > 50, "critical {critical_cases}");
+}
+
+fn exact() -> SearchParams {
+    search_params()
+}
+
+fn shortlisted(root_off_pool: usize, snipe_key: bool) -> SearchParams {
+    SearchParams {
+        shortlist: Some(Shortlist {
+            singles: 5,
+            pairs: 5,
+            root_off_pool,
+        }),
+        snipe_key,
+        ..search_params()
+    }
+}
+
+fn roster_search(
+    position: &Position<'_>,
+    pools: &Pools,
+    u: &Universe,
+    params: &SearchParams,
+    p: f64,
+) -> SearchOutcome {
+    search(
+        &OracleInput {
+            position,
+            universe: u,
+            pools,
+            objective: u,
+            feasibility: FeasibilityRule::Roster,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+            off_pool_cost: Some(p),
+        },
+        params,
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn value_of(outcome: &SearchOutcome, u: &Universe, id: &str) -> f64 {
+    outcome
+        .ranked
+        .iter()
+        .find(|r| r.action == Action::Pick(idx(u, id)))
+        .map(|r| r.value)
+        .unwrap_or_else(|| panic!("{id} is not ranked"))
+}
+
+/// Design § 6 test 11 and the acceptance case in miniature: Blue needs an ADC, its pool lists `V`
+/// for Middle only, and the roster's `A1` is a slightly better ADC (+0.05). With list pools V is "in-
+/// pool" and free, so it wins. With role tags both cost P and the board decides: A1. The ordering key,
+/// the root's in-pool / off-pool split and the leaf charge all agree.
+#[test]
+fn the_search_stops_preferring_the_off_role_fill_once_it_is_priced() {
+    let (u, pools, entries) = off_role_probe_with(&[("A1", 0.05)]);
+    let format = Format::standard();
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let p = 0.1;
+    let close = |a: f64, b: f64| (a - b).abs() < 1e-12;
+
+    // List pools: V is in the set, free; A1 costs P and loses.
+    let list = roster_search(&root, &as_list(&pools), &u, &exact(), p);
+    assert_eq!(list.top_set, vec![Action::Pick(idx(&u, "V"))]);
+    assert!(
+        close(value_of(&list, &u, "V"), 0.0),
+        "{}",
+        value_of(&list, &u, "V")
+    );
+    assert!(close(value_of(&list, &u, "A1"), 0.05 - p));
+
+    // Role tags: V at ADC is off-role and costs the same P; A1's 0.05 decides.
+    let tagged = roster_search(&root, &pools, &u, &exact(), p);
+    assert_eq!(tagged.top_set, vec![Action::Pick(idx(&u, "A1"))]);
+    assert!(close(value_of(&tagged, &u, "A1"), 0.05 - p));
+    assert!(close(value_of(&tagged, &u, "V"), -p));
+    assert_eq!(
+        tagged.root_fan, list.root_fan,
+        "the roster rule fans to everything either way"
+    );
+
+    // No shortlist = the oracle, under tags as under lists: the same ranking, values bit for bit.
+    for pools in [&pools, &as_list(&pools)] {
+        let input = OracleInput {
+            position: &root,
+            universe: &u,
+            pools,
+            objective: &u,
+            feasibility: FeasibilityRule::Roster,
+            mode: Mode::Horizon(1),
+            epsilon: 1e-9,
+            off_pool_cost: Some(p),
+        };
+        let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
+        let searched = roster_search(&root, pools, &u, &exact(), p);
+        assert_eq!(
+            searched
+                .ranked
+                .iter()
+                .map(|r| (r.action, r.value.to_bits()))
+                .collect::<Vec<_>>(),
+            oracle
+                .ranked
+                .iter()
+                .map(|r| (r.action, r.value.to_bits()))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(searched.top_set, oracle.top_set);
+    }
+
+    // The root split under a shortlist: every in-pool action plus the best ONE off-pool. Tagged, no
+    // action is in-pool (V is off-role), so the root is that one action — A1, by the key. As a list V
+    // is in-pool and is kept beside it.
+    let tagged = roster_search(&root, &pools, &u, &shortlisted(1, false), p);
+    let ranked = |o: &SearchOutcome| -> Vec<Action> { o.ranked.iter().map(|r| r.action).collect() };
+    assert_eq!(ranked(&tagged), vec![Action::Pick(idx(&u, "A1"))]);
+    let list = roster_search(&root, &as_list(&pools), &u, &shortlisted(1, false), p);
+    assert_eq!(
+        ranked(&list),
+        vec![Action::Pick(idx(&u, "V")), Action::Pick(idx(&u, "A1"))]
+    );
+
+    // The key itself: V sorts below A1 under tags and above it as a list (Blue: best first).
+    let mut memo = FeasibilityMemo::default();
+    let actions = vec![Action::Pick(idx(&u, "A1")), Action::Pick(idx(&u, "V"))];
+    let order = |pools: &Pools, memo: &mut FeasibilityMemo| {
+        let charge = action_charge(memo, FeasibilityRule::Roster, Side::Blue, &root, pools, &u);
+        static_order(
+            &u,
+            &root,
+            Side::Blue,
+            actions.clone(),
+            Some((charge, p)),
+            None,
+        )
+    };
+    assert_eq!(order(&pools, &mut memo), actions);
+    assert_eq!(
+        order(&as_list(&pools), &mut FeasibilityMemo::default()),
+        vec![actions[1], actions[0]]
+    );
+}
+
+/// Design § 6 tests 12 and 14: an action is charged whole. `X` is listed Top and Middle and can also
+/// play Support. Beside X, a top alone is free (X goes Middle) and a mid alone is free (X goes Top) —
+/// but the PAIR of them pushes X to Support, off-role: one charge, not the sum of two zeros. At a
+/// mid-pair root the first half already on the board counts the same way.
+#[test]
+fn a_pair_is_charged_whole_and_a_mid_pair_root_counts_its_first_half() {
+    let u = band(&[("X", &["Top", "Middle", "Support"])]);
+    let format = Format::standard();
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1", "X"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1", "X"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let rule = FeasibilityRule::Roster;
+    let (t1, j1, m1) = (idx(&u, "T1"), idx(&u, "J1"), idx(&u, "M1"));
+
+    // Blue holds X and starts its pair at slot 9.
+    let entries = board(&format, &u, &["X"], &["T2", "J2"]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert!(root
+        .next_slot()
+        .is_some_and(|s| s.pair_start && s.side == Side::Blue));
+    let mut memo = FeasibilityMemo::default();
+    let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
+    assert_eq!(charge.of(Action::Pick(t1)), 0);
+    assert_eq!(charge.of(Action::Pick(m1)), 0);
+    assert_eq!(charge.of(Action::pair(t1, m1)), 1);
+    assert_eq!(charge.of(Action::pair(t1, j1)), 0);
+    // As a list the same pair is two pool champions: free.
+    let list = as_list(&pools);
+    let by_list = action_charge(&mut memo, rule, Side::Blue, &root, &list, &u);
+    assert_eq!(by_list.of(Action::pair(t1, m1)), 0);
+
+    // The key orders by it (every board value here is 0, so the key IS −P × the charge)...
+    let actions = legal_actions_under(&root, &u, &pools, rule, &mut memo);
+    let ordered = static_order(
+        &u,
+        &root,
+        Side::Blue,
+        actions.clone(),
+        Some((charge, 0.1)),
+        None,
+    );
+    let charges: Vec<usize> = ordered.iter().map(|a| charge.of(*a)).collect();
+    assert!(charges.windows(2).all(|w| w[0] <= w[1]), "{charges:?}");
+    let in_pool = charges.iter().filter(|c| **c == 0).count();
+    assert!(in_pool > 0 && in_pool < ordered.len());
+    // ...and the root keeps every in-pool pair plus one more — never the displacing pair as in-pool.
+    let kept = root_shortlist(
+        &root,
+        Side::Blue,
+        ordered.clone(),
+        &charge,
+        1,
+        &mut Filter {
+            rule,
+            memo: &mut memo,
+            universe: &u,
+            pools: &pools,
+        },
+    );
+    assert_eq!(kept.len(), in_pool + 1);
+    assert_eq!(kept[..in_pool], ordered[..in_pool]);
+    assert!(!kept[..in_pool].contains(&Action::pair(t1, m1)));
+
+    // Mid-pair: T1 is the pair's first half, already on the board; M1 completes it and displaces X.
+    let entries = board(&format, &u, &["X", "T1"], &["T2", "J2"]);
+    let mid_pair = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert!(mid_pair.is_mid_pair());
+    let charge = action_charge(&mut memo, rule, Side::Blue, &mid_pair, &pools, &u);
+    assert_eq!(charge.of(Action::Pick(m1)), 1);
+    assert_eq!(charge.of(Action::Pick(j1)), 0);
+}
+
+/// Design § 6 test 12, at an INTERIOR node: the search's own ordering charges a pair whole. Blue holds
+/// `X` (listed Top and Middle, able to play Support); T1 and M1 are worth 0.25 each and nothing else is
+/// worth anything. The root is Red's pair (Red, a list pool that can finish, stays inside it under
+/// `pool_or_roster`), Blue's pair is one level down, and the shortlist keeps ONE pair there. T1 + M1 is
+/// the best board (0.5) but pushes X to Support: charged, it sorts below every in-role pair, the pair
+/// kept is worth 0.25, and that is the value. As a list the same pair is free and the value is 0.5.
+#[test]
+fn a_displacing_pair_is_ordered_below_in_role_pairs_at_an_interior_node() {
+    let u = band_with(
+        &[("X", &["Top", "Middle", "Support"])],
+        &[("T1", 0.25), ("M1", 0.25)],
+    );
+    let format = Format::standard();
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1", "X"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1", "X"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let entries = board(&format, &u, &["X"], &[]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert!(root
+        .next_slot()
+        .is_some_and(|s| s.pair_start && s.side == Side::Red));
+    let run = |pools: &Pools| {
+        search(
+            &OracleInput {
+                position: &root,
+                universe: &u,
+                pools,
+                objective: &u,
+                feasibility: FeasibilityRule::PoolOrRoster,
+                mode: Mode::Horizon(2),
+                epsilon: 1e-9,
+                off_pool_cost: None,
+            },
+            &SearchParams {
+                shortlist: Some(Shortlist {
+                    singles: 1,
+                    pairs: 1,
+                    root_off_pool: 1,
+                }),
+                ..search_params()
+            },
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+    };
+    let (t1, m1) = (idx(&u, "T1"), idx(&u, "M1"));
+    let blue_reply = |o: &SearchOutcome| o.ranked[0].continuation[0];
+
+    let tagged = run(&pools);
+    assert_eq!(tagged.value, 0.25);
+    let reply = blue_reply(&tagged);
+    assert_ne!(reply, Action::pair(t1, m1));
+    assert_eq!(
+        reply.champions().filter(|c| *c == t1 || *c == m1).count(),
+        1,
+        "one of the two, with an in-role partner"
+    );
+    assert_eq!(tagged.ranked[0].ends.blue_off_pool, 0);
+
+    let list = run(&as_list(&pools));
+    assert_eq!(list.value, 0.5);
+    assert_eq!(blue_reply(&list), Action::pair(t1, m1));
+}
+
+/// Design § 5 / § 6 test 18: the snipe-aware key's critical set under role tags is the champions
+/// whose removal lowers the in-role weight. Red's only Adc listing is `A2`; `V2` is listed Middle and
+/// could play Adc by the meta. As a set A2 is replaceable (V2 covers Adc), so it is not critical; in
+/// role form it is — and the key, flag on, reaches it.
+#[test]
+fn the_critical_set_is_read_in_role_under_tags() {
+    let u = band(&[("V2", &["Middle", "Adc"])]);
+    let format = Format::standard();
+    let red = tags(
+        &u,
+        &[
+            (Role::Top, &["T2"]),
+            (Role::Jungle, &["J2"]),
+            (Role::Middle, &["M2", "V2"]),
+            (Role::Adc, &["A2"]),
+            (Role::Support, &["S2"]),
+        ],
+    );
+    let pools = Pools {
+        blue: set(&u, &["T1", "J1", "M1", "A1", "S1"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Red, red);
+    // Blue's first pick, slot 6: Red has all five picks to come.
+    let entries = board(&format, &u, &[], &[]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!((root.slot_index(), root.mover()), (6, Some(Side::Blue)));
+
+    let critical =
+        |pools: &Pools| critical_pool(&mut FeasibilityMemo::default(), Side::Red, &root, pools, &u);
+    assert_eq!(critical(&pools), set(&u, &["T2", "J2", "A2", "S2"]));
+    assert_eq!(critical(&as_list(&pools)), set(&u, &["T2", "J2", "S2"]));
+
+    // Flag on, the root's ordering takes the snipe term on one more child under tags (A2); flag off,
+    // on none.
+    let charged = |pools: &Pools, snipe_key: bool| {
+        roster_search(&root, pools, &u, &shortlisted(3, snipe_key), 0.1).snipe_charged
+    };
+    assert_eq!(charged(&pools, true), 4);
+    assert_eq!(charged(&as_list(&pools), true), 3);
+    assert_eq!(charged(&pools, false), 0);
+}
+
+/// Design § 6 test 1 (b), interior nodes: on 60 random boards (as above) a search to depth 3 under a
+/// narrow shortlist — so interior pick and pair nodes order, truncate and price — gives the same
+/// outcome over list pools and over the same pools as maps of every meta role, under both live rules,
+/// snipe key off and on: ranked actions, values bit for bit, continuations, endings, top set, root
+/// fan and every counter; a refused root is refused alike.
+#[test]
+fn a_map_of_every_meta_role_searches_as_the_list_on_random_boards() {
+    let format = Format::standard();
+    let mut rng = Lcg(77_261_001);
+    let (mut searched, mut interior_picks) = (0, 0u64);
+    for case in 0..60 {
+        // Twenty slots need twenty champions; a few to spare.
+        let n = 20 + rng.below(4);
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+        let rows: Vec<(Vec<&str>, f64)> = (0..n)
+            .map(|_| {
+                let roles = 1 + rng.below(3);
+                let mut picked: Vec<&str> = Vec::new();
+                while picked.len() < roles {
+                    let role = ROLE_NAMES[rng.below(5)];
+                    if !picked.contains(&role) {
+                        picked.push(role);
+                    }
+                }
+                // Dyadic linear terms: sums are exact, so equal boards tie bit for bit.
+                (
+                    picked,
+                    f64::from(u8::try_from(rng.below(9)).unwrap_or(0)) / 8.0,
+                )
+            })
+            .collect();
+        let champions: Vec<(&str, &[&str], f64)> = names
+            .iter()
+            .zip(&rows)
+            .map(|(id, (roles, linear))| (id.as_str(), roles.as_slice(), *linear))
+            .collect();
+        let u = valued_universe(&champions);
+        let pool = |rng: &mut Lcg| -> ChampionSet {
+            u.all().iter().filter(|_| rng.below(5) < 3).collect()
+        };
+        let list = Pools {
+            blue: pool(&mut rng),
+            red: pool(&mut rng),
+            ..Pools::default()
+        };
+        let maps = list
+            .with_roles(Side::Blue, RoleSets::meta_roles(list.blue, &u))
+            .with_roles(Side::Red, RoleSets::meta_roles(list.red, &u));
+        let mut position = Position::new(&format, &[], &list, &u).unwrap_or_else(|e| panic!("{e}"));
+        // Stop where three turns reach picks: in the first pick phase, or at the second one.
+        let stop = if rng.below(2) == 0 {
+            6 + rng.below(6)
+        } else {
+            16 + rng.below(3)
+        };
+        while position.slot_index() < stop {
+            let Some(slot) = position.next_slot() else {
+                break;
+            };
+            let available: Vec<ChampionIdx> = position.available(&u).iter().collect();
+            if available.len() < 2 {
+                break;
+            }
+            let a = available[rng.below(available.len())];
+            let action = match slot.action {
+                ActionType::Ban => Action::Ban(a),
+                ActionType::Pick if slot.pair_start => {
+                    let rest: Vec<ChampionIdx> =
+                        available.iter().copied().filter(|c| *c != a).collect();
+                    Action::pair(a, rest[rng.below(rest.len())])
+                }
+                ActionType::Pick => Action::Pick(a),
+            };
+            position = position.apply(action);
+        }
+        for (rule, p) in [
+            (FeasibilityRule::PoolOrRoster, None),
+            (FeasibilityRule::Roster, Some(0.125)),
+        ] {
+            for snipe_key in [false, true] {
+                let params = SearchParams {
+                    shortlist: Some(Shortlist {
+                        singles: 3,
+                        pairs: 4,
+                        root_off_pool: 2,
+                    }),
+                    snipe_key,
+                    ..search_params()
+                };
+                let run = |pools: &Pools| {
+                    search(
+                        &OracleInput {
+                            position: &position,
+                            universe: &u,
+                            pools,
+                            objective: &u,
+                            feasibility: rule,
+                            mode: Mode::Horizon(3),
+                            epsilon: 1e-9,
+                            off_pool_cost: p,
+                        },
+                        &params,
+                        &CancelHandle::new(),
+                        |_| {},
+                    )
+                    .map(|o| {
+                        (
+                            o.ranked
+                                .iter()
+                                .map(|r| {
+                                    (r.action, r.value.to_bits(), r.continuation.clone(), r.ends)
+                                })
+                                .collect::<Vec<_>>(),
+                            o.top_set.clone(),
+                            (o.root_fan, o.depth, o.partial, o.value.to_bits()),
+                            (o.nodes, o.leaves, o.orderings, o.cutoffs, o.table_hits),
+                            o.snipe_charged,
+                        )
+                    })
+                    .map_err(|e| format!("{e:?}"))
+                };
+                let expected = run(&list);
+                assert_eq!(
+                    run(&maps),
+                    expected,
+                    "case {case} {rule:?} snipe_key {snipe_key}"
+                );
+                if let Ok(outcome) = &expected {
+                    searched += 1;
+                    interior_picks += outcome.3 .2;
+                }
+            }
+        }
+    }
+    // Most boards search, and the searches order children (the key is exercised below the root).
+    assert!(searched >= 200, "searched {searched}");
+    assert!(interior_picks > 50_000, "orderings {interior_picks}");
 }

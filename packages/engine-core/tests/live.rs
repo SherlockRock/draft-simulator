@@ -10,7 +10,7 @@ use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
 use engine_core::reference::feasibility::{
-    critical_pool, off_pool_count, FeasibilityMemo, FeasibilityRule,
+    critical_pool, off_pool_count, ActionCharge, FeasibilityMemo, FeasibilityRule,
 };
 use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::live::{
@@ -23,7 +23,7 @@ use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{
     search, static_order, truncate_children, Filter, SearchOutcome, SearchParams, Shortlist,
 };
-use engine_core::reference::state::{Action, Entry, Pools, Position};
+use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::TierBFixture;
 use engine_core::reference::universe::DEFAULT_OFF_POOL_COST;
 use engine_core::reference::universe::{
@@ -2178,6 +2178,7 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 6, "BA X K7 K8 K9 K10");
     let first_two = |off_pool: Option<(ChampionSet, f64)>| -> Vec<Action> {
+        let off_pool = off_pool.map(|(pool, p)| (ActionCharge::set(pool), p));
         static_order(&u, &position, Side::Blue, actions.clone(), off_pool, None)[..2].to_vec()
     };
     assert_eq!(
@@ -2691,7 +2692,7 @@ fn a_pair_of_two_critical_champions_takes_the_snipe_term_twice() {
         &position,
         Side::Red,
         actions,
-        Some((pools.red, 0.15)),
+        Some((ActionCharge::set(pools.red), 0.15)),
         Some(critical),
     );
     let at = |a: &str, b: &str| {
@@ -4352,4 +4353,93 @@ fn the_tier_a_loader_refuses_the_live_rule() {
         }
     }
     assert!(Fixture::from_json(&raw, "01").is_ok());
+}
+
+/// Role-aware pools design § 6 test 1 (b): a pool written as a map of every meta role is the list, at
+/// search level. On the four smoke roots and the sample's slot-11 root, under both live
+/// rules at widths A, snipe key off and on, a depth-1 search over the list pools and over the same
+/// pools as maps agrees on every ranked action, value (bit for bit), continuation and ending, the top
+/// set, the root fan and every counter — the tagged solver, the key, the root split and the critical
+/// set all reduce to the list's when the tags say what a list means. Depth 1 keeps the pair root
+/// (smoke-2, 13 695 children) affordable in a debug build; interior nodes are compared the same way on
+/// random band boards (`tests/role_pools.rs`).
+#[test]
+fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let mut roots: Vec<(String, LiveRoot)> = [11usize]
+        .iter()
+        .map(|events| {
+            let root = LiveRoot::from_draft_state(
+                &state_at(&s, *events),
+                &s.pools.blue,
+                &s.pools.red,
+                &[],
+                u,
+            )
+            .unwrap_or_else(|e| panic!("{e}"));
+            (format!("sample-slot-{events}"), root)
+        })
+        .collect();
+    for name in [
+        "2026-09-27-smoke-1-blue-first-pick",
+        "2026-09-27-smoke-2-red-pair-no-adc",
+        "2026-09-27-smoke-3-blue-ban-denial",
+        "2026-09-27-smoke-4-red-last-pick",
+    ] {
+        roots.push((name.to_string(), smoke(&live, name).root));
+    }
+    let widths = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let everything = |o: &SearchOutcome| {
+        (
+            o.ranked
+                .iter()
+                .map(|r| (r.action, r.value.to_bits(), r.continuation.clone(), r.ends))
+                .collect::<Vec<_>>(),
+            o.top_set.clone(),
+            (o.root_fan, o.depth, o.partial, o.value.to_bits()),
+            (o.nodes, o.leaves, o.orderings, o.cutoffs, o.table_hits),
+            o.snipe_charged,
+        )
+    };
+    let mut compared = 0;
+    for (label, root) in &roots {
+        let maps = LiveRoot {
+            pools: root
+                .pools
+                .with_roles(Side::Blue, RoleSets::meta_roles(root.pools.blue, u))
+                .with_roles(Side::Red, RoleSets::meta_roles(root.pools.red, u)),
+            ..root.clone()
+        };
+        assert_eq!(
+            (maps.pools.blue, maps.pools.red),
+            (root.pools.blue, root.pools.red),
+            "{label}"
+        );
+        for (rule, p) in [
+            (FeasibilityRule::PoolOrRoster, None),
+            (FeasibilityRule::Roster, Some(DEFAULT_OFF_POOL_COST)),
+        ] {
+            for snipe_key in [false, true] {
+                let params = SearchParams {
+                    snipe_key,
+                    ..with_shortlist(widths)
+                };
+                let list = run_with(root, u, Mode::Horizon(1), &params, rule, p);
+                let map = run_with(&maps, u, Mode::Horizon(1), &params, rule, p);
+                assert_eq!(
+                    everything(&map),
+                    everything(&list),
+                    "{label} {rule:?} snipe_key {snipe_key}"
+                );
+                compared += 1;
+            }
+        }
+    }
+    assert_eq!(compared, 20);
 }
