@@ -8,7 +8,7 @@ use common::{load_production_data, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
-use engine_core::pools::Role;
+use engine_core::pools::{Role, RolePoolMap};
 use engine_core::reference::feasibility::{
     critical_pool, off_pool_count, ActionCharge, FeasibilityMemo, FeasibilityRule,
 };
@@ -4442,4 +4442,117 @@ fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
         }
     }
     assert_eq!(compared, 20);
+}
+
+/// A list of ids as the app's role map: each champion under every role the meta lists for it.
+fn as_role_map(u: &Universe, ids: &[String]) -> RolePoolMap {
+    let under = |role: Role| -> Vec<String> {
+        ids.iter()
+            .filter(|id| {
+                u.champion_meta()
+                    .get(id.as_str())
+                    .is_some_and(|m| m.positions.contains(&role))
+            })
+            .cloned()
+            .collect()
+    };
+    RolePoolMap {
+        top: under(Role::Top),
+        jungle: under(Role::Jungle),
+        middle: under(Role::Middle),
+        adc: under(Role::Adc),
+        support: under(Role::Support),
+    }
+}
+
+/// Role-aware pools design § 4 (RA5) / § 6 test 17: the converter's role-map entry point. Fed the
+/// sample's pools as maps of every meta role it builds the list root's pools with exactly those tags;
+/// a map that lists a champion under one role carries just that role; unknown ids are collected per
+/// side, never refused; and a board pick the map omits is added under the meta's roles.
+#[test]
+fn the_converter_reads_role_maps() {
+    let live = live_universe();
+    let u = &live.universe;
+    let s = sample();
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let state = state_at(&s, 11);
+    let list = LiveRoot::from_draft_state(&state, &s.pools.blue, &s.pools.red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let (blue, red) = (as_role_map(u, &s.pools.blue), as_role_map(u, &s.pools.red));
+    let maps = LiveRoot::from_draft_state_roles(&state, &blue, &red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(maps.entries, list.entries);
+    assert!(maps.unknown.is_empty() && maps.excluded.is_empty());
+    assert_eq!(
+        maps.pools,
+        list.pools
+            .with_roles(Side::Blue, RoleSets::meta_roles(list.pools.blue, u))
+            .with_roles(Side::Red, RoleSets::meta_roles(list.pools.red, u)),
+        "a map of every meta role is the list, tagged"
+    );
+    assert!(maps.pools.roles(Side::Blue).is_some() && maps.pools.roles(Side::Red).is_some());
+    maps.position(u).unwrap_or_else(|e| panic!("{e}"));
+
+    // A champion the map lists under ONE of its meta roles carries that role only. Pantheon is on
+    // Blue's board (slot 6); the meta gives him three roles.
+    assert_eq!(
+        u.champion_meta()["Pantheon"].positions,
+        vec![Role::Support, Role::Top, Role::Jungle]
+    );
+    let mut one_role = blue.clone();
+    one_role.top.retain(|id| id != "Pantheon");
+    one_role.jungle.retain(|id| id != "Pantheon");
+    let root = LiveRoot::from_draft_state_roles(&state, &one_role, &red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let tags = root.pools.roles(Side::Blue).copied().unwrap_or_default();
+    assert!(tags.for_role(Role::Support).contains(idx("Pantheon")));
+    assert!(!tags.for_role(Role::Top).contains(idx("Pantheon")));
+    assert!(!tags.for_role(Role::Jungle).contains(idx("Pantheon")));
+    assert_eq!(root.pools.blue, list.pools.blue, "the set is unchanged");
+
+    // Unknown ids: collected with their side, in role order, then the exclusions'.
+    let mut typo = blue.clone();
+    typo.adc.push("Nobody".to_string());
+    let mut ghost = red.clone();
+    ghost.top.push("Ghost".to_string());
+    let root = LiveRoot::from_draft_state_roles(&state, &typo, &ghost, &["Nope".to_string()], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        root.unknown,
+        vec![
+            UnknownId {
+                list: UnknownList::PoolsBlue,
+                id: "Nobody".to_string()
+            },
+            UnknownId {
+                list: UnknownList::PoolsRed,
+                id: "Ghost".to_string()
+            },
+            UnknownId {
+                list: UnknownList::Exclusions,
+                id: "Nope".to_string()
+            },
+        ]
+    );
+    assert_eq!(root.pools, maps.pools);
+
+    // U5 for a map: Veigar is on Blue's board (slot 10); a map that omits him gets him back under
+    // the meta's roles, so the set and the tags are the full map's.
+    let mut without_veigar = blue.clone();
+    for row in [
+        &mut without_veigar.top,
+        &mut without_veigar.jungle,
+        &mut without_veigar.middle,
+        &mut without_veigar.adc,
+        &mut without_veigar.support,
+    ] {
+        row.retain(|id| id != "Veigar");
+    }
+    assert_ne!(
+        without_veigar.middle, blue.middle,
+        "the edit must remove Veigar"
+    );
+    let root = LiveRoot::from_draft_state_roles(&state, &without_veigar, &red, &[], u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(root.pools, maps.pools);
 }

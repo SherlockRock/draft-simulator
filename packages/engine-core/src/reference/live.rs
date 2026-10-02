@@ -10,12 +10,14 @@
 //! it never produces `Skip` (no product surface records one, D5). It never refuses a compute over
 //! a pool or exclusion id it does not know: those are reported in `LiveRoot::unknown` (U5).
 
-use super::entries::{board_picks, pool_set_lenient};
+use super::entries::{board_picks, pool_set_lenient, with_board_picks};
 use super::format::Format;
-use super::state::{Entry, Pools, Position, PositionError};
+use super::state::{Entry, Pools, Position, PositionError, RoleSets};
 use super::universe::{Champion, ChampionSet, Universe, UniverseError};
 use crate::draft_state::{ActionType, DraftState, Side};
+use crate::feasibility::ROLES;
 use crate::fm::{dot, FmWeights, RANK};
+use crate::pools::RolePoolMap;
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
 
@@ -263,6 +265,46 @@ pub fn pools_from_search(
     }
 }
 
+/// `pools_from_search` for role-tagged pools (role-aware pools design § 4, RA5): each side's pool as the
+/// app holds it — the wire's `display` map, which the incumbent already converts to a `RolePoolMap`.
+/// A side's tags are its map's entries; its own board picks follow `entries::with_board_picks` (a
+/// listed pick keeps its listed roles, an omitted one is added under every meta role). Unknown ids are
+/// collected per side, as in list form, never refused.
+pub fn pools_from_display(
+    blue: &RolePoolMap,
+    red: &RolePoolMap,
+    exclusions: &[String],
+    entries: &[Entry],
+    format: &Format,
+    universe: &Universe,
+) -> ResolvedPools {
+    let mut unknown = Vec::new();
+    let mut resolve = |list: UnknownList, side: Side, map: &RolePoolMap| {
+        let tags = ROLES.iter().fold(RoleSets::default(), |tags, role| {
+            let (set, missing) = pool_set_lenient(map.for_role(*role), universe);
+            unknown.extend(missing.into_iter().map(|id| UnknownId { list, id }));
+            set.iter().fold(tags, |tags, c| tags.with(*role, c))
+        });
+        with_board_picks(tags, board_picks(entries, format, side), universe)
+    };
+    let pools = Pools::default()
+        .with_roles(
+            Side::Blue,
+            resolve(UnknownList::PoolsBlue, Side::Blue, blue),
+        )
+        .with_roles(Side::Red, resolve(UnknownList::PoolsRed, Side::Red, red));
+    let (excluded, missing) = pool_set_lenient(exclusions, universe);
+    unknown.extend(missing.into_iter().map(|id| UnknownId {
+        list: UnknownList::Exclusions,
+        id,
+    }));
+    ResolvedPools {
+        pools,
+        excluded,
+        unknown,
+    }
+}
+
 /// A converted root: the standard format, the entries, the pools and the ids that were not
 /// resolved. Validated by `Position::new` at construction, so `position` cannot be the first thing
 /// to fail. **`position()` is the only constructor that carries `excluded`**: a `Position` rebuilt
@@ -296,6 +338,29 @@ impl LiveRoot {
             &format,
             universe,
         );
+        Position::new(&format, &entries, &resolved.pools, universe)?;
+        Ok(Self {
+            format,
+            entries,
+            pools: resolved.pools,
+            excluded: resolved.excluded,
+            unknown: resolved.unknown,
+        })
+    }
+
+    /// `from_draft_state` with role-tagged pools (`pools_from_display`): the root a role-aware search
+    /// runs from. The standard format is five picks a side, so the tags are read under either live
+    /// rule.
+    pub fn from_draft_state_roles(
+        state: &DraftState,
+        blue: &RolePoolMap,
+        red: &RolePoolMap,
+        exclusions: &[String],
+        universe: &Universe,
+    ) -> Result<Self, LiveError> {
+        let format = Format::standard();
+        let entries = entries_from_draft_state(state, universe)?;
+        let resolved = pools_from_display(blue, red, exclusions, &entries, &format, universe);
         Position::new(&format, &entries, &resolved.pools, universe)?;
         Ok(Self {
             format,
