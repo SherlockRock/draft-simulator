@@ -8,7 +8,8 @@ use crate::pools::Role;
 use crate::role_solver::{position_factor, ChampionMeta};
 use std::collections::HashMap;
 
-const ROLES: [Role; 5] = [
+/// Bit `i` of a [`RoleMask`] is `ROLES[i]`.
+pub(crate) const ROLES: [Role; 5] = [
     Role::Top,
     Role::Jungle,
     Role::Middle,
@@ -21,13 +22,15 @@ const ROLES: [Role; 5] = [
 /// Matches the soft `missing_roles(0.4)` threshold used elsewhere.
 const ROLE_PLAYABLE_THRESHOLD: f64 = 0.4;
 
-type RoleMask = u8;
+/// The roles a champion can fill, one bit per entry of [`ROLES`].
+pub(crate) type RoleMask = u8;
 
-fn champion_role_mask(
-    champion: &str,
-    meta: &HashMap<String, ChampionMeta>,
-) -> RoleMask {
-    let Some(m) = meta.get(champion) else { return 0; };
+/// The meta's mask for `champion`: every role at or above `ROLE_PLAYABLE_THRESHOLD`; 0 for a champion
+/// the meta does not know.
+pub(crate) fn champion_role_mask(champion: &str, meta: &HashMap<String, ChampionMeta>) -> RoleMask {
+    let Some(m) = meta.get(champion) else {
+        return 0;
+    };
     let mut mask: RoleMask = 0;
     for (idx, role) in ROLES.iter().enumerate() {
         if position_factor(*role, &m.positions) >= ROLE_PLAYABLE_THRESHOLD {
@@ -62,7 +65,14 @@ pub(crate) fn max_role_matching(
         .iter()
         .map(|c| champion_role_mask(c, meta))
         .collect();
-    max_bipartite_matching(&masks)
+    max_matching_masks(&masks)
+}
+
+/// `max_role_matching` on masks the caller already holds: one mask per champion, in the caller's
+/// order. The reference module's role-tagged pools read it with per-side masks (the meta's roles plus
+/// the roles the side's own pool lists — design `engine-role-aware-pools-design.md` § 2).
+pub(crate) fn max_matching_masks(masks: &[RoleMask]) -> usize {
+    max_bipartite_matching(masks)
 }
 
 /// Which of `champions` one maximum role assignment matches (`true` = assigned a role), in input order:

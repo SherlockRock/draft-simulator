@@ -197,6 +197,7 @@ impl TierBFixture {
             None => Pools {
                 blue: universe.all(),
                 red: universe.all(),
+                ..Pools::default()
             },
         };
         let excluded = pool_set("exclusions", &file.exclusions, universe).map_err(spec_err)?;

@@ -253,7 +253,11 @@ pub fn pools_from_search(
         resolve(UnknownList::PoolsRed, red_search).union(board_picks(entries, format, Side::Red));
     let excluded = resolve(UnknownList::Exclusions, exclusions);
     ResolvedPools {
-        pools: Pools { blue, red },
+        pools: Pools {
+            blue,
+            red,
+            ..Pools::default()
+        },
         excluded,
         unknown,
     }

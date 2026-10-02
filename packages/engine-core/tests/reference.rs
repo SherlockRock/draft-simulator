@@ -379,6 +379,7 @@ fn legal_actions_follow_d4_d5_d8() {
     let pools = Pools {
         blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
         red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
     };
     let t1 = u.index("T1").unwrap();
 
@@ -437,6 +438,7 @@ fn position_validation_names_the_slot() {
     let pools = Pools {
         blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
         red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
     };
     let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
     let mut six = vec![Entry::Skip; 6];
@@ -499,6 +501,7 @@ fn two_locked_top_only_champions_are_infeasible_even_with_a_full_pool() {
     let pools = Pools {
         blue: all,
         red: all,
+        ..Pools::default()
     };
     // explicit format: Blue picks twice, then three more Blue picks (five per side is what the predicate needs)
     let f = Format::explicit(vec![
@@ -594,6 +597,7 @@ fn feasibility_memo_hits_on_repeated_keys() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let pos = Position::new(&f, &[], &pools, &u).expect("empty");
     let mut memo = FeasibilityMemo::default();
@@ -1176,6 +1180,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let input = |position: &Position<'_>, mode| -> Result<Evaluation, OracleError> {
         evaluate(&OracleInput {
@@ -1215,6 +1220,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let wide_pools = Pools {
         blue: wide.all(),
         red: wide.all(),
+        ..Pools::default()
     };
     let wide_root = Position::new(&f, &[], &wide_pools, &wide).expect("empty");
     let err = evaluate(&OracleInput {
@@ -1276,6 +1282,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let tiny_pools = Pools {
         blue: ChampionSet::EMPTY.with(t1),
         red: u.all(),
+        ..Pools::default()
     };
     let start = Position::new(&two, &[], &tiny_pools, &u).expect("empty");
     let err = evaluate(&OracleInput {
@@ -1305,6 +1312,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let starved = Pools {
         blue: fx.pools.blue.without(s4).without(s5),
         red: fx.pools.red,
+        ..Pools::default()
     };
     let root02 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe).expect("position");
     let err = evaluate(&OracleInput {
@@ -1333,6 +1341,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let starved = Pools {
         blue: gone.iter().fold(fx.pools.blue, |p, c| p.without(*c)),
         red: fx.pools.red,
+        ..Pools::default()
     };
     let root01 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe)
         .expect("board picks are still in the pool");
@@ -1426,6 +1435,7 @@ fn classify_orders_complete_before_horizon_before_dry_pool_before_interior() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let mut memo = FeasibilityMemo::default();
     let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
@@ -1504,6 +1514,7 @@ fn classify_dry_pool_is_a_leaf_with_feasibility_on_and_an_error_with_it_off() {
     let pools = Pools {
         blue: u.all(),
         red: ChampionSet::EMPTY.with(t1),
+        ..Pools::default()
     };
     let entries = [
         Entry::Skip,
@@ -1548,6 +1559,7 @@ fn classify_reads_feasibility_only_at_leaves() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     // Blue picks T1 at 6; Red pair J1 + T2 at 7–8 would take T2 — instead give Blue both Tops: Blue T1 at 6,
     // Red J1 + M1 at 7–8, Blue T2 + M2 at 9–10 → Blue holds T1, T2 (two Tops): locked picks cannot match.
@@ -1627,6 +1639,7 @@ fn transposition_key_is_the_board_and_the_remaining_horizon() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let idx = |n: &str| u.index(n).unwrap();
     // Blue bans T1 then Red bans J1 — and the other order: same slot, same sets → same key.
@@ -1668,6 +1681,7 @@ fn transposition_table_stores_only_exact_values() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let pos = Position::new(&f, &[], &pools, &u).unwrap();
     let key = Key::of(&pos, 4);

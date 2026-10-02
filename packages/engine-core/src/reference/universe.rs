@@ -5,6 +5,7 @@
 //! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
 //! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
+use crate::feasibility::{champion_role_mask, RoleMask};
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
@@ -174,6 +175,9 @@ pub struct Universe {
     off_pool_cost: f64,
     live_loss: f64,
     meta: HashMap<String, ChampionMeta>,
+    /// Each champion's meta roles as the incumbent's mask (`crate::feasibility::champion_role_mask`),
+    /// by index — what a role-tagged pool is read against (role-aware pools design § 1).
+    role_masks: Vec<RoleMask>,
 }
 
 /// Interns ids in list order; refuses more than `MAX_CHAMPIONS` and duplicate ids. Shared by both
@@ -333,7 +337,7 @@ impl Universe {
             return Err(UniverseError::NonFinite("L'".to_string()));
         }
 
-        let meta = champions
+        let meta: HashMap<String, ChampionMeta> = champions
             .iter()
             .map(|c| {
                 (
@@ -346,6 +350,10 @@ impl Universe {
                 )
             })
             .collect();
+        let role_masks = champions
+            .iter()
+            .map(|c| champion_role_mask(&c.id, &meta))
+            .collect();
 
         Ok(Self {
             champions,
@@ -356,6 +364,7 @@ impl Universe {
             off_pool_cost,
             live_loss,
             meta,
+            role_masks,
         })
     }
 
@@ -425,6 +434,11 @@ impl Universe {
     /// called on this map — only `feasibility::can_complete_roles` reads it.
     pub fn champion_meta(&self) -> &HashMap<String, ChampionMeta> {
         &self.meta
+    }
+
+    /// The meta's roles for `c` as a mask (bit `i` = `crate::feasibility::ROLES[i]`).
+    pub(crate) fn role_mask(&self, c: ChampionIdx) -> RoleMask {
+        self.role_masks[usize::from(c.0)]
     }
 
     pub fn names(&self, champions: &[ChampionIdx]) -> Vec<String> {

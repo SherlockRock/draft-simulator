@@ -492,6 +492,7 @@ fn two_paths_to_the_same_blue_set_give_equal_picks_and_bit_equal_values() {
     let pools = Pools {
         blue: [a, b, c].into_iter().collect(),
         red: reds.iter().copied().collect(),
+        ..Pools::default()
     };
     let p1 =
         Position::new(&format, &entries(a, [b, c]), &pools, u).unwrap_or_else(|e| panic!("{e}"));
@@ -1640,6 +1641,7 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
     let pools = Pools {
         blue: set(&["T1", "J1", "M1", "A1", "S1"]),
         red: set(&["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = ["B1", "B2", "B3", "B4"]
@@ -1922,6 +1924,7 @@ fn the_shortlist_is_a_pure_function_of_the_position() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     // Slots 0–13: six bans, B pick, R pair, B pair, R pick, R ban, B ban — Red's ban at 14 next.
@@ -2041,6 +2044,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
@@ -2158,6 +2162,7 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
     let pools = Pools {
         blue: pool,
         red: u.all(),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
@@ -2210,6 +2215,7 @@ fn ordering_term_probe(sx: f64) -> (Universe, Pools, Vec<Entry>) {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let entries: Vec<Entry> = [
         ("K1", true),
@@ -2581,6 +2587,7 @@ fn without_a_shortlist_the_snipe_key_is_inert_under_pool_or_roster() {
     let overlap = Pools {
         blue: pools.blue.with(idx("A1")),
         red: pools.red.with(idx("BS")),
+        ..Pools::default()
     };
     let gated = Position::new(&format, &entries, &overlap, &u).unwrap_or_else(|e| panic!("{e}"));
     let mut memo = FeasibilityMemo::default();
@@ -2658,6 +2665,7 @@ fn a_pair_of_two_critical_champions_takes_the_snipe_term_twice() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = ["K1", "K2", "K3", "K4", "K5", "K6"]
@@ -3039,6 +3047,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
     let pools = Pools {
         blue: set(&["BJ", "BS", "BS2", "FA", "FB", "FC"]),
         red: set(&["R1", "R2", "R3", "R4", "R5"]),
+        ..Pools::default()
     };
     let first = entries(&bans);
     let position = Position::new(&format, &first, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
@@ -3061,6 +3070,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
     let broken_pools = Pools {
         blue: set(&["BT", "BT2", "BJ", "BS", "FA", "FB"]),
         red: pools.red,
+        ..Pools::default()
     };
     let broken = Position::new(&format, &broken_entries, &broken_pools, &u)
         .unwrap_or_else(|e| panic!("{e}"));
@@ -3092,6 +3102,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
     let done_pools = Pools {
         blue: pools.blue.union(set(&["BM", "BA"])),
         red: pools.red,
+        ..Pools::default()
     };
     let done =
         Position::new(&format, &done_entries, &done_pools, &u).unwrap_or_else(|e| panic!("{e}"));
@@ -3138,6 +3149,7 @@ fn an_off_pool_support_beats_every_in_pool_suicide_fifth_pick() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "X1", "X2"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     // Slots 0–18 in order: six bans, B pick, R pair, B pair, R pick, four bans, R pick, B pair.
@@ -3260,6 +3272,7 @@ fn two_forced_off_pool_picks_beat_a_suicide_pair() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "Y1", "Y2"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     // Slots 0–16: six bans, B pick, R pair, B pair, R pick, four bans, R pick — Blue's pair is next.
@@ -3389,6 +3402,7 @@ fn a_pool_short_by_two_roles_is_charged_two_forced_picks() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "X1", "X2", "X3"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     // Slots 0–12: six bans, B pick, R pair, B pair, R pick, R ban — Blue's ban at slot 13 is next.
@@ -3731,6 +3745,7 @@ fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     // Slots 0–14: six bans, B pick, R pair, B pair, R pick, R ban, B ban, R ban — Blue's ban at 15 next.
@@ -3857,6 +3872,7 @@ fn on_the_round5_probe_under_roster_the_self_ban_does_not_pay_and_denying_the_ro
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = [
@@ -3994,6 +4010,7 @@ fn under_roster_a_snipe_of_a_sole_role_champion_is_p_neutral_and_a_self_ban_can_
     let pools = Pools {
         blue: set(&["BT", "BJ", "BM", "BA", "BS"]),
         red: set(&["RT", "RJ", "RM", "RA", "RS"]),
+        ..Pools::default()
     };
     let format = engine_core::reference::format::Format::standard();
     let entries: Vec<Entry> = [

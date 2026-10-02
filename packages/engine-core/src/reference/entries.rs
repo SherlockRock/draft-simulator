@@ -175,6 +175,7 @@ pub fn spec_to_pools(
     let mut pools = Pools {
         blue: pool_set("pools.blue", &spec.blue, universe)?,
         red: pool_set("pools.red", &spec.red, universe)?,
+        ..Pools::default()
     };
     if union_board {
         pools.blue = pools.blue.union(board_picks(entries, format, Side::Blue));

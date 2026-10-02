@@ -5,6 +5,8 @@
 use super::format::{Format, Slot};
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
+use crate::feasibility::ROLES;
+use crate::pools::Role;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entry {
@@ -41,11 +43,69 @@ impl Action {
     }
 }
 
-/// A side's pool is a set (D4): a champion outside it is not a pick for that side; bans are unrestricted.
+/// One side's pool by role (role-aware pools design § 1): the champions the pool lists for each role,
+/// in `crate::feasibility::ROLES` order (top, jungle, middle, adc, support). A champion may sit under
+/// several roles (RA1) and under a role the meta does not list for it (RA4: the entry makes that role
+/// playable for this side).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RoleSets {
+    by_role: [ChampionSet; 5],
+}
+
+impl RoleSets {
+    fn slot(role: Role) -> usize {
+        match role {
+            Role::Top => 0,
+            Role::Jungle => 1,
+            Role::Middle => 2,
+            Role::Adc => 3,
+            Role::Support => 4,
+        }
+    }
+
+    /// `c` listed under `role`, beside whatever it is already listed under.
+    pub fn with(mut self, role: Role, c: ChampionIdx) -> Self {
+        let slot = Self::slot(role);
+        self.by_role[slot] = self.by_role[slot].with(c);
+        self
+    }
+
+    pub fn for_role(&self, role: Role) -> ChampionSet {
+        self.by_role[Self::slot(role)]
+    }
+
+    /// Every champion listed under any role: the pool as a set.
+    pub fn union(&self) -> ChampionSet {
+        self.by_role
+            .iter()
+            .fold(ChampionSet::EMPTY, |all, set| all.union(*set))
+    }
+
+    /// The list form of `set` as tags: each champion under every role the meta lists for it. The
+    /// definition "a list means every meta role" made a value (design, Definitions).
+    pub fn meta_roles(set: ChampionSet, universe: &Universe) -> Self {
+        set.iter().fold(Self::default(), |tags, c| {
+            ROLES
+                .iter()
+                .enumerate()
+                .filter(|(bit, _)| (universe.role_mask(c) >> bit) & 1 == 1)
+                .fold(tags, |tags, (_, role)| tags.with(*role, c))
+        })
+    }
+}
+
+/// A side's pool as a set (D4): a champion outside it is not a pick for that side under the gate; bans
+/// are unrestricted. `blue_roles` / `red_roles` are the optional role tags (role-aware pools design
+/// § 1): `None` is list form — every reader runs the set code — and `Some` must list exactly the
+/// champions of the side's set ([`Pools::with_roles`] keeps the two in step). Tags are read only under
+/// a live rule on a five-pick format (`feasibility::tags_for`); a search or an oracle run refuses them
+/// anywhere else.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Pools {
     pub blue: ChampionSet,
     pub red: ChampionSet,
+    pub blue_roles: Option<RoleSets>,
+    pub red_roles: Option<RoleSets>,
 }
 
 impl Pools {
@@ -54,6 +114,29 @@ impl Pools {
             Side::Blue => self.blue,
             Side::Red => self.red,
         }
+    }
+
+    /// `side`'s role tags, when its pool carries them.
+    pub fn roles(&self, side: Side) -> Option<&RoleSets> {
+        match side {
+            Side::Blue => self.blue_roles.as_ref(),
+            Side::Red => self.red_roles.as_ref(),
+        }
+    }
+
+    /// `side`'s pool replaced by `roles`: the set becomes their union, so the two cannot disagree.
+    pub fn with_roles(mut self, side: Side, roles: RoleSets) -> Self {
+        match side {
+            Side::Blue => {
+                self.blue = roles.union();
+                self.blue_roles = Some(roles);
+            }
+            Side::Red => {
+                self.red = roles.union();
+                self.red_roles = Some(roles);
+            }
+        }
+        self
     }
 }
 
