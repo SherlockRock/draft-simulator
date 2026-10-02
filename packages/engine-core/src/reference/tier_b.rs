@@ -5,7 +5,8 @@
 //! typo should fail loudly); the live converter is the lenient one.
 
 use super::entries::{
-    pool_set, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec, EntrySpec, PoolsSpec,
+    pool_form, pool_set, role_key, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec,
+    EntrySpec, PoolForm, PoolsSpec,
 };
 use super::feasibility::{FeasibilityMemo, FeasibilityRule};
 use super::format::Format;
@@ -59,7 +60,8 @@ struct TierBFile {
     source: Source,
     format: String,
     position: Vec<EntrySpec>,
-    /// Absent (a pro replay, D7: "no pools") = the whole roster on both sides.
+    /// Absent (a pro replay, D7: "no pools") = the whole roster on both sides. Each side is a list of
+    /// ids or the app's role map `{top, jungle, mid, adc, support}` (`entries::pool_form`).
     #[serde(default)]
     pools: Option<PoolsSpec>,
     #[serde(default)]
@@ -121,11 +123,15 @@ pub struct TierBFixture {
     pub path: Option<PathBuf>,
 }
 
-/// A loaded fixture plus the non-fatal findings (data-version mismatches, an illegal `actual_next`).
+/// A loaded fixture plus the non-fatal findings (data-version mismatches, an illegal `actual_next`)
+/// and the notes — facts about the file a reader of the report should see that are not mistakes: a
+/// pool entry under a role the meta does not list (role-aware pools RA4: honoured, playable for that
+/// side only).
 #[derive(Clone, Debug)]
 pub struct Loaded {
     pub fixture: TierBFixture,
     pub warnings: Vec<String>,
+    pub notes: Vec<String>,
 }
 
 impl TierBFixture {
@@ -200,6 +206,20 @@ impl TierBFixture {
                 ..Pools::default()
             },
         };
+        let mut notes = Vec::new();
+        for (side, name) in [(Side::Blue, "blue"), (Side::Red, "red")] {
+            for (role, c) in pools
+                .roles(side)
+                .map(|tags| tags.off_meta(universe))
+                .unwrap_or_default()
+            {
+                let key = role_key(role);
+                notes.push(format!(
+                    "{id}: pools.{name}.{key}: {} is not a meta {key} — playable for {side:?} only",
+                    universe.id(c)
+                ));
+            }
+        }
         let excluded = pool_set("exclusions", &file.exclusions, universe).map_err(spec_err)?;
         if let Some(capture) = &file.capture {
             let version = capture
@@ -314,21 +334,39 @@ impl TierBFixture {
                     c != d
                 })
             };
-            let empty = Vec::new();
-            let (blue, red) = match &file.pools {
-                Some(p) => (&p.blue, &p.red),
-                None => (&empty, &empty),
+            // A list side is compared with the capture's `search` list; a role-map side with its
+            // `display` map, role by role (the wire's keys). Absent pools compare as empty lists.
+            const DISPLAY_KEYS: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "ADC", "SUPPORT"];
+            let side_differs = |name: &str, field: &str, value: Option<&serde_json::Value>| {
+                match value.map(|v| pool_form(field, v)) {
+                    None => differs(list(&["pools", name, "search"]), &[]),
+                    Some(Ok(PoolForm::List(ids))) => {
+                        differs(list(&["pools", name, "search"]), &ids)
+                    }
+                    Some(Ok(PoolForm::Roles(rows))) => DISPLAY_KEYS
+                        .iter()
+                        .zip(&rows)
+                        .any(|(key, ids)| differs(list(&["pools", name, "display", key]), ids)),
+                    // Unreachable: `spec_to_pools` read the same value above.
+                    Some(Err(_)) => false,
+                }
             };
-            for (what, captured, declared) in [
-                ("pools.blue", list(&["pools", "blue", "search"]), blue),
-                ("pools.red", list(&["pools", "red", "search"]), red),
+            let sides = file.pools.as_ref();
+            for (what, differs) in [
+                (
+                    "pools.blue",
+                    side_differs("blue", "pools.blue", sides.map(|p| &p.blue)),
+                ),
+                (
+                    "pools.red",
+                    side_differs("red", "pools.red", sides.map(|p| &p.red)),
+                ),
                 (
                     "exclusions",
-                    list(&["pools", "crossGameExclusions"]),
-                    &file.exclusions,
+                    differs(list(&["pools", "crossGameExclusions"]), &file.exclusions),
                 ),
             ] {
-                if differs(captured, declared) {
+                if differs {
                     warnings.push(format!(
                         "{id}: {what} differs from the captured request; the top-level field is used"
                     ));
@@ -358,6 +396,7 @@ impl TierBFixture {
                 path: None,
             },
             warnings,
+            notes,
         })
     }
 }

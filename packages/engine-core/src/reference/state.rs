@@ -84,13 +84,34 @@ impl RoleSets {
     /// The list form of `set` as tags: each champion under every role the meta lists for it. The
     /// definition "a list means every meta role" made a value (design, Definitions).
     pub fn meta_roles(set: ChampionSet, universe: &Universe) -> Self {
-        set.iter().fold(Self::default(), |tags, c| {
-            ROLES
-                .iter()
-                .enumerate()
-                .filter(|(bit, _)| (universe.role_mask(c) >> bit) & 1 == 1)
-                .fold(tags, |tags, (_, role)| tags.with(*role, c))
-        })
+        set.iter()
+            .fold(Self::default(), |tags, c| tags.with_meta_roles(c, universe))
+    }
+
+    /// `c` listed under every role the meta lists for it — how a board pick the pool omits is added
+    /// (a sunk fact: it can never be off-role, so it is never charged; design, Definitions).
+    pub fn with_meta_roles(self, c: ChampionIdx, universe: &Universe) -> Self {
+        ROLES
+            .iter()
+            .enumerate()
+            .filter(|(bit, _)| (universe.role_mask(c) >> bit) & 1 == 1)
+            .fold(self, |tags, (_, role)| tags.with(*role, c))
+    }
+
+    /// The entries under a role the meta does not list for the champion (RA4: honoured — the entry
+    /// makes the role playable for this side — and worth saying to whoever reads a report), in role
+    /// then index order.
+    pub fn off_meta(&self, universe: &Universe) -> Vec<(Role, ChampionIdx)> {
+        ROLES
+            .iter()
+            .enumerate()
+            .flat_map(|(bit, role)| {
+                self.by_role[bit]
+                    .iter()
+                    .filter(move |c| (universe.role_mask(*c) >> bit) & 1 == 0)
+                    .map(move |c| (*role, c))
+            })
+            .collect()
     }
 
     /// The roles this pool lists for `c` (0 = not in the pool), bit `i` = `ROLES[i]`.

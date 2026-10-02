@@ -3,7 +3,8 @@
 //! action specs are the shared ones in `super::entries` (slice-5 U7).
 
 use super::entries::{
-    spec_to_action, spec_to_entries, spec_to_pools, ActionSpec, EntrySpec, PoolsSpec, SpecError,
+    refuse_role_maps, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec, EntrySpec,
+    PoolsSpec, SpecError,
 };
 use super::feasibility::FeasibilityRule;
 use super::format::{Format, Turn};
@@ -191,6 +192,7 @@ impl Fixture {
 
         // Tier A pools are authored exactly: no board union (an off-pool pick is an authoring error).
         let entries = spec_to_entries(&file.position, &format, &universe).map_err(spec_err)?;
+        refuse_role_maps(&file.pools).map_err(spec_err)?;
         let pools =
             spec_to_pools(&file.pools, &entries, &format, &universe, false).map_err(spec_err)?;
         // Position::new re-checks kinds and adds duplicate / pool checks; its errors are position-level.

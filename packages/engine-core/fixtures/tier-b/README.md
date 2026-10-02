@@ -35,15 +35,33 @@ The search is shortlisted (B-proper § 2): at an interior pick node the best `si
 | `source` | `{ fm_version, meta_version, captured, session? }` | the data the position was captured on; `session` is the Navigator session id when there is one |
 | `format` | `"standard"` | the only format this slice loads |
 | `position` | `[{ slot, side, kind, champion? }]` | slot = index; `side` is `Blue`/`Red`; `kind` is `ban`, `pick` or `skip`; a `skip` (a forfeited ban) is legal on ban slots only and names no champion |
-| `pools` | `{ blue: [id], red: [id] }`, optional | each side's search pool as a set; a side's own picks already on the board are added automatically (a past off-pool pick is a fact, not a choice). **Absent = the whole roster on both sides** (a pro replay, D7: "no pools") |
+| `pools` | `{ blue, red }`, optional; each side is a list `[id]` or a role map `{ top, jungle, mid, adc, support }` | each side's search pool. A **list** is a set: every champion counts as in-pool in any role the meta lets it play. A **role map** is the app's own shape (`Pools.champions`) and makes the pool role-aware — see "Role maps" below. The two sides are independent. A side's own picks already on the board are added automatically (a past off-pool pick is a fact, not a choice). **Absent = the whole roster on both sides** (a pro replay, D7: "no pools") |
 | `exclusions` | `[id]`, default `[]` | cross-game exclusions (fearless): unavailable to both sides — never a ban, never a pick |
 | `our_side` | `Blue` \| `Red`, optional | the side the rubric is read from |
 | `actual_next` | id, `[a, b]` at a pair start, or absent | what was actually played next — the soft comparison point, never truth; the report says whether it was in the pool |
 | `review` | string, default `""` | rubric verdicts in prose, appended per reading |
 | `verdict` | `{ "off_pool": true \| false }`, optional | **would you leave the pool here** — the one structured verdict, read by the calibration summary (below); meaningful at a pick root only |
-| `capture` | object with a string `protocolVersion`, optional | the raw captured request (the wire `EngineRequest` once the capture button exists), kept opaque so nothing the loader does not model (display pools, tiers) is lost. **Provenance only: the top-level `pools` / `exclusions` are the position**; when the capture's search pools or `crossGameExclusions` differ from them the loader warns and uses the top-level fields |
+| `capture` | object with a string `protocolVersion`, optional | the raw captured request (the wire `EngineRequest` once the capture button exists), kept opaque so nothing the loader does not model (display pools, tiers) is lost. **Provenance only: the top-level `pools` / `exclusions` are the position**; when the capture's search pools or `crossGameExclusions` differ from them the loader warns and uses the top-level fields. A role-map side is compared with the capture's `display` map, role by role; a list side with its `search` list |
 
 Unknown fields are rejected (`deny_unknown_fields`), inside `verdict` too. Ids are the champion aliases of `champion-meta.json` (`Fiddlesticks`, `MonkeyKing`, `TwistedFate`); an id the current data does not know is an error in EVERY list here, including `exclusions` (the live converter reports such ids instead — a hand-authored file is expected to be current). An exclusion that names a champion already on the board loads with a warning.
+
+## Role maps
+
+A role map lists a side's champions under the role its player pilots them in:
+
+```json
+"pools": {
+  "blue": { "top": ["Garen", "Jax"], "jungle": ["JarvanIV", "Jax"], "mid": ["Viktor"], "adc": ["Jhin"], "support": ["Bard"] },
+  "red": ["Aatrox", "Vi", "Sylas", "Jinx", "Nautilus"]
+}
+```
+
+- **Exactly five keys**: `top`, `jungle`, `mid`, `adc`, `support` (the app's spelling: `adc`, not the meta's `BOTTOM`; `mid`, not `middle`). All five are required; an empty list is allowed; any other key is an error, as is an unknown champion — each named with its location (`pools.blue.mid`).
+- **Off-role is off-pool.** A champion placed in a role its entry does not list costs P exactly like a champion outside the pool. The count is taken over the cheapest role arrangement of the side's picks, so a pick already on the board that a later pick pushes off its listed role is charged, once. (Picks that cannot be arranged in five distinct roles at all have no arrangement to count: that board is priced by the infeasibility band, and the count falls back to the champions outside the pool entirely.)
+- **A champion may sit under several roles** and is in-pool for each.
+- **An entry under a role the meta does not list is honoured**: it makes that role playable for that side (and for that side only). The loader records a note for each such entry and the report prints it.
+- **Board picks**: one the map lists keeps its listed roles; one the map omits is added under every role the meta lists for it, so it is never charged.
+- Role maps are read under the live rules (`pool_or_roster`, `roster`). A Tier A fixture takes list form only, and a search under `on` / `off` refuses a role-tagged pool.
 
 ## What the report prints
 
@@ -53,7 +71,7 @@ The **summary** intersects every verdict: `off_pool: true` means P must sit belo
 
 ## Calibrating P (B-proper § 3)
 
-P is `engine_core::reference::universe::DEFAULT_OFF_POOL_COST`: 0.10 blue-win logits (about 2.5 percentage points of win probability), calibrated 2026-09-29 on the `2026-09-29-*` corpus (seven usable verdicts, interval P > 0.09 and P < 0.11 at a 0.01 sweep step; the user chose 0.10). It replaced the 0.15 assumption and is PROVISIONAL until pools are role-aware — pools are sets today, so a champion the pool lists for one role counts as in-pool in any role (the `PARKED` positions in the corpus). The procedure:
+P is `engine_core::reference::universe::DEFAULT_OFF_POOL_COST`: 0.10 blue-win logits (about 2.5 percentage points of win probability), calibrated 2026-09-29 on the `2026-09-29-*` corpus (seven usable verdicts, interval P > 0.09 and P < 0.11 at a 0.01 sweep step; the user chose 0.10). It replaced the 0.15 assumption and is PROVISIONAL: it was calibrated on list pools, where a champion the pool lists for one role counts as in-pool in any role (the `PARKED` positions in the corpus). Role maps re-price every off-pool line; recalibrate on them. The procedure:
 
 1. Author positions where an off-pool pick tempts (`category: off-pool`), from your own prep; `docs/plans/2026-09-27-tier-b-smoke/gen_tierb.py` is the template. The four 2026-09-27 smoke positions are sweep inputs but keep `SMOKE` in `notes` — they are constructed, not corpus.
 2. Run the report (a wider `TIER_B_P` sweep narrows the brackets, e.g. `0.02,0.05,0.1,0.15,0.2,0.3`).

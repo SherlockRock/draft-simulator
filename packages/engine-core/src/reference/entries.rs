@@ -3,9 +3,11 @@
 //! Every error names its field so a mis-authored file fails with a location, never a wrong answer.
 
 use super::format::{Format, Slot};
-use super::state::{Action, Entry, Pools};
-use super::universe::{ChampionSet, Universe};
+use super::state::{Action, Entry, Pools, RoleSets};
+use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
+use crate::feasibility::ROLES;
+use crate::pools::Role;
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -26,11 +28,101 @@ pub struct EntrySpec {
     pub champion: Option<String>,
 }
 
+/// Each side is kept as raw JSON and read by `pool_form`, field by field: a side is a list of ids
+/// or a role map, and an untagged serde enum would report a mistake in either as "did not match any
+/// variant" with no location.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PoolsSpec {
-    pub blue: Vec<String>,
-    pub red: Vec<String>,
+    pub blue: serde_json::Value,
+    pub red: serde_json::Value,
+}
+
+/// The role map's keys, in `crate::feasibility::ROLES` order: the app's spelling (`Pools.champions`),
+/// so `mid` and `adc` — not the crate's `middle` nor the meta's `BOTTOM`.
+pub const ROLE_KEYS: [&str; 5] = ["top", "jungle", "mid", "adc", "support"];
+
+/// `role`'s key in a role map (`ROLE_KEYS`, by role).
+pub fn role_key(role: Role) -> &'static str {
+    match role {
+        Role::Top => "top",
+        Role::Jungle => "jungle",
+        Role::Middle => "mid",
+        Role::Adc => "adc",
+        Role::Support => "support",
+    }
+}
+
+/// One side's pool as authored (role-aware pools design § 4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PoolForm {
+    /// A list of ids: every role the meta lists for each (today's form).
+    List(Vec<String>),
+    /// The app's role map: the ids listed under each of `ROLE_KEYS`, in that order.
+    Roles([Vec<String>; 5]),
+}
+
+/// Reads one side of `pools` (`field` = `pools.blue` / `pools.red`): a list of ids, or a map with
+/// exactly the five `ROLE_KEYS`, each a list of ids (empty allowed; a champion may sit under several).
+/// Every mistake is named with its location.
+pub fn pool_form(field: &str, value: &serde_json::Value) -> Result<PoolForm, SpecError> {
+    let invalid = |field: String, reason: String| SpecError::Invalid { field, reason };
+    let ids = |field: &str, value: &serde_json::Value| -> Result<Vec<String>, SpecError> {
+        let list = value
+            .as_array()
+            .ok_or_else(|| invalid(field.to_string(), "expected a list of champion ids".into()))?;
+        list.iter()
+            .enumerate()
+            .map(|(i, id)| {
+                id.as_str().map(String::from).ok_or_else(|| {
+                    invalid(format!("{field}[{i}]"), "expected a champion id".into())
+                })
+            })
+            .collect()
+    };
+    if value.is_array() {
+        return ids(field, value).map(PoolForm::List);
+    }
+    let Some(map) = value.as_object() else {
+        return Err(invalid(
+            field.to_string(),
+            "expected a list of champion ids or a role map {top, jungle, mid, adc, support}".into(),
+        ));
+    };
+    if let Some(key) = map.keys().find(|k| !ROLE_KEYS.contains(&k.as_str())) {
+        return Err(invalid(
+            format!("{field}.{key}"),
+            "unknown role; a role map has exactly top, jungle, mid, adc, support".into(),
+        ));
+    }
+    let mut rows: [Vec<String>; 5] = Default::default();
+    for (row, key) in rows.iter_mut().zip(ROLE_KEYS) {
+        let role_field = format!("{field}.{key}");
+        let listed = map.get(key).ok_or_else(|| {
+            invalid(
+                role_field.clone(),
+                "missing; a role map has exactly top, jungle, mid, adc, support".into(),
+            )
+        })?;
+        *row = ids(&role_field, listed)?;
+    }
+    Ok(PoolForm::Roles(rows))
+}
+
+/// Tier A takes list form only (D4: the gate rules have no price for an off-role pick; role tags are
+/// the live rules'). A map is refused by shape, before it is read, so a malformed one gets this
+/// message too.
+pub fn refuse_role_maps(spec: &PoolsSpec) -> Result<(), SpecError> {
+    for (field, value) in [("pools.blue", &spec.blue), ("pools.red", &spec.red)] {
+        if value.is_object() {
+            return Err(SpecError::Invalid {
+                field: field.to_string(),
+                reason: "a role map in a Tier A fixture: Tier A pools gate as sets (D4) and take list form; role tags are priced by the live rules"
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// A single id at a single slot, `[a, b]` at a pair start (Tier A `expected_top`, Tier B `actual_next`).
@@ -162,7 +254,8 @@ pub fn board_picks(entries: &[Entry], format: &Format, side: Side) -> ChampionSe
         .collect()
 }
 
-/// Both pools as sets. `union_board = true` (live, Tier B — slice-5 U5) adds each side's own picks
+/// Both pools. A list side is a set, as before; a role-map side carries its tags (role-aware pools
+/// design § 1, § 4). `union_board = true` (live, Tier B — slice-5 U5) adds each side's own picks
 /// already on the board, so a past off-pool pick loads as a fact; `false` (Tier A) keeps the authored
 /// set exactly, so an off-pool pick stays a `PickOutsidePool` authoring error.
 pub fn spec_to_pools(
@@ -172,16 +265,47 @@ pub fn spec_to_pools(
     universe: &Universe,
     union_board: bool,
 ) -> Result<Pools, SpecError> {
-    let mut pools = Pools {
-        blue: pool_set("pools.blue", &spec.blue, universe)?,
-        red: pool_set("pools.red", &spec.red, universe)?,
-        ..Pools::default()
-    };
-    if union_board {
-        pools.blue = pools.blue.union(board_picks(entries, format, Side::Blue));
-        pools.red = pools.red.union(board_picks(entries, format, Side::Red));
+    let mut pools = Pools::default();
+    for (side, field, value) in [
+        (Side::Blue, "pools.blue", &spec.blue),
+        (Side::Red, "pools.red", &spec.red),
+    ] {
+        let board = if union_board {
+            board_picks(entries, format, side)
+        } else {
+            ChampionSet::EMPTY
+        };
+        pools = match pool_form(field, value)? {
+            PoolForm::List(ids) => {
+                let set = pool_set(field, &ids, universe)?.union(board);
+                match side {
+                    Side::Blue => Pools { blue: set, ..pools },
+                    Side::Red => Pools { red: set, ..pools },
+                }
+            }
+            PoolForm::Roles(rows) => {
+                let mut tags = RoleSets::default();
+                for ((role, key), ids) in ROLES.iter().zip(ROLE_KEYS).zip(&rows) {
+                    for id in ids {
+                        tags = tags.with(*role, lookup(&format!("{field}.{key}"), id, universe)?);
+                    }
+                }
+                pools.with_roles(side, with_board_picks(tags, board, universe))
+            }
+        };
     }
     Ok(pools)
+}
+
+/// A role-tagged side's own board picks (design, Definitions): one the pool lists keeps its listed
+/// roles — so a later pick that displaces it is charged (RA2) — and one the pool omits is added under
+/// every meta role: a sunk fact, never off-role, never charged.
+pub fn with_board_picks(tags: RoleSets, board: ChampionSet, universe: &Universe) -> RoleSets {
+    let listed = tags.union();
+    board
+        .iter()
+        .filter(|c: &ChampionIdx| !listed.contains(*c))
+        .fold(tags, |tags, c| tags.with_meta_roles(c, universe))
 }
 
 /// Resolves an action spec at `root`: a single id at a ban or single-pick slot, a pair at a pair start.

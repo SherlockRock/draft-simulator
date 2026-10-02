@@ -10,6 +10,7 @@ use engine_core::reference::feasibility::{
     action_charge, critical_pool, locked_matchable, off_pool, off_pool_count, pool_can_complete,
     side_feasible, tags_for, FeasibilityMemo, FeasibilityRule, OffPool,
 };
+use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::format::{Format, Kind, Turn};
 use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::oracle::{evaluate, Mode, OracleError, OracleInput};
@@ -1664,4 +1665,37 @@ fn a_map_of_every_meta_role_searches_as_the_list_on_random_boards() {
     // Most boards search, and the searches order children (the key is exercised below the root).
     assert!(searched >= 200, "searched {searched}");
     assert!(interior_picks > 50_000, "orderings {interior_picks}");
+}
+
+/// Design § 4 / § 6 test 15: Tier A takes list form only. A role map in a fixture is refused by shape
+/// with the D4 message — a malformed map too, before anything in it is read.
+#[test]
+fn a_tier_a_fixture_refuses_a_role_map() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures/tier-a/01-pair-completion.json");
+    let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{e}"));
+    assert!(Fixture::from_json(&raw, "01").is_ok());
+    let refused = |side: &str, map: serde_json::Value| {
+        let mut file: serde_json::Value =
+            serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{e}"));
+        file["pools"][side] = map;
+        match Fixture::from_json(&file.to_string(), "01") {
+            Err(FixtureError::Invalid { field, reason, .. }) => (field, reason),
+            other => panic!("expected Invalid, got {:?}", other.map(|f| f.id)),
+        }
+    };
+    let well_formed =
+        serde_json::json!({"top": [], "jungle": [], "mid": [], "adc": [], "support": []});
+    for (side, map) in [
+        ("blue", well_formed.clone()),
+        ("red", well_formed),
+        ("blue", serde_json::json!({"bottom": ["nobody"]})),
+    ] {
+        let (field, reason) = refused(side, map);
+        assert_eq!(field, format!("pools.{side}"));
+        assert!(
+            reason.contains("Tier A") && reason.contains("list form") && reason.contains("D4"),
+            "{reason}"
+        );
+    }
 }

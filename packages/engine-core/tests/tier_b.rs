@@ -8,6 +8,7 @@ use common::{load_production_data, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
+use engine_core::pools::Role;
 use engine_core::reference::feasibility::{
     action_charge, critical_pool, off_pool, pool_can_complete, side_feasible, FeasibilityMemo,
     FeasibilityRule,
@@ -20,6 +21,7 @@ use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{Category, TierBError, TierBFixture, Verdict};
 use engine_core::reference::universe::{Universe, DEFAULT_OFF_POOL_COST};
 use serde::Deserialize;
+use serde_json::json;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -1413,4 +1415,297 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
     assert!(files >= 18, "{files} files");
     assert!(positions >= 250, "{positions} positions");
     assert!(charges >= 1_000_000, "{charges} charges");
+}
+
+/// The Rourke pool as the app stores it (dev DB, 2026-10-01): 23 entries, 20 champions — Jax and Udyr
+/// sit under top and jungle, Yasuo under mid and adc.
+fn rourke_map() -> serde_json::Value {
+    json!({
+        "top": ["Garen", "Jax", "Nasus", "Udyr"],
+        "jungle": ["JarvanIV", "Jax", "Udyr", "Kindred", "Volibear"],
+        "mid": ["Viktor", "Syndra", "Taliyah", "Yasuo"],
+        "adc": ["Jhin", "MissFortune", "Sivir", "Varus", "Yasuo"],
+        "support": ["Alistar", "Amumu", "Bard", "Shen", "Rakan"]
+    })
+}
+
+/// The Team Liquid pool as the app stores it: 11 entries, 11 champions.
+fn team_liquid_map() -> serde_json::Value {
+    json!({
+        "top": ["Aatrox", "KSante", "Renekton"],
+        "jungle": ["Vi", "MonkeyKing"],
+        "mid": ["Azir", "Sylas"],
+        "adc": ["Jinx", "Kaisa"],
+        "support": ["Nautilus", "Rakan"]
+    })
+}
+
+/// smoke-4 (Rourke Blue against Team Liquid Red, Red's last pick) with `pools` replaced and,
+/// optionally, a `capture` added.
+fn smoke_4_with(pools: serde_json::Value, capture: Option<serde_json::Value>) -> String {
+    let mut file: serde_json::Value =
+        serde_json::from_str(&sample_json("2026-09-27-smoke-4-red-last-pick"))
+            .unwrap_or_else(|e| panic!("{e}"));
+    file["pools"] = pools;
+    if let Some(capture) = capture {
+        file["capture"] = capture;
+    }
+    file.to_string()
+}
+
+/// Role-aware pools design § 4 / § 6 test 16: a side's pool is a list or the app's role map. A map
+/// loads with its tags — a champion under two roles under both — and the same set as the list file;
+/// the two sides are independent; nothing is warned or noted for a map the meta agrees with.
+#[test]
+fn a_role_map_loads_with_its_tags_and_a_list_side_stays_a_list() {
+    let live = live();
+    let u = &live.universe;
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let list = TierBFixture::from_json(
+        &sample_json("2026-09-27-smoke-4-red-last-pick"),
+        "list",
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(list.fixture.root.pools.roles(Side::Blue), None);
+    assert_eq!(list.fixture.root.pools.roles(Side::Red), None);
+    assert!(list.notes.is_empty());
+
+    let raw = smoke_4_with(
+        json!({"blue": rourke_map(), "red": team_liquid_map()}),
+        None,
+    );
+    let maps = TierBFixture::from_json(&raw, "maps", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(maps.warnings, list.warnings);
+    assert!(maps.notes.is_empty(), "{:?}", maps.notes);
+    let pools = &maps.fixture.root.pools;
+    assert_eq!(
+        (pools.blue, pools.red),
+        (list.fixture.root.pools.blue, list.fixture.root.pools.red),
+        "the map's union is the list"
+    );
+    let blue = pools.roles(Side::Blue).copied().unwrap_or_default();
+    assert_eq!(blue.for_role(Role::Top).len(), 4);
+    assert_eq!(blue.for_role(Role::Jungle).len(), 5);
+    assert_eq!(blue.for_role(Role::Middle).len(), 4);
+    assert_eq!(blue.for_role(Role::Adc).len(), 5);
+    assert_eq!(blue.for_role(Role::Support).len(), 5);
+    for (id, roles) in [
+        ("Jax", [Role::Top, Role::Jungle]),
+        ("Yasuo", [Role::Middle, Role::Adc]),
+    ] {
+        assert!(
+            roles.iter().all(|r| blue.for_role(*r).contains(idx(id))),
+            "{id}"
+        );
+    }
+    assert!(
+        !blue.for_role(Role::Top).contains(idx("Yasuo")),
+        "the meta's top is not listed"
+    );
+    let red = pools.roles(Side::Red).copied().unwrap_or_default();
+    assert!(red.for_role(Role::Adc).contains(idx("Jinx")));
+    assert_eq!(red.union().len(), 11);
+
+    // One side a map, the other a list: independent.
+    let blue_list = list_ids(&sample_json("2026-09-27-smoke-4-red-last-pick"), "blue");
+    let raw = smoke_4_with(json!({"blue": blue_list, "red": team_liquid_map()}), None);
+    let mixed = TierBFixture::from_json(&raw, "mixed", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(mixed.fixture.root.pools.roles(Side::Blue), None);
+    assert_eq!(mixed.fixture.root.pools.roles(Side::Red), Some(&red));
+    assert_eq!(mixed.fixture.root.pools.blue, pools.blue);
+}
+
+/// One side's list of ids out of a Tier B file's `pools`.
+fn list_ids(raw: &str, side: &str) -> serde_json::Value {
+    let file: serde_json::Value = serde_json::from_str(raw).unwrap_or_else(|e| panic!("{e}"));
+    file["pools"][side].clone()
+}
+
+/// Design § 4 / test 16: every mistake in a role map is named with its location.
+#[test]
+fn the_loader_names_every_mistake_in_a_role_map() {
+    let live = live();
+    let invalid = |blue: serde_json::Value| -> (String, String) {
+        let raw = smoke_4_with(json!({"blue": blue, "red": team_liquid_map()}), None);
+        match TierBFixture::from_json(&raw, "edited", &live) {
+            Err(TierBError::Invalid { field, reason, .. }) => (field, reason),
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    };
+    let edit = |f: &dyn Fn(&mut serde_json::Value)| {
+        let mut map = rourke_map();
+        f(&mut map);
+        invalid(map)
+    };
+
+    // A key the app's map does not have (the meta says BOTTOM, the engine Adc; the file says adc).
+    let (field, reason) = edit(&|m| m["bottom"] = json!(["Jhin"]));
+    assert_eq!(field, "pools.blue.bottom");
+    assert_eq!(
+        reason,
+        "unknown role; a role map has exactly top, jungle, mid, adc, support"
+    );
+    // A missing role: all five are required (an empty list says "nobody").
+    let (field, reason) = edit(&|m| {
+        m.as_object_mut().map(|o| o.remove("support"));
+    });
+    assert_eq!(field, "pools.blue.support");
+    assert_eq!(
+        reason,
+        "missing; a role map has exactly top, jungle, mid, adc, support"
+    );
+    // An unknown champion, named with its role.
+    let (field, reason) = edit(&|m| m["mid"] = json!(["Viktor", "Nobody"]));
+    assert_eq!(field, "pools.blue.mid");
+    assert_eq!(reason, "unknown champion \"Nobody\"");
+    // Something that is not an id, named with its index.
+    let (field, reason) = edit(&|m| m["top"] = json!(["Garen", 7]));
+    assert_eq!(field, "pools.blue.top[1]");
+    assert_eq!(reason, "expected a champion id");
+    // A role that is not a list.
+    let (field, reason) = edit(&|m| m["jungle"] = json!("JarvanIV"));
+    assert_eq!(field, "pools.blue.jungle");
+    assert_eq!(reason, "expected a list of champion ids");
+    // A side that is neither form.
+    let (field, reason) = invalid(json!(7));
+    assert_eq!(field, "pools.blue");
+    assert_eq!(
+        reason,
+        "expected a list of champion ids or a role map {top, jungle, mid, adc, support}"
+    );
+    // An empty role is fine.
+    let raw = smoke_4_with(
+        json!({"blue": rourke_map(), "red": {"top": ["Aatrox"], "jungle": ["Vi"], "mid": ["Sylas"], "adc": [], "support": ["Nautilus"]}}),
+        None,
+    );
+    assert!(TierBFixture::from_json(&raw, "edited", &live).is_ok());
+}
+
+/// Design RA4 / test 16: an entry under a role the meta does not list loads — it is honoured, not
+/// refused — and the loader says so in a note, per entry, naming the side it is playable for.
+#[test]
+fn an_off_meta_entry_loads_and_is_noted() {
+    let live = live();
+    let mut red = team_liquid_map();
+    // Vi is a jungler in the meta; this pool also lists her top.
+    red["top"] = json!(["Aatrox", "KSante", "Renekton", "Vi"]);
+    let raw = smoke_4_with(json!({"blue": rourke_map(), "red": red}), None);
+    let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        loaded.notes,
+        vec![format!(
+            "{}: pools.red.top: Vi is not a meta top — playable for Red only",
+            loaded.fixture.id
+        )]
+    );
+    let u = &live.universe;
+    let vi = u.index("Vi").expect("Vi");
+    let tags = loaded
+        .fixture
+        .root
+        .pools
+        .roles(Side::Red)
+        .copied()
+        .unwrap_or_default();
+    assert!(tags.for_role(Role::Top).contains(vi) && tags.for_role(Role::Jungle).contains(vi));
+    assert_eq!(tags.off_meta(u), vec![(Role::Top, vi)]);
+}
+
+/// Design, Definitions / § 6 test 6 — `a_past_pick_outside_the_recorded_pool_loads_as_a_fact`, for a
+/// role map: a board pick the map OMITS is added under every role the meta lists for it (a sunk fact:
+/// it cannot be off-role, so it is never charged), and a board pick the map LISTS keeps its listed
+/// roles and gains none.
+#[test]
+fn a_role_map_keeps_a_listed_board_picks_roles_and_adds_an_omitted_one_under_the_metas() {
+    let live = live();
+    let u = &live.universe;
+    let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+    let mut red = team_liquid_map();
+    // Sylas is on Red's board (slot 11); drop him from the recorded pool.
+    red["mid"] = json!(["Azir"]);
+    let raw = smoke_4_with(json!({"blue": rourke_map(), "red": red}), None);
+    let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    let pools = &loaded.fixture.root.pools;
+    let tags = pools.roles(Side::Red).copied().unwrap_or_default();
+    // Omitted: in the set, under the meta's three roles for Sylas.
+    assert!(pools.red.contains(idx("Sylas")));
+    assert_eq!(pools.red.len(), 11);
+    for role in [Role::Middle, Role::Jungle, Role::Support] {
+        assert!(tags.for_role(role).contains(idx("Sylas")), "{role:?}");
+    }
+    assert!(!tags.for_role(Role::Top).contains(idx("Sylas")));
+    // Listed: Aatrox is on the board and listed top; the meta's jungle is not added.
+    assert!(tags.for_role(Role::Top).contains(idx("Aatrox")));
+    assert!(!tags.for_role(Role::Jungle).contains(idx("Aatrox")));
+    // Nothing is charged for the board as it stands, on either side, under either live rule.
+    let position = loaded
+        .fixture
+        .root
+        .position(u)
+        .unwrap_or_else(|e| panic!("{e}"));
+    for rule in [FeasibilityRule::PoolOrRoster, FeasibilityRule::Roster] {
+        for side in [Side::Blue, Side::Red] {
+            let count = off_pool(
+                &mut FeasibilityMemo::default(),
+                rule,
+                side,
+                &position,
+                pools,
+                u,
+            );
+            assert_eq!(count.made, 0, "{rule:?} {side:?}");
+        }
+    }
+}
+
+/// Design § 4 / test 16: a role-map side is checked against the capture's `display` map, role by role
+/// (the wire's keys), and a list side against `search`, as before.
+#[test]
+fn a_role_map_is_checked_against_the_captures_display() {
+    let live = live();
+    let display = |map: &serde_json::Value| {
+        json!({
+            "TOP": map["top"], "JUNGLE": map["jungle"], "MIDDLE": map["mid"],
+            "ADC": map["adc"], "SUPPORT": map["support"]
+        })
+    };
+    let capture = |blue: serde_json::Value, red: serde_json::Value| {
+        json!({
+            "protocolVersion": "1.2.0",
+            "pools": {
+                // A map side never reads `search`: these lists are wrong on purpose.
+                "blue": {"display": blue, "search": ["Zed"]},
+                "red": {"display": red, "search": []},
+                "crossGameExclusions": []
+            }
+        })
+    };
+    let pools = json!({"blue": rourke_map(), "red": team_liquid_map()});
+    let load = |capture: serde_json::Value| {
+        TierBFixture::from_json(&smoke_4_with(pools.clone(), Some(capture)), "edited", &live)
+            .unwrap_or_else(|e| panic!("{e}"))
+    };
+
+    // The same maps on the wire: nothing to say.
+    let same = load(capture(display(&rourke_map()), display(&team_liquid_map())));
+    assert!(same.warnings.is_empty(), "{:?}", same.warnings);
+
+    // One champion fewer in the captured Blue adc list: Blue differs, Red does not.
+    let mut other = rourke_map();
+    other["adc"] = json!(["Jhin", "MissFortune", "Sivir", "Varus"]);
+    let differing = load(capture(display(&other), display(&team_liquid_map())));
+    assert_eq!(differing.warnings.len(), 1, "{:?}", differing.warnings);
+    assert!(differing.warnings[0].contains("pools.blue differs from the captured request"));
+    // The top-level field is used.
+    assert_eq!(
+        differing
+            .fixture
+            .root
+            .pools
+            .roles(Side::Blue)
+            .map(|t| t.for_role(Role::Adc).len()),
+        Some(5)
+    );
 }
