@@ -1802,3 +1802,269 @@ fn the_report_marks_an_off_role_fill_off_pool() {
     );
     assert_eq!(list.matches("searched 53 of 154").count(), 2, "{list}");
 }
+
+/// Role-aware pools design § 6 test 20 — the acceptance corpus. The five positions parked on
+/// 2026-09-29 because the engine's best "in-pool" action was an off-role fill, now written as role
+/// maps (`gen_corpus_roles.py`), on the boards as recorded, under `roster` at the default P, widths B,
+/// horizon 2. On the four parked directly:
+///
+/// - as LISTS the best in-pool action is the fill the parking note names (Galio pushed to support by
+///   a second and third mid; Viktor, then Syndra, in the ADC slot; Vi at top);
+/// - as MAPS that same action is off-pool with the charge shown, it falls in the ranking, and the
+///   best in-pool action is a champion the pool lists for the missing role.
+///
+/// top-17 was parked one ply down: its best in-pool pair is the same in both forms, and what moves is
+/// Red's reply — as a list the free off-role "Vi at top", as a map a reply Red pays for.
+///
+/// Whether the TOP action is in-pool is not asserted: at P = 0.10 it is an off-pool pick on every one
+/// of these (the calibration question the next session reads), which is the search doing its job.
+#[test]
+fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
+    let live = live();
+    let u = &live.universe;
+    let action = |ids: &[&str]| -> Action {
+        let c = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
+        match ids {
+            [a] => Action::Pick(c(a)),
+            [a, b] => Action::pair(c(a), c(b)),
+            other => panic!("{other:?}"),
+        }
+    };
+    struct Reading {
+        /// (rank, action) of the best in-pool action; the rank of `fill`.
+        best_in_pool: (usize, Action),
+        fill_rank: usize,
+        fill_charge: usize,
+        /// The best in-pool line: its value and Red's off-pool count at its end.
+        value: f64,
+        red_off_pool: usize,
+        /// The fill's own line: its value and both sides' off-pool counts at its end.
+        fill_value: f64,
+        fill_off_pool: (usize, usize),
+    }
+    let read = |id: &str, fill: Action, as_list: bool| -> Reading {
+        let fx = TierBFixture::load_file(
+            &dir("fixtures/tier-b").join(format!("2026-09-29-{id}.json")),
+            &live,
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+        .fixture;
+        assert!(
+            fx.root.pools.roles(Side::Blue).is_some() && fx.root.pools.roles(Side::Red).is_some(),
+            "{id}: the corpus is written as role maps"
+        );
+        let pools = if as_list {
+            Pools {
+                blue: fx.root.pools.blue,
+                red: fx.root.pools.red,
+                ..Pools::default()
+            }
+        } else {
+            fx.root.pools
+        };
+        let position = fx.root.position(u).unwrap_or_else(|e| panic!("{e}"));
+        let mover = position.mover().expect("a root");
+        let outcome = search(
+            &OracleInput {
+                position: &position,
+                universe: u,
+                pools: &pools,
+                objective: u,
+                feasibility: FeasibilityRule::Roster,
+                mode: Mode::Horizon(2),
+                epsilon: 1e-9,
+                off_pool_cost: Some(DEFAULT_OFF_POOL_COST),
+            },
+            &SearchParams {
+                node_budget: Some(20_000_000),
+                wall_budget: Duration::from_secs(300),
+                shortlist: Some(Shortlist {
+                    singles: 30,
+                    pairs: 60,
+                    root_off_pool: 100,
+                }),
+                ..SearchParams::default()
+            },
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert!(!outcome.partial, "{id}");
+        let charge = action_charge(
+            &mut FeasibilityMemo::default(),
+            FeasibilityRule::Roster,
+            mover,
+            &position,
+            &pools,
+            u,
+        );
+        let rank = |a: Action| {
+            1 + outcome
+                .ranked
+                .iter()
+                .position(|r| r.action == a)
+                .unwrap_or_else(|| panic!("{id}: {a:?} is not ranked"))
+        };
+        let best = outcome
+            .ranked
+            .iter()
+            .find(|r| charge.of(r.action) == 0)
+            .unwrap_or_else(|| panic!("{id}: no in-pool action ranked"));
+        let filled = &outcome.ranked[rank(fill) - 1];
+        Reading {
+            best_in_pool: (rank(best.action), best.action),
+            fill_rank: rank(fill),
+            fill_charge: charge.of(fill),
+            value: best.value,
+            red_off_pool: best.ends.red_off_pool,
+            fill_value: filled.value,
+            fill_off_pool: (filled.ends.blue_off_pool, filled.ends.red_off_pool),
+        }
+    };
+
+    // (position, the parked fill, its rank as a list, its charge and rank as a map, the best in-pool
+    // action as a map and its rank).
+    for (id, fill, list_rank, charge, map_rank, in_role, in_role_rank) in [
+        (
+            "supp-pinch-slot-17-dme",
+            action(&["Ahri", "Syndra"]),
+            1,
+            2,
+            16,
+            action(&["Renata", "Ziggs"]),
+            5,
+        ),
+        (
+            "supp-pinch-slot-19-kittens",
+            action(&["Viktor"]),
+            2,
+            1,
+            13,
+            action(&["Sivir"]),
+            6,
+        ),
+        (
+            "ad-pinch-slot-19-kittens",
+            action(&["Syndra"]),
+            1,
+            1,
+            2,
+            action(&["Ashe"]),
+            3,
+        ),
+        (
+            "top-pinch-slot-19-kittens",
+            action(&["Vi"]),
+            5,
+            1,
+            27,
+            action(&["Ornn"]),
+            12,
+        ),
+    ] {
+        let list = read(id, fill, true);
+        assert_eq!(list.best_in_pool, (list_rank, fill), "{id}: as a list");
+        assert_eq!(list.fill_charge, 0, "{id}: as a list the fill is free");
+        let map = read(id, fill, false);
+        assert_eq!(map.fill_charge, charge, "{id}: as a map");
+        assert_eq!(map.fill_rank, map_rank, "{id}: as a map");
+        assert_eq!(map.best_in_pool, (in_role_rank, in_role), "{id}: as a map");
+        // The price itself, independently of any pinned rank: at a last-pick root the fill's leaf is
+        // the same complete board in both forms, so its value moves by exactly P times the change in
+        // (Red's off-pool count − Blue's) — the right amount, on the right side, with the right sign.
+        if id.contains("slot-19") {
+            let net = |r: &Reading| {
+                f64::from(u8::try_from(r.fill_off_pool.1).expect("a handful"))
+                    - f64::from(u8::try_from(r.fill_off_pool.0).expect("a handful"))
+            };
+            let moved = map.fill_value - list.fill_value;
+            let expected = DEFAULT_OFF_POOL_COST * (net(&map) - net(&list));
+            assert!(
+                (moved - expected).abs() < 1e-9,
+                "{id}: the fill moved by {moved}, the counts say {expected}"
+            );
+            assert_eq!(list.fill_off_pool.1, 0, "{id}: free as a list");
+            assert_eq!(map.fill_off_pool.1, charge, "{id}: charged to Red as a map");
+        }
+    }
+    // Two more charges the design names: at top-19 Locke (listed Middle) cannot go top and pushes
+    // MonkeyKing there — two off-role pilots; at supp-17 Ahri + Kaisa pushes Galio to support — one.
+    // (Asked of the charge directly: Ahri + Kaisa is cut by the shortlist and never ranked.)
+    let charge_at = |id: &str, a: Action| -> usize {
+        let fx = TierBFixture::load_file(
+            &dir("fixtures/tier-b").join(format!("2026-09-29-{id}.json")),
+            &live,
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+        .fixture;
+        let position = fx.root.position(u).unwrap_or_else(|e| panic!("{e}"));
+        action_charge(
+            &mut FeasibilityMemo::default(),
+            FeasibilityRule::Roster,
+            position.mover().expect("a root"),
+            &position,
+            &fx.root.pools,
+            u,
+        )
+        .of(a)
+    };
+    assert_eq!(
+        charge_at("top-pinch-slot-19-kittens", action(&["Locke"])),
+        2
+    );
+    assert_eq!(
+        charge_at("supp-pinch-slot-17-dme", action(&["Ahri", "Kaisa"])),
+        1
+    );
+
+    // top-17, one ply down: the same best in-pool pair either way; Red's reply stops being free.
+    let pair = action(&["Locke", "Rumble"]);
+    let (list, map) = (
+        read("top-pinch-slot-17-dme", pair, true),
+        read("top-pinch-slot-17-dme", pair, false),
+    );
+    assert_eq!(list.best_in_pool, (2, pair));
+    assert_eq!(map.best_in_pool, (2, pair));
+    assert_eq!((list.red_off_pool, map.red_off_pool), (0, 1));
+    assert!(
+        map.value > list.value,
+        "Red's reply is priced: {} then {}",
+        list.value,
+        map.value
+    );
+}
+
+/// Role-aware pools design § 2 (the sixth reader): the report's break-even reads the action's CLASS
+/// from the same charge. supp-17's top pair under role maps is Syndra + Ziggs — both in DME's pool as
+/// a set, but taking them pushes Galio to support — so the top is OFF-pool, and the break-even says so.
+#[test]
+fn the_report_classes_an_in_set_off_role_pair_off_pool() {
+    let live = live();
+    let loaded = vec![TierBFixture::load_file(
+        &dir("fixtures/tier-b/2026-09-29-supp-pinch-slot-17-dme.json"),
+        &live,
+    )];
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(2),
+        Shortlist {
+            singles: 30,
+            pairs: 60,
+            root_off_pool: 100,
+        },
+        &[DEFAULT_OFF_POOL_COST],
+        ReportLimits {
+            top: 2,
+            ..ReportLimits::DEFAULT
+        },
+    );
+    assert!(
+        text.contains("    Syndra+Ziggs                 0.0099 [off-pool 1]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  break-even: top off-pool at every P"),
+        "{text}"
+    );
+}
