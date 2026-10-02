@@ -182,9 +182,106 @@ pub fn can_complete_roles(
     max_bipartite_matching(&all_masks) >= 5
 }
 
+/// `can_complete_roles` for a caller that already holds the masks (one per champion, in the caller's
+/// order): the same decision sequence — too few candidates, a comp that is not five, locked picks that
+/// cannot be matched, then the combined matching — written beside the incumbent's function, which is
+/// left exactly as it was (it builds its masks lazily, after the cheap exits, and the incumbent search
+/// calls it on its hot path). `the_mask_predicate_is_the_string_predicate` keeps the two in step.
+pub(crate) fn can_complete_masks(
+    locked_masks: &[RoleMask],
+    pool_masks: &[RoleMask],
+    remaining_picks: usize,
+) -> bool {
+    if pool_masks.len() < remaining_picks {
+        return false;
+    }
+    if locked_masks.len() + remaining_picks != 5 {
+        return true;
+    }
+    if max_bipartite_matching(locked_masks) != locked_masks.len() {
+        return false;
+    }
+    let mut all_masks = locked_masks.to_vec();
+    all_masks.extend_from_slice(pool_masks);
+    max_bipartite_matching(&all_masks) >= 5
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{max_assignment, max_bipartite_matching, RoleMask};
+    use super::{
+        can_complete_masks, can_complete_roles, champion_role_mask, max_assignment,
+        max_bipartite_matching, RoleMask, ROLES,
+    };
+    use crate::role_solver::ChampionMeta;
+    use std::collections::HashMap;
+
+    /// Role-aware pools design § 2: `can_complete_masks` is `can_complete_roles` on masks. One champion
+    /// per non-empty role mask (`m1` … `m31`, its positions the mask's roles) plus one the meta does not
+    /// know; 20 000 draws of locked picks (0–5), candidates (0–6) and picks to come (0–5) — every exit of
+    /// the predicate, the comps that are not five included — give the same answer through both.
+    #[test]
+    fn the_mask_predicate_is_the_string_predicate() {
+        let meta: HashMap<String, ChampionMeta> = (1u8..32)
+            .map(|mask| {
+                let id = format!("m{mask}");
+                let positions = ROLES
+                    .iter()
+                    .enumerate()
+                    .filter(|(bit, _)| mask >> bit & 1 == 1)
+                    .map(|(_, role)| *role)
+                    .collect();
+                (
+                    id.clone(),
+                    ChampionMeta {
+                        id,
+                        positions,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+        assert_eq!(champion_role_mask("m21", &meta), 21);
+        assert_eq!(champion_role_mask("nobody", &meta), 0);
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = |bound: u64| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) % bound
+        };
+        let (mut yes, mut no, mut not_five) = (0, 0, 0);
+        for _ in 0..20_000 {
+            let name = |next: &mut dyn FnMut(u64) -> u64| match next(33) {
+                0 => "nobody".to_string(),
+                mask => format!("m{}", mask.min(31)),
+            };
+            let (locked_len, pool_len) = (next(6), next(7));
+            let locked: Vec<String> = (0..locked_len).map(|_| name(&mut next)).collect();
+            let pool: Vec<String> = (0..pool_len).map(|_| name(&mut next)).collect();
+            // Mostly the count that makes a comp of five; sometimes any other.
+            let remaining = if next(4) == 0 {
+                usize::try_from(next(6)).unwrap_or(0)
+            } else {
+                5usize.saturating_sub(locked.len())
+            };
+            let masks = |names: &[String]| -> Vec<RoleMask> {
+                names.iter().map(|c| champion_role_mask(c, &meta)).collect()
+            };
+            let by_names = can_complete_roles(&locked, &pool, remaining, &meta);
+            assert_eq!(
+                can_complete_masks(&masks(&locked), &masks(&pool), remaining),
+                by_names,
+                "{locked:?} {pool:?} {remaining}"
+            );
+            yes += u32::from(by_names);
+            no += u32::from(!by_names);
+            not_five += u32::from(locked.len() + remaining != 5);
+        }
+        assert!(
+            yes > 2_000 && no > 2_000 && not_five > 2_000,
+            "{yes} {no} {not_five}"
+        );
+    }
 
     /// Snipe-key design § 3 test 4: on every combination of up to four role masks (each of the 32
     /// masks, the empty one included) the assignment marks exactly as many champions as the maximum

@@ -64,7 +64,7 @@ pub fn legal_actions_under(
             FeasibilityRule::On | FeasibilityRule::Off => false,
             FeasibilityRule::PoolOrRoster => {
                 slot.action == ActionType::Pick
-                    && !pool_can_complete(memo, slot.side, position, pools, universe)
+                    && !pool_can_complete(memo, rule, slot.side, position, pools, universe)
             }
             FeasibilityRule::Roster => slot.action == ActionType::Pick,
         };

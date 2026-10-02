@@ -5,7 +5,7 @@
 use super::format::{Format, Slot};
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
-use crate::feasibility::ROLES;
+use crate::feasibility::{RoleMask, ROLES};
 use crate::pools::Role;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +91,15 @@ impl RoleSets {
                 .filter(|(bit, _)| (universe.role_mask(c) >> bit) & 1 == 1)
                 .fold(tags, |tags, (_, role)| tags.with(*role, c))
         })
+    }
+
+    /// The roles this pool lists for `c` (0 = not in the pool), bit `i` = `ROLES[i]`.
+    pub(crate) fn mask(&self, c: ChampionIdx) -> RoleMask {
+        self.by_role
+            .iter()
+            .enumerate()
+            .filter(|(_, set)| set.contains(c))
+            .fold(0, |mask, (bit, _)| mask | (1 << bit))
     }
 }
 

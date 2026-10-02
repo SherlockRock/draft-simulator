@@ -2,10 +2,13 @@
 //! defined at five picks a side (`crate::feasibility::can_complete_roles` returns `true` for
 //! any other total); `FeasibilityRule::Off` is how a fixture on a shorter format says so.
 
-use super::state::{Pools, Position};
+use super::state::{Pools, Position, RoleSets};
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::Side;
-use crate::feasibility::{can_complete_roles, max_role_assignment, max_role_matching};
+use crate::feasibility::{
+    can_complete_masks, can_complete_roles, max_matching_masks, max_role_assignment,
+    max_role_matching, RoleMask,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -64,7 +67,10 @@ impl FeasibilityRule {
 /// of two sole-ADCs are queried against the roster at every leaf below them, `available` differs
 /// per leaf, and each miss ran the string predicate over ≈ 165 names — the live rule cost 2× the
 /// gate's time and memory for that alone). `critical` memoises `critical_pool` on `(side, locked set,
-/// pool net)` (the snipe-aware key, design `engine-snipe-key-design.md` § 2).
+/// pool net)` (the snipe-aware key, design `engine-snipe-key-design.md` § 2). No key carries the pools:
+/// a role-tagged side (`tags_for`) answers `locked` and `memo` on its own playable masks, so a memo
+/// must never be shared across different pools either — one per search, as the search and the oracle
+/// build it.
 #[derive(Debug, Default)]
 pub struct FeasibilityMemo {
     memo: HashMap<(Side, ChampionSet, ChampionSet), bool>,
@@ -73,6 +79,37 @@ pub struct FeasibilityMemo {
     critical: HashMap<(Side, ChampionSet, ChampionSet), ChampionSet>,
     pub calls: u64,
     pub misses: u64,
+}
+
+/// `side`'s role tags where they are read (role-aware pools design § 1): the pool carries them, the
+/// rule is a live one and the side picks five. Everywhere else the side is its set and every reader
+/// runs the list-form code — which is what keeps a list pool bit-identical, and what makes the public
+/// helpers total; a search or an oracle run refuses the other cases up front
+/// (`oracle::check_role_tags`).
+pub fn tags_for<'p>(
+    rule: FeasibilityRule,
+    side: Side,
+    position: &Position<'_>,
+    pools: &'p Pools,
+) -> Option<&'p RoleSets> {
+    if rule.is_live() {
+        live_tags(side, position, pools)
+    } else {
+        None
+    }
+}
+
+/// `tags_for` where the caller is already on a live rule's path.
+fn live_tags<'p>(side: Side, position: &Position<'_>, pools: &'p Pools) -> Option<&'p RoleSets> {
+    pools
+        .roles(side)
+        .filter(|_| position.format().picks_per_side(side) == 5)
+}
+
+/// RA4: the roles `c` can fill for a role-tagged side — the meta's, plus the ones the side's own pool
+/// lists for it. Per side: the other side's entries never widen it.
+fn playable(tags: &RoleSets, universe: &Universe, c: ChampionIdx) -> RoleMask {
+    universe.role_mask(c) | tags.mask(c)
 }
 
 /// Can `side` still complete five roles? locked = its picks; `On`: from its pool net of everything
@@ -86,16 +123,24 @@ pub fn side_feasible(
     pools: &Pools,
     universe: &Universe,
 ) -> bool {
+    let tags = tags_for(rule, side, position, pools);
+    let roster = |memo: &mut FeasibilityMemo| {
+        can_complete_from(
+            memo,
+            side,
+            position,
+            position.available(universe),
+            tags,
+            universe,
+        )
+    };
     match rule {
         FeasibilityRule::Off => true,
-        FeasibilityRule::On => pool_can_complete(memo, side, position, pools, universe),
+        FeasibilityRule::On => pool_can_complete(memo, rule, side, position, pools, universe),
         FeasibilityRule::PoolOrRoster => {
-            pool_can_complete(memo, side, position, pools, universe)
-                || can_complete_from(memo, side, position, position.available(universe), universe)
+            pool_can_complete(memo, rule, side, position, pools, universe) || roster(memo)
         }
-        FeasibilityRule::Roster => {
-            can_complete_from(memo, side, position, position.available(universe), universe)
-        }
+        FeasibilityRule::Roster => roster(memo),
     }
 }
 
@@ -103,13 +148,15 @@ pub fn side_feasible(
 /// also the widening test: `false` at a pick slot means the side draws from the roster (U10).
 pub fn pool_can_complete(
     memo: &mut FeasibilityMemo,
+    rule: FeasibilityRule,
     side: Side,
     position: &Position<'_>,
     pools: &Pools,
     universe: &Universe,
 ) -> bool {
     let pool_net = pools.for_side(side).intersect(position.available(universe));
-    can_complete_from(memo, side, position, pool_net, universe)
+    let tags = tags_for(rule, side, position, pools);
+    can_complete_from(memo, side, position, pool_net, tags, universe)
 }
 
 /// U10's off-pool count for `side` at a leaf: off-pool picks already made (picks outside the side's
@@ -137,6 +184,7 @@ pub fn off_pool_count(
         return 0;
     }
     let pool = pools.for_side(side);
+    let tags = tags_for(rule, side, position, pools);
     let made = position
         .picks(side)
         .iter()
@@ -146,9 +194,15 @@ pub fn off_pool_count(
         .format()
         .picks_remaining(side, position.slot_index());
     let forced = if remaining == 0
-        || pool_can_complete(memo, side, position, pools, universe)
-        || !can_complete_from(memo, side, position, position.available(universe), universe)
-    {
+        || pool_can_complete(memo, rule, side, position, pools, universe)
+        || !can_complete_from(
+            memo,
+            side,
+            position,
+            position.available(universe),
+            tags,
+            universe,
+        ) {
         0
     } else {
         // The roster can complete, so the locked picks form a matching and every matchable
@@ -183,7 +237,9 @@ pub fn critical_pool(
     let remaining = position
         .format()
         .picks_remaining(side, position.slot_index());
-    if remaining == 0 || !locked_matchable(memo, side, locked, universe) {
+    // Only ever asked where the off-pool term rides the key — under a live rule.
+    let tags = live_tags(side, position, pools);
+    if remaining == 0 || !locked_matchable(memo, side, locked, tags, universe) {
         return ChampionSet::EMPTY;
     }
     let pool_net = pools.for_side(side).intersect(position.available(universe));
@@ -235,28 +291,46 @@ fn role_rank(
 /// Can `locked` be matched to distinct roles at all? The predicate's own first test, and the whole
 /// answer when it fails; memoised on the locked set alone (`FeasibilityMemo.locked`). Public for the
 /// shortlist's lazy filter (B-proper § 2, `search::truncate_children`), which asks it of a child's
-/// locked picks — at most five names, no candidate set.
+/// locked picks — at most five names, no candidate set. `tags` is the side's `tags_for`: `None` is
+/// the meta alone, as before; `Some` matches on the side's playable roles (RA4). The switch is HERE,
+/// inside the one function the critical-set gate, the completion predicate and the lazy filter all
+/// call, so the three cannot put a meta-only and a playable answer on the same `(side, locked)` key.
 pub fn locked_matchable(
     memo: &mut FeasibilityMemo,
     side: Side,
     locked: &[ChampionIdx],
+    tags: Option<&RoleSets>,
     universe: &Universe,
 ) -> bool {
     let locked_set: ChampionSet = locked.iter().copied().collect();
     if let Some(&ok) = memo.locked.get(&(side, locked_set)) {
         return ok;
     }
-    let ok = max_role_matching(&universe.names(locked), universe.champion_meta()) == locked.len();
+    let ok = match tags {
+        None => {
+            max_role_matching(&universe.names(locked), universe.champion_meta()) == locked.len()
+        }
+        Some(tags) => {
+            let masks: Vec<RoleMask> = locked
+                .iter()
+                .map(|c| playable(tags, universe, *c))
+                .collect();
+            max_matching_masks(&masks) == locked.len()
+        }
+    };
     memo.locked.insert((side, locked_set), ok);
     ok
 }
 
 /// The predicate on an explicit candidate set, memoised on `(side, locked set, candidate set)`.
+/// `tags` as in `locked_matchable`: `None` runs the incumbent's string predicate, as before; `Some`
+/// runs the same predicate on the side's playable masks (`crate::feasibility::can_complete_masks`).
 fn can_complete_from(
     memo: &mut FeasibilityMemo,
     side: Side,
     position: &Position<'_>,
     candidates: ChampionSet,
+    tags: Option<&RoleSets>,
     universe: &Universe,
 ) -> bool {
     memo.calls += 1;
@@ -276,16 +350,28 @@ fn can_complete_from(
     // infeasible whatever the candidates (the predicate's own first test, `can_complete_roles`), so
     // the answer is memoised on the locked set alone and the candidates are never named. Exactly the
     // predicate's result; only its cost changes.
-    if locked.len() + remaining == 5 && !locked_matchable(memo, side, locked, universe) {
+    if locked.len() + remaining == 5 && !locked_matchable(memo, side, locked, tags, universe) {
         memo.memo.insert(key, false);
         return false;
     }
-    let feasible = can_complete_roles(
-        &universe.names(locked),
-        &universe.names_of(candidates),
-        remaining,
-        universe.champion_meta(),
-    );
+    let feasible = match tags {
+        None => can_complete_roles(
+            &universe.names(locked),
+            &universe.names_of(candidates),
+            remaining,
+            universe.champion_meta(),
+        ),
+        Some(tags) => {
+            let masks = |champions: &mut dyn Iterator<Item = ChampionIdx>| -> Vec<RoleMask> {
+                champions.map(|c| playable(tags, universe, c)).collect()
+            };
+            can_complete_masks(
+                &masks(&mut locked.iter().copied()),
+                &masks(&mut candidates.iter()),
+                remaining,
+            )
+        }
+    };
     memo.memo.insert(key, feasible);
     feasible
 }

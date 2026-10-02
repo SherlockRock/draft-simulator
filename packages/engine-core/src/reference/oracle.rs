@@ -74,6 +74,9 @@ pub enum OracleError {
     /// `OracleInput::off_pool_cost` does not fit the rule (B-proper design § 1).
     #[error("off_pool_cost: {reason}")]
     OffPoolCost { reason: String },
+    /// A role-tagged pool where role tags are not read (role-aware pools design § 1).
+    #[error("role tags: {reason}")]
+    RoleTags { reason: String },
 }
 
 impl From<ClassifyError> for OracleError {
@@ -129,6 +132,36 @@ pub fn resolve_off_pool_cost(input: &OracleInput<'_>) -> Result<f64, OracleError
             "not read under {rule:?}: pool_or_roster prices at P = L itself and the gate rules have no off-pool picks"
         ))),
     }
+}
+
+/// Role tags are read under a live rule on a five-pick comp and nowhere else (role-aware pools design
+/// § 1). The gate rules have no price, so an off-role pick from a tagged pool would be legal and free
+/// there — the defect the tags exist to remove — and off five picks the completion predicate is not
+/// defined. Refused here, beside the check on P, so no search or oracle run ever reads a tagged pool
+/// as its set without saying so.
+pub fn check_role_tags(input: &OracleInput<'_>) -> Result<(), OracleError> {
+    for side in [Side::Blue, Side::Red] {
+        if input.pools.roles(side).is_none() {
+            continue;
+        }
+        if !input.feasibility.is_live() {
+            return Err(OracleError::RoleTags {
+                reason: format!(
+                    "{side:?}'s pool is role-tagged under {}: role tags are priced by the live rules (pool_or_roster, roster); the gate takes list form",
+                    input.feasibility.wire_name()
+                ),
+            });
+        }
+        let picks = input.position.format().picks_per_side(side);
+        if picks != 5 {
+            return Err(OracleError::RoleTags {
+                reason: format!(
+                    "{side:?}'s pool is role-tagged and {side:?} picks {picks}: role tags need a five-pick comp"
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 struct Search<'a> {
@@ -226,6 +259,7 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
         return Err(OracleError::HorizonZero);
     }
     let off_pool_cost = resolve_off_pool_cost(input)?;
+    check_role_tags(input)?;
 
     let started = Instant::now();
     let mut search = Search {

@@ -2083,6 +2083,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
             rule: FeasibilityRule::Roster,
             memo: &mut memo,
             universe: &u,
+            pools: &pools,
         },
     );
     assert_eq!(
@@ -2100,6 +2101,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
             rule: FeasibilityRule::Roster,
             memo: &mut memo,
             universe: &u,
+            pools: &pools,
         },
     );
     assert_eq!(forty.len(), 40);
@@ -2131,6 +2133,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
             rule: FeasibilityRule::On,
             memo: &mut memo,
             universe: &u,
+            pools: &pools,
         },
     );
     assert_eq!(gate, ordered[..4].to_vec(), "the gate rules truncate blind");
@@ -2143,7 +2146,8 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
             &mut Filter {
                 rule: FeasibilityRule::Roster,
                 memo: &mut memo,
-                universe: &u
+                universe: &u,
+                pools: &pools,
             }
         ),
         ordered,

@@ -11,13 +11,13 @@
 //! Truncation is not exact; `None` is the exact search of slice 4.
 
 use super::feasibility::{
-    critical_pool, locked_matchable, side_feasible, FeasibilityMemo, FeasibilityRule,
+    critical_pool, locked_matchable, side_feasible, tags_for, FeasibilityMemo, FeasibilityRule,
 };
 use super::format::Slot;
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::{Leaf, Objective};
-use super::oracle::{resolve_off_pool_cost, Mode, OracleError, OracleInput};
-use super::state::{Action, Position};
+use super::oracle::{check_role_tags, resolve_off_pool_cost, Mode, OracleError, OracleInput};
+use super::state::{Action, Pools, Position};
 use super::transposition::{Entry, Key, TranspositionTable};
 use super::universe::{ChampionSet, Universe};
 use crate::cancellation::{ensure_not_cancelled, CancelHandle};
@@ -235,11 +235,13 @@ pub fn static_order(
 }
 
 /// What the shortlist's feasibility filter reads (B-proper § 2): the rule (the filter runs under the
-/// live rules only), the search's feasibility memo (`FeasibilityMemo.locked`) and the universe.
+/// live rules only), the search's feasibility memo (`FeasibilityMemo.locked`), the universe, and the
+/// pools — a role-tagged side's locked picks are matched on its playable roles (`tags_for`).
 pub struct Filter<'a> {
     pub rule: FeasibilityRule,
     pub memo: &'a mut FeasibilityMemo,
     pub universe: &'a Universe,
+    pub pools: &'a Pools,
 }
 
 /// B-proper § 2: the shortlist's truncation, a pure function of its arguments. `ordered` is a pick
@@ -263,6 +265,7 @@ pub fn truncate_children(
         ordered.truncate(width);
         return ordered;
     }
+    let tags = tags_for(filter.rule, side, position, filter.pools);
     let mut keep = vec![false; ordered.len()];
     let mut kept = 0;
     for (i, a) in ordered.iter().enumerate() {
@@ -270,7 +273,7 @@ pub fn truncate_children(
             break;
         }
         let child = position.apply(*a);
-        if locked_matchable(filter.memo, side, child.picks(side), filter.universe) {
+        if locked_matchable(filter.memo, side, child.picks(side), tags, filter.universe) {
             keep[i] = true;
             kept += 1;
         }
@@ -452,6 +455,7 @@ impl Iteration<'_, '_> {
                         rule: self.input.feasibility,
                         memo: &mut self.shared.memo,
                         universe: self.input.universe,
+                        pools: self.input.pools,
                     },
                 )
             }
@@ -605,6 +609,7 @@ impl Iteration<'_, '_> {
                     rule: self.input.feasibility,
                     memo: &mut self.shared.memo,
                     universe: self.input.universe,
+                    pools: self.input.pools,
                 },
             ),
             _ => ordered,
@@ -689,6 +694,7 @@ pub fn search(
         }
     }
     let off_pool_cost = resolve_off_pool_cost(input).map_err(invalid)?;
+    check_role_tags(input).map_err(invalid)?;
     let mut shared = Shared {
         memo: FeasibilityMemo::default(),
         table: TranspositionTable::default(),
