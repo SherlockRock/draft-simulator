@@ -8,11 +8,15 @@ use common::{load_production_data, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
-use engine_core::reference::feasibility::FeasibilityRule;
+use engine_core::reference::feasibility::{
+    action_charge, critical_pool, off_pool, pool_can_complete, side_feasible, FeasibilityMemo,
+    FeasibilityRule,
+};
 use engine_core::reference::live::LiveUniverse;
+use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{search, SearchParams, Shortlist};
-use engine_core::reference::state::{Action, Entry};
+use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{Category, TierBError, TierBFixture, Verdict};
 use engine_core::reference::universe::{Universe, DEFAULT_OFF_POOL_COST};
 use serde::Deserialize;
@@ -1324,4 +1328,89 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         "{text}"
     );
     assert!(text.contains("sample-skip-at-slot-1"), "{text}");
+}
+
+/// Role-aware pools design § 6 test 1 (a), on the real pools: a pool written as a map of every meta
+/// role is the list. For every position along the recorded line of every Tier B file (the corpus under
+/// `fixtures/tier-b/` and the samples under `tests/data/tier-b/`), under both live rules and for both
+/// sides: the off-pool count in both parts, the pool test, feasibility, the critical set, the legal fan
+/// and the charge of every roster pick are equal for the list pools and for the same pools as maps.
+/// This is the test that ties the tagged solver to list semantics — a list side never reaches it.
+#[test]
+fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
+    let live = live();
+    let u = &live.universe;
+    let mut files = 0;
+    let mut positions = 0;
+    let mut charges = 0u64;
+    for sub in ["fixtures/tier-b", "tests/data/tier-b"] {
+        let loaded = TierBFixture::load_dir(&dir(sub), &live).unwrap_or_else(|e| panic!("{e}"));
+        for fx in loaded
+            .into_iter()
+            .map(|l| l.unwrap_or_else(|e| panic!("{sub}: {e}")).fixture)
+        {
+            files += 1;
+            let list = Pools {
+                blue: fx.root.pools.blue,
+                red: fx.root.pools.red,
+                ..Pools::default()
+            };
+            let maps = list
+                .with_roles(Side::Blue, RoleSets::meta_roles(list.blue, u))
+                .with_roles(Side::Red, RoleSets::meta_roles(list.red, u));
+            assert_eq!((maps.blue, maps.red), (list.blue, list.red), "{}", fx.id);
+            for n in 0..=fx.root.entries.len() {
+                let position = Position::new(&fx.root.format, &fx.root.entries[..n], &list, u)
+                    .unwrap_or_else(|e| panic!("{} at {n}: {e}", fx.id))
+                    .with_excluded(fx.root.excluded);
+                positions += 1;
+                for rule in [FeasibilityRule::PoolOrRoster, FeasibilityRule::Roster] {
+                    for side in [Side::Blue, Side::Red] {
+                        let ask = |pools: &Pools| {
+                            let mut memo = FeasibilityMemo::default();
+                            (
+                                off_pool(&mut memo, rule, side, &position, pools, u),
+                                pool_can_complete(&mut memo, rule, side, &position, pools, u),
+                                side_feasible(&mut memo, rule, side, &position, pools, u),
+                                critical_pool(&mut memo, side, &position, pools, u),
+                            )
+                        };
+                        assert_eq!(ask(&maps), ask(&list), "{} at {n} {rule:?} {side:?}", fx.id);
+                    }
+                    let fan = |pools: &Pools| {
+                        legal_actions_under(
+                            &position,
+                            u,
+                            pools,
+                            rule,
+                            &mut FeasibilityMemo::default(),
+                        )
+                    };
+                    assert_eq!(fan(&maps), fan(&list), "{} at {n} {rule:?}", fx.id);
+                    let Some(slot) = position.next_slot() else {
+                        continue;
+                    };
+                    if slot.action != ActionType::Pick {
+                        continue;
+                    }
+                    let mut memo = FeasibilityMemo::default();
+                    let by_list = action_charge(&mut memo, rule, slot.side, &position, &list, u);
+                    let by_map = action_charge(&mut memo, rule, slot.side, &position, &maps, u);
+                    for action in position.pick_actions_from(position.available(u)) {
+                        assert_eq!(
+                            by_map.of(action),
+                            by_list.of(action),
+                            "{} at {n} {rule:?} {action:?}",
+                            fx.id
+                        );
+                        charges += 1;
+                    }
+                }
+            }
+        }
+    }
+    // Twelve corpus positions and the samples, every prefix, every roster pick at every pick slot.
+    assert!(files >= 18, "{files} files");
+    assert!(positions >= 250, "{positions} positions");
+    assert!(charges >= 1_000_000, "{charges} charges");
 }
