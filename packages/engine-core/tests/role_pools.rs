@@ -1699,3 +1699,93 @@ fn a_tier_a_fixture_refuses_a_role_map() {
         );
     }
 }
+
+/// Design § 1 / § 6 test 13: the two sides are read independently. Both sides hold top, jungle, mid
+/// and support and need an ADC; each pool's only candidate is a champion listed Middle that the meta
+/// lets play Adc. A side whose pool is a role map is forced off-pool once; a side whose pool is a list
+/// is not — whatever the other side's form — and the search prices exactly that.
+#[test]
+fn a_tagged_side_and_a_list_side_are_read_independently() {
+    let u = band(&[("V", &["Middle", "Adc"]), ("W", &["Middle", "Adc"])]);
+    let format = Format::standard();
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1", "V"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let red = tags(
+        &u,
+        &[
+            (Role::Top, &["T2"]),
+            (Role::Jungle, &["J2"]),
+            (Role::Middle, &["M2", "W"]),
+            (Role::Support, &["S2"]),
+        ],
+    );
+    let both = Pools::default()
+        .with_roles(Side::Blue, blue)
+        .with_roles(Side::Red, red);
+    let neither = as_list(&both);
+    let blue_only = neither.with_roles(Side::Blue, blue);
+    let red_only = neither.with_roles(Side::Red, red);
+    let entries = board(
+        &format,
+        &u,
+        &["T1", "J1", "M1", "S1"],
+        &["T2", "J2", "M2", "S2"],
+    );
+    let root = Position::new(&format, &entries, &both, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!((root.slot_index(), root.mover()), (18, Some(Side::Blue)));
+
+    for rule in LIVE {
+        let forced = |pools: &Pools, side: Side| count(rule, side, &root, pools, &u).forced;
+        // (pools, Blue forced, Red forced)
+        for (pools, blue_forced, red_forced) in [
+            (&both, 1, 1),
+            (&blue_only, 1, 0),
+            (&red_only, 0, 1),
+            (&neither, 0, 0),
+        ] {
+            assert_eq!(forced(pools, Side::Blue), blue_forced, "{rule:?} Blue");
+            assert_eq!(forced(pools, Side::Red), red_forced, "{rule:?} Red");
+        }
+    }
+
+    // End to end under `roster` at P = 0.125, two turns (Blue's last pick, Red's last pick), every
+    // board value 0: a line's value is P × (Red's off-pool picks − Blue's). Blue taking its own `V`:
+    let outcome = |pools: &Pools| {
+        search(
+            &OracleInput {
+                position: &root,
+                universe: &u,
+                pools,
+                objective: &u,
+                feasibility: FeasibilityRule::Roster,
+                mode: Mode::Horizon(2),
+                epsilon: 1e-9,
+                off_pool_cost: Some(0.125),
+            },
+            &exact(),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+    };
+    // Both maps: Blue pays for V at ADC, Red pays for its own fill — even.
+    assert_eq!(value_of(&outcome(&both), &u, "V"), 0.0);
+    // Blue a map, Red a list: Blue pays, Red's W is free.
+    assert_eq!(value_of(&outcome(&blue_only), &u, "V"), -0.125);
+    // Blue a list, Red a map: V is free for Blue, Red pays.
+    assert_eq!(value_of(&outcome(&red_only), &u, "V"), 0.125);
+    // Both lists: nobody pays.
+    assert_eq!(value_of(&outcome(&neither), &u, "V"), 0.0);
+    // (With Blue a map and Red a list, Blue's best move is not V: taking W — Red's one ADC — costs
+    // Blue the same P and makes Red pay it back, the P-neutral snipe of D4.)
+    let sniped = outcome(&blue_only);
+    assert_eq!(sniped.top_set, vec![Action::Pick(idx(&u, "W"))]);
+    assert_eq!(sniped.value, 0.0);
+}

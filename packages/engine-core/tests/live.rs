@@ -10,7 +10,8 @@ use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::{Role, RolePoolMap};
 use engine_core::reference::feasibility::{
-    critical_pool, off_pool_count, ActionCharge, FeasibilityMemo, FeasibilityRule,
+    action_charge, critical_pool, off_pool, off_pool_count, ActionCharge, FeasibilityMemo,
+    FeasibilityRule,
 };
 use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::live::{
@@ -1213,33 +1214,86 @@ fn measure_b_proper_width_grid() {
         Ok(other) => panic!("B_PROPER_SNIPE_KEY {other:?}"),
     };
     let key_name = if snipe_key { "on" } else { "off" };
+    // Role-aware pools design § 7: `list` (the default) runs every root on list pools — a root whose
+    // file carries role maps is stripped to its sets — and is the control; `map` runs the roots that
+    // have role maps (the smoke roots, from tests/data/live/smoke-role-maps.json, and any corpus
+    // fixture written as maps) and names the ones that have none.
+    let form = match std::env::var("B_PROPER_FORM").as_deref() {
+        Ok("map") => "map",
+        Ok("list") | Err(_) => "list",
+        Ok(other) => panic!("B_PROPER_FORM {other:?}"),
+    };
+    let as_list = |root: LiveRoot| LiveRoot {
+        pools: Pools {
+            blue: root.pools.blue,
+            red: root.pools.red,
+            ..Pools::default()
+        },
+        ..root
+    };
     let mut roots: Vec<(String, LiveRoot)> = Vec::new();
     for (events, label) in [
         (2usize, "sample-slot-2-blue-ban"),
         (7, "sample-slot-7-red-pair"),
         (11, "sample-slot-11-red-pick"),
     ] {
+        if form == "map" {
+            println!("GRID-SKIP | {label} | no role map exists for the sample's pools");
+            continue;
+        }
         roots.push((
             label.to_string(),
             LiveRoot::from_draft_state(&state_at(&s, events), &s.pools.blue, &s.pools.red, &[], u)
                 .unwrap_or_else(|e| panic!("{e}")),
         ));
     }
-    for name in [
+    let smoke_names = [
         "2026-09-27-smoke-1-blue-first-pick",
         "2026-09-27-smoke-2-red-pair-no-adc",
         "2026-09-27-smoke-3-blue-ban-denial",
         "2026-09-27-smoke-4-red-last-pick",
-    ] {
-        roots.push((name.to_string(), smoke(&live, name).root));
+    ];
+    for name in smoke_names {
+        let root = if form == "map" {
+            smoke_as_maps(&live, name).root
+        } else {
+            smoke(&live, name).root
+        };
+        roots.push((name.to_string(), root));
     }
     if let Ok(only) = std::env::var("B_PROPER_ROOTS") {
         let only: Vec<&str> = only.split(',').map(str::trim).collect();
+        // A label that is not one of the seven names a corpus fixture (`fixtures/tier-b/<label>.json`).
+        for label in only
+            .iter()
+            .filter(|l| !l.starts_with("sample-slot-") && !smoke_names.contains(l))
+        {
+            let fixture = TierBFixture::load_file(
+                &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("fixtures/tier-b")
+                    .join(format!("{label}.json")),
+                &live,
+            )
+            .unwrap_or_else(|e| panic!("{label}: {e}"))
+            .fixture;
+            let tagged = [Side::Blue, Side::Red]
+                .iter()
+                .any(|side| fixture.root.pools.roles(*side).is_some());
+            if form == "map" {
+                assert!(
+                    tagged,
+                    "{label}: B_PROPER_FORM=map and the fixture has no role map"
+                );
+                roots.push((label.to_string(), fixture.root));
+            } else {
+                roots.push((label.to_string(), as_list(fixture.root)));
+            }
+        }
         roots.retain(|(label, _)| only.contains(&label.as_str()));
         assert_eq!(
             roots.len(),
             only.len(),
-            "B_PROPER_ROOTS names an unknown root"
+            "B_PROPER_ROOTS names an unknown root, or one with no role map under B_PROPER_FORM=map"
         );
     }
     let rule_name = match rule {
@@ -1247,13 +1301,22 @@ fn measure_b_proper_width_grid() {
         FeasibilityRule::PoolOrRoster => "pool_or_roster",
         _ => unreachable!(),
     };
-    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top | snipe_key | snipe_charged | top_blue_forced | top_red_forced");
-    println!("GRID-ACTION-HEADER | root | rule | widths | snipe_key | depth | partial | action | value | continuation | blue_forced | red_forced");
+    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top | snipe_key | snipe_charged | top_blue_forced | top_red_forced | form");
+    println!("GRID-ACTION-HEADER | root | rule | widths | snipe_key | depth | partial | action | value | continuation | blue_forced | red_forced | form");
     for (label, root) in &roots {
         let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
         let started = std::time::Instant::now();
         let mover = position.mover().expect("a root");
-        let pool = root.pools.for_side(mover);
+        // The mover's action charge (`feasibility::ActionCharge`): the class of an action is what the
+        // search's own root split uses — in-pool = it adds no off-pool pick.
+        let charge = action_charge(
+            &mut FeasibilityMemo::default(),
+            rule,
+            mover,
+            &position,
+            &root.pools,
+            u,
+        );
         // Each side's FORCED off-pool count at a line's leaf — its off-pool count less its own
         // off-pool picks on the line (review round 1: a side that CHOSE the roster is not sniped; and
         // either side can be sniped, whoever moves at the root): "blue red".
@@ -1263,11 +1326,15 @@ fn measure_b_proper_width_grid() {
                 .iter()
                 .fold(position.apply(r.action), |p, a| p.apply(*a));
             let of = |side: Side, off: usize| {
-                let made = leaf
-                    .picks(side)
-                    .iter()
-                    .filter(|c| !root.pools.for_side(side).contains(**c))
-                    .count();
+                let made = off_pool(
+                    &mut FeasibilityMemo::default(),
+                    rule,
+                    side,
+                    &leaf,
+                    &root.pools,
+                    u,
+                )
+                .made;
                 off.saturating_sub(made)
             };
             format!(
@@ -1287,7 +1354,7 @@ fn measure_b_proper_width_grid() {
                 .map_or("-".to_string(), |r| name(&r.action));
             // Review round 1: the margin between the top and the best action of the OTHER pool class
             // (in-pool vs off-pool), positive for the mover — "stable" means nothing without it.
-            let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+            let in_pool = |a: &Action| charge.of(*a) == 0;
             let (top_class, margin, other) = match (pick_root, o.ranked.first()) {
                 (true, Some(t)) => {
                     let class = in_pool(&t.action);
@@ -1324,7 +1391,7 @@ fn measure_b_proper_width_grid() {
                 _ => ("-".to_string(), "-".to_string(), "-".to_string()),
             };
             println!(
-                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other} | {key_name} | {} | {}",
+                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other} | {key_name} | {} | {} | {form}",
                 o.depth,
                 partial,
                 started.elapsed().as_millis(),
@@ -1343,7 +1410,7 @@ fn measure_b_proper_width_grid() {
             );
             for r in &o.ranked {
                 println!(
-                    "GRID-ACTION | {label} | {rule_name} | {widths} | {key_name} | {} | {partial} | {} | {} | {} | {}",
+                    "GRID-ACTION | {label} | {rule_name} | {widths} | {key_name} | {} | {partial} | {} | {} | {} | {} | {form}",
                     o.depth,
                     name(&r.action),
                     r.value,
@@ -1894,6 +1961,22 @@ fn smoke(live: &LiveUniverse, name: &str) -> TierBFixture {
     )
     .unwrap_or_else(|e| panic!("{name}: {e}"))
     .fixture
+}
+
+/// A smoke fixture with its pools replaced by the role maps the app holds for the same two pools
+/// (`tests/data/live/smoke-role-maps.json`): the grid's and the tests' role-tagged form of a smoke root.
+fn smoke_as_maps(live: &LiveUniverse, name: &str) -> TierBFixture {
+    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let read = |path: PathBuf| -> serde_json::Value {
+        let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{path:?}: {e}"))
+    };
+    let maps = read(data.join("live/smoke-role-maps.json"));
+    let mut file = read(data.join("tier-b").join(format!("{name}.json")));
+    file["pools"] = serde_json::json!({"blue": maps["blue"], "red": maps["red"]});
+    TierBFixture::from_json(&file.to_string(), name, live)
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+        .fixture
 }
 
 /// B-proper § 7 test 3: the shortlist is a pure function of the position, so table hits stay sound.

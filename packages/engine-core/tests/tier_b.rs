@@ -633,6 +633,9 @@ fn render_report(
         for w in &l.warnings {
             let _ = writeln!(out, "  warning: {w}");
         }
+        for n in &l.notes {
+            let _ = writeln!(out, "  note: {n}");
+        }
         let fx = &l.fixture;
         let position = fx
             .root
@@ -642,7 +645,16 @@ fn render_report(
             .next_slot()
             .expect("a loaded position has a next slot");
         let pick_root = root.action == ActionType::Pick;
-        let pool = fx.root.pools.for_side(root.side);
+        // The mover's action charge (role-aware pools design § 2): the marker and the break-even's class
+        // read what the search's root split reads. The same under either live rule.
+        let charge = action_charge(
+            &mut FeasibilityMemo::default(),
+            FeasibilityRule::Roster,
+            root.side,
+            &position,
+            &fx.root.pools,
+            u,
+        );
         let names = |a: &Action| {
             a.champions()
                 .map(|c| u.id(c).to_string())
@@ -653,7 +665,7 @@ fn render_report(
             if !pick_root {
                 return String::new();
             }
-            let off = a.champions().filter(|c| !pool.contains(*c)).count();
+            let off = charge.of(*a);
             if off == 0 {
                 " [in-pool]".to_string()
             } else {
@@ -753,7 +765,7 @@ fn render_report(
             }
             if let (Some(top), Arm::Roster(p)) = (out_come.ranked.first(), arm) {
                 if pick_root {
-                    let in_pool = |a: &Action| a.champions().all(|c| pool.contains(c));
+                    let in_pool = |a: &Action| charge.of(*a) == 0;
                     let mixed = out_come.top_set.iter().any(in_pool)
                         && out_come.top_set.iter().any(|a| !in_pool(a));
                     if out_come.partial {
@@ -1708,4 +1720,85 @@ fn a_role_map_is_checked_against_the_captures_display() {
             .map(|t| t.for_role(Role::Adc).len()),
         Some(5)
     );
+}
+
+/// Role-aware pools design § 2 / § 6 test 11: the report's marker and the class its break-even reads
+/// come from the same action charge as the search's root split. smoke-4 (Red needs an ADC) with Kaisa
+/// listed under mid instead of adc: as a list she is an in-pool ADC; as a map she is an off-role fill,
+/// marked `[off-pool 1]`, the entry is noted (the meta has no mid Kaisa), and the break-even reads the
+/// top action's class accordingly.
+#[test]
+fn the_report_marks_an_off_role_fill_off_pool() {
+    let live = live();
+    let mut red = team_liquid_map();
+    red["adc"] = json!(["Jinx"]);
+    red["mid"] = json!(["Azir", "Sylas", "Kaisa"]);
+    let widths = Shortlist {
+        singles: 15,
+        pairs: 25,
+        root_off_pool: 50,
+    };
+    let report = |pools: serde_json::Value| {
+        let loaded = vec![TierBFixture::from_json(
+            &smoke_4_with(pools, None),
+            "edited",
+            &live,
+        )];
+        render_report(
+            &loaded,
+            &live,
+            Mode::Horizon(1),
+            widths,
+            &[0.05, 0.25],
+            ReportLimits {
+                top: 4,
+                ..ReportLimits::DEFAULT
+            },
+        )
+    };
+    let maps = report(json!({"blue": rourke_map(), "red": red}));
+    let list = report(json!({
+        "blue": list_ids(&sample_json("2026-09-27-smoke-4-red-last-pick"), "blue"),
+        "red": list_ids(&sample_json("2026-09-27-smoke-4-red-last-pick"), "red")
+    }));
+    // The first line of `text` that ranks Kaisa (the `pool_or_roster` arm: three pool champions).
+    let kaisa = |text: &str| -> String {
+        text.lines()
+            .find(|l| l.starts_with("    Kaisa "))
+            .unwrap_or_else(|| panic!("no Kaisa line:\n{text}"))
+            .to_string()
+    };
+
+    // As a map: an off-role fill. Marked, charged L under `pool_or_roster` (0.1138 + 1026.4), counted
+    // on Red's side of the leaf, noted as an off-meta entry, and no longer one of the root's in-pool
+    // actions (52 searched: Jinx, K'Sante and the best 50 off-pool).
+    assert!(
+        maps.contains(
+            "  note: 2026-09-27-smoke-4-red-last-pick: pools.red.mid: Kaisa is not a meta mid — playable for Red only"
+        ),
+        "{maps}"
+    );
+    let line = kaisa(&maps);
+    assert!(line.contains("1026.5508 [off-pool 1]"), "{line}");
+    assert!(line.contains("off-pool blue 0 red 1"), "{line}");
+    assert!(
+        maps.contains("  actual next Kaisa [off-pool 1] ranked 2 of 3"),
+        "{maps}"
+    );
+    assert_eq!(maps.matches("searched 52 of 154").count(), 2, "{maps}");
+    assert!(
+        maps.contains("    Jinx                         0.0555 [in-pool]"),
+        "{maps}"
+    );
+
+    // As a list: an in-pool ADC, free, nothing noted, one more in-pool action at the root.
+    assert!(!list.contains("  note: "), "{list}");
+    let line = kaisa(&list);
+    assert!(line.contains("0.1138 [in-pool]"), "{line}");
+    assert!(line.contains("off-pool blue 0 red 0"), "{line}");
+    assert!(
+        list.contains("  actual next Kaisa [in-pool] ranked 2 of 3"),
+        "{list}"
+    );
+    assert_eq!(list.matches("searched 53 of 154").count(), 2, "{list}");
 }
