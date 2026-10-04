@@ -300,7 +300,9 @@ impl ActionCharge<'_> {
     /// tagged side: the rise in the off-role count of the mover's picks — the action taken whole, since
     /// two in-role singles can displace a locked pick together. Never negative: where the action breaks
     /// the comp the count falls back to the set test, which can undercount, and the difference is
-    /// clamped at 0 (that child is in the L' band). 0 = an in-pool action.
+    /// clamped at 0 (that child is in the L' band) — but never below the champions the action itself
+    /// names outside the pool, so such an action still reads off-pool (the ordering key, the root split
+    /// and the report's marker), as it does in list form. 0 = an in-pool action.
     pub fn of(&self, action: Action) -> usize {
         let outside = action
             .champions()
@@ -324,6 +326,7 @@ impl ActionCharge<'_> {
             tagged.outside_pool + outside,
         )
         .saturating_sub(tagged.made)
+        .max(outside)
     }
 }
 

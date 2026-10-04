@@ -731,6 +731,72 @@ fn an_action_that_breaks_the_comp_is_charged_nothing_more() {
     assert_eq!(charge.of(Action::Pick(idx(&u, "J2"))), 1);
 }
 
+/// Review minor F2 (role-aware pools execution): the clamp above floors the DIFFERENCE at 0, but an
+/// action that names a champion outside the pool is off-pool whatever it does to the comp. Same
+/// board: taking A2 — off Blue's pool, Adc — leaves V nowhere to go, so the broken board falls back to
+/// the set test (one champion outside) and the clamp alone would read 0 below the one already made.
+/// The charge is never below the champions the action names outside the pool: 1 — as list form says.
+#[test]
+fn an_outside_champion_that_breaks_the_comp_is_still_charged_for_itself() {
+    let u = band(&[("V", &["Middle", "Adc"])]);
+    let format = Format::standard();
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1", "V"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: set(&u, &["T2", "J2", "M2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let entries = board(&format, &u, &["M1", "V"], &["T2", "J2"]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let rule = FeasibilityRule::Roster;
+    assert_eq!(count(rule, Side::Blue, &root, &pools, &u).made, 1);
+    let mut memo = FeasibilityMemo::default();
+    let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
+    let a2 = Action::Pick(idx(&u, "A2"));
+    assert!(!pools.blue.contains(idx(&u, "A2")));
+    assert!(!side_feasible(
+        &mut memo,
+        rule,
+        Side::Blue,
+        &root.apply(a2),
+        &pools,
+        &u
+    ));
+    assert_eq!(charge.of(a2), 1, "its own outside champion still counts");
+    // List form agrees, and the in-pool break (A1) is still charged nothing more.
+    let list = as_list(&pools);
+    let list_charge = action_charge(&mut memo, rule, Side::Blue, &root, &list, &u);
+    assert_eq!(list_charge.of(a2), 1);
+    assert_eq!(charge.of(Action::Pick(idx(&u, "A1"))), 0);
+    // A pair naming one outside champion that breaks the comp is charged that one: with T1 locked
+    // too (Blue's pair at slot 17), A2 + S1 fills Adc and Support and leaves V nowhere to go.
+    let entries = board(&format, &u, &["M1", "V", "T1"], &["T2", "J2", "M2", "S2"]);
+    let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(root.slot_index(), 17);
+    assert_eq!(count(rule, Side::Blue, &root, &pools, &u).made, 1);
+    let mut memo = FeasibilityMemo::default();
+    let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
+    let pair = Action::pair(idx(&u, "A2"), idx(&u, "S1"));
+    assert!(!side_feasible(
+        &mut memo,
+        rule,
+        Side::Blue,
+        &root.apply(pair),
+        &pools,
+        &u
+    ));
+    assert_eq!(charge.of(pair), 1);
+}
+
 /// Design § 6 test 4 (RA1): a champion listed under two roles is in-role in either.
 #[test]
 fn a_two_role_entry_is_in_pool_for_both_roles() {
