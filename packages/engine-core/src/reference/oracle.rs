@@ -141,8 +141,15 @@ pub fn resolve_off_pool_cost(input: &OracleInput<'_>) -> Result<f64, OracleError
 /// as its set without saying so.
 pub fn check_role_tags(input: &OracleInput<'_>) -> Result<(), OracleError> {
     for side in [Side::Blue, Side::Red] {
-        if input.pools.roles(side).is_none() {
+        let Some(tags) = input.pools.roles(side) else {
             continue;
+        };
+        if tags.union() != input.pools.for_side(side) {
+            return Err(OracleError::RoleTags {
+                reason: format!(
+                    "{side:?}'s pool is role-tagged but its set is not the union of its tags: build it with Pools::with_roles"
+                ),
+            });
         }
         if !input.feasibility.is_live() {
             return Err(OracleError::RoleTags {

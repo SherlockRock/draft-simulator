@@ -39,11 +39,17 @@ pub struct PoolsSpec {
 }
 
 /// The role map's keys, in `crate::feasibility::ROLES` order: the app's spelling (`Pools.champions`),
-/// so `mid` and `adc` — not the crate's `middle` nor the meta's `BOTTOM`.
-pub const ROLE_KEYS: [&str; 5] = ["top", "jungle", "mid", "adc", "support"];
+/// so `mid` and `adc` — not the crate's `middle` nor the meta's `BOTTOM`. Spelled once, in `role_key`.
+pub const ROLE_KEYS: [&str; 5] = [
+    role_key(ROLES[0]),
+    role_key(ROLES[1]),
+    role_key(ROLES[2]),
+    role_key(ROLES[3]),
+    role_key(ROLES[4]),
+];
 
-/// `role`'s key in a role map (`ROLE_KEYS`, by role).
-pub fn role_key(role: Role) -> &'static str {
+/// `role`'s key in a role map — the one spelling `ROLE_KEYS` is built from.
+pub const fn role_key(role: Role) -> &'static str {
     match role {
         Role::Top => "top",
         Role::Jungle => "jungle",
@@ -299,7 +305,11 @@ pub fn spec_to_pools(
 
 /// A role-tagged side's own board picks (design, Definitions): one the pool lists keeps its listed
 /// roles — so a later pick that displaces it is charged (RA2) — and one the pool omits is added under
-/// every meta role: a sunk fact, never off-role, never charged.
+/// every meta role: a sunk fact, never off-role, never charged. A pick with no meta role would have
+/// none to be added under and the root would then be refused as outside the pool (review minor F6) —
+/// unreachable: both universe constructors refuse a champion with no positions (`NoPositions`), the
+/// live loader drops one, and every listed position is playable (`position_factor` never puts a
+/// listed role below `ROLE_PLAYABLE_THRESHOLD`), so a champion in a universe always has a role.
 pub fn with_board_picks(tags: RoleSets, board: ChampionSet, universe: &Universe) -> RoleSets {
     let listed = tags.union();
     board

@@ -423,6 +423,68 @@ fn a_role_tagged_pool_is_refused_where_tags_are_not_read() {
     }
 }
 
+/// Review minor F7: `Pools`' set and tag fields are public, so a literal can put them out of step and
+/// the three readers of the set (the gate, the legal fan, the board check) would then disagree
+/// silently with the readers of the tags. A tagged side whose set is not the union of its tags is
+/// refused up front, under either live rule, by the oracle and the search alike.
+#[test]
+fn a_tagged_side_whose_set_is_not_its_union_is_refused() {
+    let u = band(&[]);
+    let format = Format::standard();
+    let blue = RoleSets::meta_roles(set(&u, &["T1", "J1", "M1", "A1", "S1"]), &u);
+    let out_of_step = Pools {
+        blue: set(&u, &["T1", "J1", "M1", "A1"]),
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        blue_roles: Some(blue),
+        red_roles: None,
+    };
+    let in_step = Pools {
+        red: out_of_step.red,
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    for rule in LIVE {
+        let refuse = |pools: &Pools| {
+            let position = Position::new(&format, &[], pools, &u).unwrap_or_else(|e| panic!("{e}"));
+            let input = OracleInput {
+                position: &position,
+                universe: &u,
+                pools,
+                objective: &u,
+                feasibility: rule,
+                mode: Mode::Horizon(1),
+                epsilon: 1e-9,
+                off_pool_cost: (rule == FeasibilityRule::Roster).then_some(0.1),
+            };
+            (
+                evaluate(&input).err(),
+                search(&input, &search_params(), &CancelHandle::new(), |_| {}).err(),
+            )
+        };
+        let (oracle, searched) = refuse(&out_of_step);
+        let reason = match oracle {
+            Some(OracleError::RoleTags { reason }) => reason,
+            other => panic!("{rule:?}: the oracle: {other:?}"),
+        };
+        assert!(
+            ["Blue", "union"].iter().all(|w| reason.contains(w)),
+            "{reason}"
+        );
+        match searched {
+            Some(EngineError::InvalidInput { path }) => {
+                assert_eq!(path, vec![format!("role tags: {reason}")])
+            }
+            other => panic!("{rule:?}: the search: {other:?}"),
+        }
+        let (oracle, searched) = refuse(&in_step);
+        assert!(
+            !matches!(oracle, Some(OracleError::RoleTags { .. })),
+            "{rule:?}: {oracle:?}"
+        );
+        assert!(searched.is_none(), "{rule:?}: {searched:?}");
+    }
+}
+
 const LIVE: [FeasibilityRule; 2] = [FeasibilityRule::PoolOrRoster, FeasibilityRule::Roster];
 
 /// The same sets with no tags: the list form of a tagged pool.
@@ -544,6 +606,7 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
         assert_eq!(charge.of(Action::Pick(v)), 1);
         assert_eq!(charge.of(Action::Pick(a1)), 1);
+        let mut memo = FeasibilityMemo::default();
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &listed_adc, &u);
         assert_eq!(charge.of(Action::Pick(v)), 0);
         // Red's list pool is untouched by Blue's tags.
@@ -726,7 +789,7 @@ fn an_action_that_breaks_the_comp_is_charged_nothing_more() {
         &pools,
         &u
     ));
-    // A pick that keeps the comp arrangeable is charged as usual: T1 is in-role, T2 is off the pool.
+    // A pick that keeps the comp arrangeable is charged as usual: T1 is in-role, J2 is off the pool.
     assert_eq!(charge.of(Action::Pick(idx(&u, "T1"))), 0);
     assert_eq!(charge.of(Action::Pick(idx(&u, "J2"))), 1);
 }

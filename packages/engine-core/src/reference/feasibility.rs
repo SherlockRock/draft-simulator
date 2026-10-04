@@ -817,10 +817,16 @@ mod tests {
 
     /// The fewest placements that are not in-role over every way to complete `locked` with
     /// `to_come` of `candidates` (pool net and roster alike) and arrange the five; `None` when no
-    /// completion can be arranged.
+    /// completion can be arranged. `chosen` ranges over every subset of the candidates, which can
+    /// outnumber the roles (review minor F1: `roles_in` counts the first five bits only).
     fn true_minimum(locked: &[Champ], candidates: &[Champ], to_come: usize) -> Option<usize> {
+        let chosen_count = |chosen: usize| {
+            (0..candidates.len())
+                .filter(|i| chosen >> i & 1 == 1)
+                .count()
+        };
         (0..1usize << candidates.len())
-            .filter(|chosen| roles_in(*chosen) == to_come)
+            .filter(|chosen| chosen_count(*chosen) == to_come)
             .filter_map(|chosen| {
                 let mut team = locked.to_vec();
                 team.extend(
