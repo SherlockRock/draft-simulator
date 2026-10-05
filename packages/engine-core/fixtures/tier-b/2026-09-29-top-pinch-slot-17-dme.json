@@ -219,5 +219,8 @@
     }
   },
   "our_side": "Blue",
-  "review": "2026-09-29 PARKED, no verdict (user's blind answer: stay): the value hinges on Kittens' parked last pick at slot 19, off-role under set pools. Role maps since 2026-10-02: the verdict is due at recalibration."
+  "verdict": {
+    "off_pool": true
+  },
+  "review": "2026-09-29 PARKED, no verdict (user's blind answer: stay): the value hinges on Kittens' parked last pick at slot 19, off-role under set pools. Role maps since 2026-10-02: the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave \u2014 close; very willing to go off-role for one of the two picks, a bit less so for both."
 }

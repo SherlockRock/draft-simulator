@@ -12,13 +12,21 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
 /// The off-pool cost P under `FeasibilityRule::Roster` (B-proper design B5, § 3): blue-win logits,
-/// about 2.5 percentage points of win probability near an even game. Calibrated 2026-09-29 on the
-/// Tier B authoring corpus (`fixtures/tier-b/2026-09-29-*`, the user's Kittens vs DME pinch drafts):
-/// seven usable verdicts put P > 0.09 and P < 0.11 at a 0.01 sweep step (report `docs/plans/
-/// 2026-09-28-tier-b-authoring/report-2.txt`; the coarse sweep, `report-1.txt`, read 0.08–0.12), and
-/// the user chose 0.10 after reading the scored options — lower than the 0.15 assumption it replaces. PROVISIONAL: pools are
-/// sets, not roles (design § 9, "Role-aware pools") — five of the twelve positions were parked for it,
-/// and making off-role count as off-pool re-prices every off-pool line; recalibrate after it lands.
+/// about 2.5 percentage points of win probability near an even game. First calibrated 2026-09-29 on
+/// list pools (seven verdicts, P > 0.09 and P < 0.11; the user chose 0.10 over the 0.15 assumption).
+/// Recalibrated 2026-10-04 on ROLE MAPS (role-aware pools, slice 7), where an off-role pilot costs P
+/// too: the corpus `fixtures/tier-b/2026-09-29-*` + `2026-10-04-*` — 21 positions of the user's
+/// Kittens vs DME pinch drafts (the five parked September boards as recorded, three continuations
+/// re-derived under role maps and vetted, six engine-selected earlier stops), 20 verdicts after one
+/// was dropped as unable to bound P. Nineteen are consistent with 0.10 < P < 0.11 at a 0.01 sweep
+/// step (reports `docs/plans/2026-10-04-engine-recalibration/report-4-verdicts-prefix.txt`,
+/// `report-5-verdicts-fine.txt`); the one kept conflict (the re-derived supp-19, "stay" against a
+/// 3.9 pp gain) would need P > 0.155. The user kept 0.10: the lower edge, which leans toward leaving
+/// as the verdicts did. Caveats recorded with the verdicts: the user read the engine's scores
+/// (not blind) and reports some inaccuracy, and the meta's position lists are loose (Syndra, Hwei
+/// and Katarina at BOTTOM, Camille at SUPPORT), so roster options the user would never play reach
+/// the ranking — the champion-meta `playable` floor (positions refresh slice 2) is the fix, and
+/// re-reading P after it is cheap (the report, the same files).
 pub const DEFAULT_OFF_POOL_COST: f64 = 0.10;
 
 pub const MAX_CHAMPIONS: usize = 256;

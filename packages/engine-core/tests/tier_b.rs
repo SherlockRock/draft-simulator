@@ -1818,8 +1818,12 @@ fn the_report_marks_an_off_role_fill_off_pool() {
 ///
 /// Whether the TOP action is in-pool is not asserted: at P = 0.10 it is an off-pool pick on every one
 /// of these (the calibration question the next session reads), which is the search doing its job.
+///
+/// Pinned to P = 0.10 explicitly — the P the slice was measured at — so the ranks stay the record of
+/// the slice when `DEFAULT_OFF_POOL_COST` moves (the recalibration, 2026-10-04).
 #[test]
 fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
+    const MEASURED_AT: f64 = 0.10;
     let live = live();
     let u = &live.universe;
     let action = |ids: &[&str]| -> Action {
@@ -1873,7 +1877,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
                 feasibility: FeasibilityRule::Roster,
                 mode: Mode::Horizon(2),
                 epsilon: 1e-9,
-                off_pool_cost: Some(DEFAULT_OFF_POOL_COST),
+                off_pool_cost: Some(MEASURED_AT),
             },
             &SearchParams {
                 node_budget: Some(20_000_000),
@@ -1978,7 +1982,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
                     - f64::from(u8::try_from(r.fill_off_pool.0).expect("a handful"))
             };
             let moved = map.fill_value - list.fill_value;
-            let expected = DEFAULT_OFF_POOL_COST * (net(&map) - net(&list));
+            let expected = MEASURED_AT * (net(&map) - net(&list));
             assert!(
                 (moved - expected).abs() < 1e-9,
                 "{id}: the fill moved by {moved}, the counts say {expected}"
@@ -2037,6 +2041,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
 /// Role-aware pools design § 2 (the sixth reader): the report's break-even reads the action's CLASS
 /// from the same charge. supp-17's top pair under role maps is Syndra + Ziggs — both in DME's pool as
 /// a set, but taking them pushes Galio to support — so the top is OFF-pool, and the break-even says so.
+/// At P = 0.10, the P the slice was measured at (the value line is P-dependent).
 #[test]
 fn the_report_classes_an_in_set_off_role_pair_off_pool() {
     let live = live();
@@ -2053,7 +2058,7 @@ fn the_report_classes_an_in_set_off_role_pair_off_pool() {
             pairs: 60,
             root_off_pool: 100,
         },
-        &[DEFAULT_OFF_POOL_COST],
+        &[0.10],
         ReportLimits {
             top: 2,
             ..ReportLimits::DEFAULT

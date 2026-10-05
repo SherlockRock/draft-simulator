@@ -231,5 +231,8 @@
     }
   },
   "our_side": "Red",
-  "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Vi (a jungler) with MonkeyKing or Vi at top, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration."
+  "verdict": {
+    "off_pool": true
+  },
+  "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Vi (a jungler) with MonkeyKing or Vi at top, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool."
 }
