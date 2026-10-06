@@ -2367,7 +2367,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const createAnnotationMutation = useMutation(() => ({
         mutationFn: createAnnotation,
         onSuccess: (data) => {
-            setAnnotations([...annotations, data.annotation]);
+            // The live snapshot can arrive before this response. Two rows with
+            // the same id mount two editors; focusing the second blurs the
+            // first and clears editingAnnotationId for both.
+            if (!annotations.some((annotation) => annotation.id === data.annotation.id)) {
+                setAnnotations([...annotations, data.annotation]);
+            }
             // Symmetric with the local branch: select and open the new note.
             setSelectedAnnotationId(data.annotation.id);
             setEditingAnnotationId(data.annotation.id);
