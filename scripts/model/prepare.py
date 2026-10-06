@@ -100,7 +100,15 @@ def flatten(parquet):
                game_duration, game_start, extractor_version, {", ".join(cols)}
         FROM '{parquet}'
     """
-    return duckdb.sql(sql).df()
+    # Own connection with few threads: teams_json is ~31 KB per row and the
+    # default 16-thread scan of a 1M-row export ran out of memory on a 19 GB
+    # machine (2026-10-06); the projection itself is small, so 2 threads stream it.
+    con = duckdb.connect()
+    con.execute("SET threads = 2; SET preserve_insertion_order = false; SET memory_limit = '8GB'")
+    try:
+        return con.sql(sql).df()
+    finally:
+        con.close()
 
 
 # ---------------------------------------------------------------------------
