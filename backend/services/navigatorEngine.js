@@ -88,7 +88,11 @@ function formatPositionsSource(block) {
   const feasibility = f
     ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}`
     : "unmeasured";
-  return `${block.kind} patches=${block.patches.join(",")} threshold=${block.threshold} generated=${block.generatedAt} feasibility=${feasibility}${block.unmeasuredAtParity ? " [source unmeasured at parity]" : ""}`;
+  const fallbackCount = block.fallback ? Object.keys(block.fallback).length : 0;
+  const rule = block.rule
+    ? ` rule=${block.rule} deciding=${block.decidingPatch}${fallbackCount > 0 ? ` fallback=${fallbackCount}` : ""}`
+    : "";
+  return `${block.kind} patches=${block.patches.join(",")}${rule} threshold=${block.threshold} generated=${block.generatedAt} feasibility=${feasibility}${block.unmeasuredAtParity ? " [source unmeasured at parity]" : ""}`;
 }
 
 function formatPositionsSourceLine(sources) {

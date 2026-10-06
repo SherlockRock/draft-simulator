@@ -11,8 +11,9 @@ Outputs (all under data/training/, which is gitignored):
     champion_vocab.json    raw Riot id -> dense index (0=UNKNOWN, 1=NONE)
     patch_vocab.json       "major.minor" -> dense index, release order
     region_vocab.json      region -> dense index
-    role_percentages.json  per champion, share of train games in each role — also the
-                           shipped source of champion-meta positions (refresh-champion-positions.mjs)
+    role_percentages.json  per champion, share of train games in each role, pooled and
+                           per patch (`by_patch`) — also the shipped source of champion-meta
+                           positions (refresh-champion-positions.mjs, newest patch decides)
     folds.parquet          rolling-origin fold assignments (5 folds)
     holdout_drafts.csv     test split: 10 aliases + label  (Task 5 input)
     sibling_sets.parquet   held-out-slot candidate sets    (gate 1)
@@ -141,19 +142,30 @@ def parse_patch(text):
     return int(parts[0]), int(parts[1])
 
 
-def patch_cut(df, max_patch, report):
-    """Drop games newer than max_patch (inclusive keep). None keeps everything.
+def patch_cut(df, max_patch, report, min_patch=None):
+    """Keep games with min_patch <= patch <= max_patch (both inclusive; None = open).
 
-    Used to freeze a corpus at a patch boundary: on patch day the newest patch
-    is hours old and would otherwise ride in as a few hundred stray rows.
+    max_patch freezes a corpus at a patch boundary: on patch day the newest
+    patch is hours old and would otherwise ride in as a few hundred stray rows.
+    min_patch windows the corpus from below: the collector keeps every patch it
+    has ever fetched, and a window of the newest two or three keeps the
+    time split's test edge on the current patch and every downstream artifact
+    (sibling sets, solver_states.csv, emit_solver_roles) proportionate.
     """
-    if max_patch is None:
+    if max_patch is None and min_patch is None:
         return df
-    major, minor = max_patch
-    keep = (df.patch_major < major) | ((df.patch_major == major) & (df.patch_minor <= minor))
+    keep = pd.Series(True, index=df.index)
+    desc = "patch"
+    if min_patch is not None:
+        major, minor = min_patch
+        keep &= (df.patch_major > major) | ((df.patch_major == major) & (df.patch_minor >= minor))
+        desc = f"{major}.{minor} <= {desc}"
+    if max_patch is not None:
+        major, minor = max_patch
+        keep &= (df.patch_major < major) | ((df.patch_major == major) & (df.patch_minor <= minor))
+        desc = f"{desc} <= {major}.{minor}"
     out = df[keep].reset_index(drop=True)
-    log(f"\n## Patch cut\n\nkeep patch <= {major}.{minor}: {len(out):,} "
-        f"(-{len(df) - len(out):,})", report)
+    log(f"\n## Patch cut\n\nkeep {desc}: {len(out):,} (-{len(df) - len(out):,})", report)
     return out
 
 
@@ -251,10 +263,18 @@ def build_role_percentages(train, id_to_alias, report):
     positions, and the source Task 2b synthesises ChampionMeta from.
     """
     counts = defaultdict(lambda: np.zeros(5, dtype=np.int64))
+    # The same counts per patch (still TRAIN only), for the positions refresh's
+    # recency rule: the shipped primary and shares follow the newest patch a
+    # champion has >= MIN_PICKS picks on (scripts/champion-positions/derive.mjs),
+    # falling back to the pooled block above it. Keyed "major.minor" like
+    # patch_vocab.json; per patch the picks sum to 10 x that patch's train games.
+    by_patch = defaultdict(lambda: defaultdict(lambda: np.zeros(5, dtype=np.int64)))
     for slot in range(10):
         role = slot % 5  # slot index IS canonical role order, both sides
         for cid, n in train[f"riot_{slot}"].astype(int).value_counts().items():
             counts[int(cid)][role] += int(n)
+        for (patch, cid), n in train.groupby(["patch", f"riot_{slot}"]).size().items():
+            by_patch[int(cid)][patch][role] += int(n)
     out = {}
     for cid, arr in counts.items():
         total = int(arr.sum())
@@ -263,10 +283,22 @@ def build_role_percentages(train, id_to_alias, report):
             "games": total,
             "roles": {POSITIONS[i]: float(arr[i] / total) for i in range(5)},
             "meta_roles": {META_POS[POSITIONS[i]]: float(arr[i] / total) for i in range(5)},
+            "by_patch": {
+                patch: {
+                    "games": int(parr.sum()),
+                    "meta_roles": {META_POS[POSITIONS[i]]: float(parr[i] / parr.sum()) for i in range(5)},
+                }
+                for patch, parr in sorted(by_patch[cid].items(), key=lambda kv: parse_patch(kv[0]))
+            },
         }
     rarest = sorted(out.items(), key=lambda kv: kv[1]["games"])[:5]
     log(f"role_percentages: {len(out)} champions; rarest — "
         + ", ".join(f"{v['alias']}={v['games']}" for _, v in rarest), report)
+    newest = max((p for v in out.values() for p in v["by_patch"]), key=parse_patch)
+    thin = sorted(((v["alias"], v["by_patch"].get(newest, {}).get("games", 0)) for v in out.values()),
+                  key=lambda kv: kv[1])[:5]
+    log(f"role_percentages by_patch: newest train patch {newest}; fewest picks on it — "
+        + ", ".join(f"{a}={n}" for a, n in thin), report)
     return out
 
 
@@ -720,6 +752,8 @@ def main():
     ap.add_argument("--sibling-n", type=int, default=SIBLING_N)
     ap.add_argument("--max-patch", type=parse_patch, default=None,
                     help="keep games on this patch and older, e.g. 16.16")
+    ap.add_argument("--min-patch", type=parse_patch, default=None,
+                    help="keep games on this patch and newer, e.g. 16.18 (windows a full export)")
     args = ap.parse_args()
 
     out_dir = Path(args.out)
@@ -733,6 +767,7 @@ def main():
               f"generated {datetime.now(timezone.utc).isoformat()}",
               f"source parquet: `{Path(parquet).name}`",
               f"max patch: {args.max_patch or 'none'}",
+              f"min patch: {args.min_patch or 'none'}",
               f"seed: {SEED}"]
 
     id_to_alias = load_id_to_alias()
@@ -741,7 +776,7 @@ def main():
 
     df = flatten(parquet)
     df = apply_filters(df, report)
-    df = patch_cut(df, args.max_patch, report)
+    df = patch_cut(df, args.max_patch, report, min_patch=args.min_patch)
     df = ragged_tail_cut(df, report)
 
     id_to_index, champ_vocab = build_champion_vocab(df, id_to_alias, report)

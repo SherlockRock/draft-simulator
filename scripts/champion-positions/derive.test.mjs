@@ -2,15 +2,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  POSITIONS_THRESHOLD, MAX_PRIMARY_FLIPS, MAX_FEASIBILITY_DROP,
+  POSITIONS_THRESHOLD, MAX_PRIMARY_FLIPS, MAX_FEASIBILITY_DROP, MIN_PICKS, RECENCY_RULE,
   derivePositions, ratesFromCorpus, ratesFromUgg, refreshPositions, diffPositions,
-  buildProvenance, formatPositionsSource, evaluateGate, formatDiff,
+  buildProvenance, formatPositionsSource, evaluateGate, formatDiff, parsePatch, comparePatches,
 } from "./derive.mjs";
 
 test("the constants are the design's", () => {
   assert.equal(POSITIONS_THRESHOLD, 0.10);
   assert.equal(MAX_PRIMARY_FLIPS, 10);
   assert.equal(MAX_FEASIBILITY_DROP, 0.02);
+  assert.equal(MIN_PICKS, 300);
+  assert.equal(RECENCY_RULE, "latest-patch");
+});
+
+test("patches compare numerically on (major, minor), never as strings", () => {
+  assert.deepEqual(parsePatch("16.17"), [16, 17]);
+  assert.throws(() => parsePatch("16_8"), /MAJOR\.MINOR/);
+  assert.throws(() => parsePatch("16"), /MAJOR\.MINOR/);
+  assert.ok(comparePatches("16.9", "16.17") < 0, "16.9 is older than 16.17 (a string sort says otherwise)");
+  assert.ok(comparePatches("17.1", "16.19") > 0, "a major bump is newer");
+  assert.equal(comparePatches("16.16", "16.16"), 0);
+  assert.deepEqual(["16.17", "16.9", "17.1", "16.16"].sort(comparePatches), ["16.9", "16.16", "16.17", "17.1"]);
 });
 
 test("derivePositions lists roles at or above the threshold, ordered by share", () => {
@@ -34,17 +46,85 @@ test("derivePositions treats a missing role key as zero and includes exactly-thr
   assert.deepEqual(derivePositions({ MIDDLE: 0.9, JUNGLE: 0.1 }), ["MIDDLE", "JUNGLE"]);
 });
 
-test("ratesFromCorpus reads meta_roles, keys by alias, and counts games as picks / 10", () => {
-  const doc = {
-    "67": { alias: "Vayne", games: 20, roles: { TOP: 0.5, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0.5, UTILITY: 0 },
-            meta_roles: { TOP: 0.5, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0.5, SUPPORT: 0 } },
-    "103": { alias: "Ahri", games: 30, roles: { MIDDLE: 1 }, meta_roles: { MIDDLE: 1 } },
+// A two-patch corpus in prepare.py's shape. Camille is the recency case: pooled
+// SUPPORT-first, newest patch TOP-first. Nilah is thin on the newest patch and
+// falls back to the previous one; Zaahen is thin everywhere and falls back to
+// the pooled shares. Picks per patch sum to the pooled `games`, and across
+// champions each patch's picks are a multiple of ten.
+function corpusDoc() {
+  return {
+    "164": {
+      alias: "Camille", games: 1000,
+      roles: { TOP: 0.29, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, UTILITY: 0.71 },
+      meta_roles: { TOP: 0.29, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0.71 },
+      by_patch: {
+        "16.15": { games: 500, meta_roles: { TOP: 0.02, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0.98 } },
+        "16.16": { games: 500, meta_roles: { TOP: 0.56, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0.44 } },
+      },
+    },
+    "895": {
+      alias: "Nilah", games: 2600,
+      roles: { TOP: 0, JUNGLE: 0, MIDDLE: 0.1, BOTTOM: 0.9, UTILITY: 0 },
+      meta_roles: { TOP: 0, JUNGLE: 0, MIDDLE: 0.1, BOTTOM: 0.9, SUPPORT: 0 },
+      by_patch: {
+        "16.15": { games: 2400, meta_roles: { TOP: 0, JUNGLE: 0, MIDDLE: 0.05, BOTTOM: 0.95, SUPPORT: 0 } },
+        "16.16": { games: 200, meta_roles: { TOP: 0, JUNGLE: 0, MIDDLE: 0.7, BOTTOM: 0.3, SUPPORT: 0 } },
+      },
+    },
+    "999": {
+      alias: "Zaahen", games: 400,
+      roles: { TOP: 0.6, JUNGLE: 0.4, MIDDLE: 0, BOTTOM: 0, UTILITY: 0 },
+      meta_roles: { TOP: 0.6, JUNGLE: 0.4, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0 },
+      by_patch: {
+        "16.15": { games: 100, meta_roles: { TOP: 0.1, JUNGLE: 0.9, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0 } },
+        "16.16": { games: 300, meta_roles: { TOP: 0.9, JUNGLE: 0.1, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0 } },
+      },
+    },
   };
-  const { rates, games, kind } = ratesFromCorpus(doc);
-  assert.equal(kind, "corpus");
-  assert.equal(games, 5);
-  assert.deepEqual(rates.get("Vayne"), { TOP: 0.5, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0.5, SUPPORT: 0 });
-  assert.equal(rates.get("Ahri").MIDDLE, 1);
+}
+
+test("ratesFromCorpus scores each champion on the newest patch with at least MIN_PICKS picks, and says which patch decided", () => {
+  const out = ratesFromCorpus(corpusDoc());
+  assert.equal(out.kind, "corpus");
+  assert.equal(out.games, 400);                 // 4,000 pooled picks / 10
+  assert.deepEqual(out.patches, ["16.15", "16.16"]);
+  assert.equal(out.decidingPatch, "16.16");
+  assert.equal(out.decidingGames, 100);         // 500 + 200 + 300 picks on 16.16
+  assert.equal(out.minPicks, MIN_PICKS);
+  // Camille: the newest patch decides — TOP-first, where the pooled shares said SUPPORT-first.
+  assert.deepEqual(out.rates.get("Camille"), { TOP: 0.56, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0.44 });
+  assert.deepEqual(out.pooled.get("Camille"), { TOP: 0.29, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0, SUPPORT: 0.71 });
+  assert.equal(out.chosen.get("Camille"), "16.16");
+  // Zaahen has exactly MIN_PICKS on the newest patch: the floor is inclusive.
+  assert.equal(out.chosen.get("Zaahen"), "16.16");
+  assert.equal(out.rates.get("Zaahen").TOP, 0.9);
+  // Nilah has 200 picks on the newest patch, under the floor: the previous patch decides, and she is listed.
+  assert.equal(out.chosen.get("Nilah"), "16.15");
+  assert.deepEqual(out.fallback, { Nilah: "16.15" });
+});
+
+test("ratesFromCorpus falls back patch by patch, then to the pooled shares, and lists every champion the newest patch did not decide", () => {
+  const out = ratesFromCorpus(corpusDoc(), { minPicks: 301 });
+  // Nilah: 200 picks on 16.16 is under the floor; 16.15 decides.
+  assert.equal(out.chosen.get("Nilah"), "16.15");
+  assert.equal(out.rates.get("Nilah").BOTTOM, 0.95);
+  // Zaahen: 300 on 16.16 and 100 on 16.15 are both under 301; the pooled shares decide.
+  assert.equal(out.chosen.get("Zaahen"), "pooled");
+  assert.deepEqual(out.rates.get("Zaahen"), out.pooled.get("Zaahen"));
+  assert.equal(out.rates.get("Zaahen").TOP, 0.6);
+  assert.deepEqual(out.fallback, { Nilah: "16.15", Zaahen: "pooled" });
+  assert.equal(out.chosen.get("Camille"), "16.16");
+});
+
+test("ratesFromCorpus orders patches numerically so 16.9 never outranks 16.17", () => {
+  const doc = corpusDoc();
+  for (const entry of Object.values(doc)) {
+    entry.by_patch = { "16.17": entry.by_patch["16.16"], "16.9": entry.by_patch["16.15"] };
+  }
+  const out = ratesFromCorpus(doc);
+  assert.deepEqual(out.patches, ["16.9", "16.17"]);
+  assert.equal(out.decidingPatch, "16.17");
+  assert.equal(out.chosen.get("Camille"), "16.17");
 });
 
 test("ratesFromCorpus refuses a file without the meta_roles block (the roles block says UTILITY)", () => {
@@ -52,8 +132,25 @@ test("ratesFromCorpus refuses a file without the meta_roles block (the roles blo
   assert.throws(() => ratesFromCorpus(doc), /meta_roles/);
 });
 
+test("ratesFromCorpus refuses a file without the by_patch block (an old prepare.py output cannot feed the recency rule)", () => {
+  const doc = { "67": { alias: "Vayne", games: 10, roles: { TOP: 1 }, meta_roles: { TOP: 1 } } };
+  assert.throws(() => ratesFromCorpus(doc), /by_patch/);
+  const empty = { "67": { alias: "Vayne", games: 10, roles: { TOP: 1 }, meta_roles: { TOP: 1 }, by_patch: {} } };
+  assert.throws(() => ratesFromCorpus(empty), /by_patch/);
+});
+
+test("ratesFromCorpus refuses a by_patch block that does not partition the pooled picks, or a bad patch key", () => {
+  const doc = corpusDoc();
+  doc["164"].by_patch["16.16"].games = 400;
+  assert.throws(() => ratesFromCorpus(doc), /partition/);
+  const bad = corpusDoc();
+  bad["164"].by_patch["16_16"] = bad["164"].by_patch["16.16"];
+  delete bad["164"].by_patch["16.16"];
+  assert.throws(() => ratesFromCorpus(bad), /MAJOR\.MINOR/);
+});
+
 test("ratesFromCorpus refuses a pick total that is not a multiple of ten", () => {
-  const doc = { "67": { alias: "Vayne", games: 7, roles: {}, meta_roles: { TOP: 1 } } };
+  const doc = { "67": { alias: "Vayne", games: 7, roles: {}, meta_roles: { TOP: 1 }, by_patch: { "16.16": { games: 7, meta_roles: { TOP: 1 } } } } };
   assert.throws(() => ratesFromCorpus(doc), /multiple of 10/);
 });
 
@@ -123,6 +220,15 @@ test("buildProvenance writes the block in the documented key order and omits an 
   assert.deepEqual(q.feasibility, { sets: 10, bothSides: 0.5 });
   const u = buildProvenance({ kind: "ugg", patches: ["16_8"], games: 450, gamesUnit: "champion-matches", unmeasuredAtParity: true, threshold: 0.1, generatedAt: "x" });
   assert.deepEqual(Object.keys(u), ["kind", "patches", "games", "gamesUnit", "unmeasuredAtParity", "threshold", "generatedAt"]);
+  // The recency rule's fields sit between the source and the threshold; an absent fallback is written as {}.
+  const r = buildProvenance({ kind: "corpus", patches: ["16.18", "16.19"], games: 200000, rule: "latest-patch", minPicks: 300,
+                              decidingPatch: "16.19", decidingGames: 120000, threshold: 0.1, generatedAt: "x", feasibility: { sets: 1, bothSides: 0.8 } });
+  assert.deepEqual(Object.keys(r), ["kind", "patches", "games", "rule", "minPicks", "decidingPatch", "decidingGames", "fallback", "threshold", "generatedAt", "feasibility"]);
+  assert.deepEqual(r.fallback, {});
+  assert.equal(r.decidingPatch, "16.19");
+  const s = buildProvenance({ kind: "corpus", patches: ["16.19"], games: 1, rule: "latest-patch", minPicks: 300, decidingPatch: "16.19", decidingGames: 1,
+                              fallback: { Nilah: "pooled" }, threshold: 0.1, generatedAt: "x" });
+  assert.deepEqual(s.fallback, { Nilah: "pooled" });
 });
 
 test("formatPositionsSource renders every field an operator needs, including a carried-forward feasibility", () => {
@@ -144,6 +250,18 @@ test("formatPositionsSource renders every field an operator needs, including a c
   assert.equal(
     formatPositionsSource({ kind: "corpus", patches: ["16.15", "16.16"], games: 300885, threshold: 0.1, generatedAt: "x" }),
     "corpus patches=16.15,16.16 threshold=0.1 generated=x feasibility=unmeasured",
+  );
+  // the recency rule: name it and its deciding patch; count the champions decided otherwise, only when there are any.
+  // Same strings as backend/tests/navigator/navigator_engine_boot_line.test.js (the backend keeps a verbatim CJS copy).
+  const block = { kind: "corpus", patches: ["16.18", "16.19"], games: 200000, rule: "latest-patch", minPicks: 300, decidingPatch: "16.19",
+    decidingGames: 120000, fallback: {}, threshold: 0.1, generatedAt: "2026-10-06T00:00:00.000Z", feasibility: { sets: 40000, bothSides: 0.8 } };
+  assert.equal(
+    formatPositionsSource(block),
+    "corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 threshold=0.1 generated=2026-10-06T00:00:00.000Z feasibility=0.8",
+  );
+  assert.equal(
+    formatPositionsSource({ ...block, fallback: { Nilah: "16.18", Zaahen: "pooled" } }),
+    "corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 fallback=2 threshold=0.1 generated=2026-10-06T00:00:00.000Z feasibility=0.8",
   );
 });
 
@@ -212,9 +330,13 @@ test("formatDiff names each flip with its rates, the lost and gained pairs, and 
   const rates = new Map([["Vayne", { TOP: 0.5677, BOTTOM: 0.3842, MIDDLE: 0.0344, JUNGLE: 0.0113, SUPPORT: 0.0024 }]]);
   const text = formatDiff(diff, rates, ["Zaahen"]);
   assert.match(text, /primary flips \(1\)/);
-  assert.match(text, /Vayne +BOTTOM +-> TOP +\(TOP 0\.57, BOTTOM 0\.38\)/);
+  assert.match(text, /Vayne +BOTTOM +-> TOP +\(TOP 0\.57, BOTTOM 0\.38\)$/m);
+  assert.doesNotMatch(text, /pooled/);
   assert.match(text, /roles lost \(1\): Ashe SUPPORT/);
   assert.match(text, /roles gained \(1\): Sylas JUNGLE/);
   assert.match(text, /kept \(no source data\) \(1\): Zaahen/);
   assert.match(text, /mean positions per champion 1\.40 -> 1\.72/);
+  // With the pooled map (corpus source) each flip also shows the pooled-window shares.
+  const pooled = new Map([["Vayne", { TOP: 0.3, BOTTOM: 0.65, MIDDLE: 0.05, JUNGLE: 0, SUPPORT: 0 }]]);
+  assert.match(formatDiff(diff, rates, [], pooled), /Vayne +BOTTOM +-> TOP +\(TOP 0\.57, BOTTOM 0\.38\) \| pooled \(BOTTOM 0\.65, TOP 0\.30, MIDDLE 0\.05\)/);
 });
