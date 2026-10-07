@@ -1,7 +1,7 @@
 {
   "id": "2026-10-04-supp-pinch-slot-17-dme",
   "category": "off-pool",
-  "notes": "User's 'support pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. DME (Blue) pair at slot 17. Picks after slot 15 are the engine's in-pool continuation re-derived under role maps 2026-10-04, user-vetted (slot 16 Rakan -> Alistar); the recorded role-blind board is 2026-09-29-supp-pinch-slot-17-dme.",
+  "notes": "User's 'support pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. DME (Blue) pair at slot 17. Picks after slot 15 are the engine's in-pool continuation re-derived under role maps 2026-10-04, user-vetted (slot 16 Rakan -> Alistar); the recorded role-blind board is 2026-09-29-supp-pinch-slot-17-dme. 2026-10-07: role_verdict added (engine-role-grade § 6) — the Q question on this position's graded top at P = 0.105, Q = 0 under the 16.19 recency table (Renata support + Syndra adc, grade 84, r 0.16): the user flagged Syndra-at-adc as unplayable on 2026-10-04, so ok = false; the 2026-10-04 off_pool verdict (a P question) is untouched.",
   "source": {
     "fm_version": "fm-2026-09-01-6880daa",
     "meta_version": "16.13.1",
@@ -221,6 +221,17 @@
   "our_side": "Blue",
   "verdict": {
     "off_pool": true
+  },
+  "role_verdict": {
+    "action": [
+      "Renata",
+      "Syndra"
+    ],
+    "roles": [
+      "support",
+      "adc"
+    ],
+    "ok": false
   },
   "review": "2026-10-04: continuation re-derived under role maps (slot 16 Rakan -> Alistar), user-vetted; supersedes 2026-09-29-supp-pinch-slot-17-dme for the recalibration read (that file stays as the slice's test artefact). 2026-10-04 user (scored read, role maps): leave the pool."
 }
