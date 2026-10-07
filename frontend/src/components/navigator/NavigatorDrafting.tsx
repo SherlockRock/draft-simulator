@@ -32,7 +32,10 @@ import {
     topLinePath,
     type ColumnModel
 } from "../../utils/navigatorColumns";
-import { deriveEngineStatus, type EngineProgress } from "../../utils/navigatorEngineStatus";
+import {
+    deriveEngineStatus,
+    type EngineProgress
+} from "../../utils/navigatorEngineStatus";
 import {
     EXPORT_CANVAS_STORAGE_KEY,
     exportDraftDescription,
@@ -254,10 +257,19 @@ const NavigatorDrafting: Component = () => {
     // Heartbeat first (live), else the painted partial's own meta.
     const progress = createMemo<EngineProgress | null>(() => {
         const hb = engineHeartbeat();
-        if (hb) return { depthPainted: hb.depthPainted, depthInProgress: hb.depthInProgress, nodes: hb.nodes };
+        if (hb)
+            return {
+                depthPainted: hb.depthPainted,
+                depthInProgress: hb.depthInProgress,
+                nodes: hb.nodes
+            };
         const m = currentMeta();
         if (m && m.inProgress === true)
-            return { depthPainted: m.depthReached, depthInProgress: m.depthInProgress ?? 0, nodes: m.nodesEvaluated };
+            return {
+                depthPainted: m.depthReached,
+                depthInProgress: m.depthInProgress ?? 0,
+                nodes: m.nodesEvaluated
+            };
         return null;
     });
     const status = createMemo(() =>

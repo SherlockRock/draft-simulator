@@ -22,12 +22,16 @@ describe("NavigatorEngineHeartbeatSchema", () => {
     test("accepts the wire shape, including a null afterEventId", () => {
         expect(NavigatorEngineHeartbeatSchema.safeParse(hb).success).toBe(true);
         expect(
-            NavigatorEngineHeartbeatSchema.safeParse({ ...hb, afterEventId: null }).success
+            NavigatorEngineHeartbeatSchema.safeParse({ ...hb, afterEventId: null })
+                .success
         ).toBe(true);
     });
     test("rejects a missing field", () => {
-        const { nodes: _dropped, ...rest } = hb;
-        expect(NavigatorEngineHeartbeatSchema.safeParse(rest).success).toBe(false);
+        const missingNodes = { ...hb };
+        Reflect.deleteProperty(missingNodes, "nodes");
+        expect(NavigatorEngineHeartbeatSchema.safeParse(missingNodes).success).toBe(
+            false
+        );
     });
 });
 
@@ -41,7 +45,9 @@ describe("heartbeatMatchesState", () => {
         expect(heartbeatMatchesState(hb, null, "e7")).toBe(false);
     });
     test("zero-event state matches a null after-event id", () => {
-        expect(heartbeatMatchesState({ ...hb, afterEventId: null }, "d1", null)).toBe(true);
+        expect(heartbeatMatchesState({ ...hb, afterEventId: null }, "d1", null)).toBe(
+            true
+        );
     });
 });
 
@@ -179,9 +185,9 @@ describe("partialMatchesState (final review #1, design § 7)", () => {
         expect(
             partialMatchesState({ source: "persisted", after_event_id: "e7" }, "e9")
         ).toBe(true);
-        expect(
-            partialMatchesState({ source: "cache", after_event_id: null }, "e9")
-        ).toBe(true);
+        expect(partialMatchesState({ source: "cache", after_event_id: null }, "e9")).toBe(
+            true
+        );
     });
     test("a partial with a matching after_event_id passes", () => {
         expect(

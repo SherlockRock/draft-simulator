@@ -116,7 +116,9 @@ describe("streaming states (design § 4)", () => {
             elapsedMs: 400,
             progress: { depthPainted: 0, depthInProgress: 1, nodes: 120 }
         });
-        expect(formatEngineStatus(s)).toBe("◐ Thinking · searching depth 1 · 0.4 s · 120 nodes");
+        expect(formatEngineStatus(s)).toBe(
+            "◐ Thinking · searching depth 1 · 0.4 s · 120 nodes"
+        );
     });
     test("thinking with a painted depth names the candidates and both depths", () => {
         const s = deriveEngineStatus({
@@ -156,8 +158,14 @@ describe("streaming states (design § 4)", () => {
         expect(formatEngineStatus(s)).not.toContain("no heartbeat");
     });
     test("ready after a deadline cut says budget hit", () => {
-        const s = deriveEngineStatus({ ...base, meta: { depthReached: 2, computeTimeMs: 5003 }, budgetHit: true });
-        expect(formatEngineStatus(s)).toBe("● 8 candidates · depth 2 · 5003 ms · budget hit");
+        const s = deriveEngineStatus({
+            ...base,
+            meta: { depthReached: 2, computeTimeMs: 5003 },
+            budgetHit: true
+        });
+        expect(formatEngineStatus(s)).toBe(
+            "● 8 candidates · depth 2 · 5003 ms · budget hit"
+        );
     });
     test("a stale check never applies outside thinking", () => {
         expect(isHeartbeatStale(deriveEngineStatus(base))).toBe(false);

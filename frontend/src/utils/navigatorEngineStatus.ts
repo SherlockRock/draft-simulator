@@ -102,7 +102,9 @@ export function formatEngineStatus(status: EngineStatus): string {
             if (status.progress !== null)
                 parts.push(`${status.progress.nodes.toLocaleString("en-US")} nodes`);
             if (isHeartbeatStale(status) && status.heartbeatStaleMs !== null)
-                parts.push(`no heartbeat for ${Math.round(status.heartbeatStaleMs / 1000)} s`);
+                parts.push(
+                    `no heartbeat for ${Math.round(status.heartbeatStaleMs / 1000)} s`
+                );
             return parts.join(" · ");
         }
         case "ready":

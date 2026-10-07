@@ -87,7 +87,10 @@ function Draft(props: props) {
     const params = useParams();
     const navigate = useNavigate();
     const {
-        socket: socketAccessor, connectionStatus, pickSync, pickSyncVersion
+        socket: socketAccessor,
+        connectionStatus,
+        pickSync,
+        pickSyncVersion
     } = useCanvasSocket();
     const displayedDraft = createMemo(() => {
         pickSyncVersion();
@@ -179,7 +182,9 @@ function Draft(props: props) {
             // their existing live updates and do not use the canvas edit queue.
             const full = DraftSchema.safeParse(raw);
             const incoming = full.success ? full.data : { ...current, ...update.data };
-            props.mutate(incoming.type === "canvas" ? pickSync.merge(incoming) : incoming);
+            props.mutate(
+                incoming.type === "canvas" ? pickSync.merge(incoming) : incoming
+            );
         };
         socket.on("draftUpdate", onDraftUpdate);
         onCleanup(() => socket.off("draftUpdate", onDraftUpdate));
@@ -414,7 +419,10 @@ function Draft(props: props) {
                                 >
                                     {/* All 10 bans */}
                                     <Index
-                                        each={(displayedDraft()?.picks ?? []).slice(0, 10)}
+                                        each={(displayedDraft()?.picks ?? []).slice(
+                                            0,
+                                            10
+                                        )}
                                     >
                                         {(each, index) => {
                                             const side = index < 5 ? "team1" : "team2";
@@ -484,7 +492,10 @@ function Draft(props: props) {
                                 >
                                     {/* Blue Side Champions */}
                                     <Index
-                                        each={(displayedDraft()?.picks ?? []).slice(10, 15)}
+                                        each={(displayedDraft()?.picks ?? []).slice(
+                                            10,
+                                            15
+                                        )}
                                     >
                                         {(each, index) => (
                                             <Droppable id={index + 10}>
@@ -592,7 +603,10 @@ function Draft(props: props) {
                                 >
                                     {/* Red Side Champions */}
                                     <Index
-                                        each={(displayedDraft()?.picks ?? []).slice(15, 20)}
+                                        each={(displayedDraft()?.picks ?? []).slice(
+                                            15,
+                                            20
+                                        )}
                                     >
                                         {(each, index) => (
                                             <Droppable id={index + 15}>

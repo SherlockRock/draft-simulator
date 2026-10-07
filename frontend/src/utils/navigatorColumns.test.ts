@@ -220,12 +220,18 @@ describe("banSignalAbsent (design § 5)", () => {
     });
     test("a ban fan whose composites differ has signal (phase-2 bans)", () => {
         const [a, ...rest] = banRoot.children;
-        const varied = [{ ...a, scores: { ...a.scores, composite: a.scores.composite + 0.1 } }, ...rest];
+        const varied = [
+            { ...a, scores: { ...a.scores, composite: a.scores.composite + 0.1 } },
+            ...rest
+        ];
         expect(banSignalAbsent(varied)).toBe(false);
     });
     test("a ban fan with a non-zero component has signal", () => {
         const [a, ...rest] = banRoot.children;
-        const withInfo = [{ ...a, scores: { ...a.scores, informationValue: 0.2 } }, ...rest];
+        const withInfo = [
+            { ...a, scores: { ...a.scores, informationValue: 0.2 } },
+            ...rest
+        ];
         expect(banSignalAbsent(withInfo)).toBe(false);
     });
     test("an empty fan is not 'absent signal'", () => {

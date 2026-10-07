@@ -2930,16 +2930,22 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     createEffect(() => {
         const currentId = canvasId();
         const data = props.canvasData;
-        if (!data || props.isLoading || props.isFetching || currentId === loadedCanvasId())
+        if (
+            !data ||
+            props.isLoading ||
+            props.isFetching ||
+            currentId === loadedCanvasId()
+        )
             return;
 
         // Reset stores with new canvas data
         setCanvasDrafts(
             (data.drafts ?? []).map((cd) => ({
                 ...cd,
-                Draft: cd.Draft.type === "canvas" && !isLocalMode()
-                    ? pickSync.merge(cd.Draft)
-                    : cd.Draft
+                Draft:
+                    cd.Draft.type === "canvas" && !isLocalMode()
+                        ? pickSync.merge(cd.Draft)
+                        : cd.Draft
             }))
         );
         setConnections(data.connections ?? []);
@@ -3107,7 +3113,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 // payload has no ORDER BY, so any drag's UPDATE can reorder it.
                 const drafts = data.drafts.map((cd) => ({
                     ...cd,
-                    Draft: cd.Draft.type === "canvas" ? pickSync.merge(cd.Draft) : cd.Draft
+                    Draft:
+                        cd.Draft.type === "canvas" ? pickSync.merge(cd.Draft) : cd.Draft
                 }));
                 setCanvasDrafts(reconcile(drafts, { key: "draft_id" }));
                 setConnections(data.connections);
@@ -3195,9 +3202,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             setCanvasDrafts(
                 (cd) => cd.Draft.id === data.id,
                 "Draft",
-                (draft) => draft.type === "canvas"
-                    ? pickSync.merge({ ...draft, ...data })
-                    : { ...draft, ...data }
+                (draft) =>
+                    draft.type === "canvas"
+                        ? pickSync.merge({ ...draft, ...data })
+                        : { ...draft, ...data }
             );
         };
         socket.on("draftUpdate", onDraftUpdate);
@@ -4233,9 +4241,10 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     // navigation and write into canvas B's row.
     const viewportFlight = createLatestWins<{ canvasId: string; viewport: Viewport }>(
         ({ canvasId, viewport }) =>
-            updateViewportMutation
-                .mutateAsync({ canvasId, viewport })
-                .then(() => undefined, () => undefined)
+            updateViewportMutation.mutateAsync({ canvasId, viewport }).then(
+                () => undefined,
+                () => undefined
+            )
     );
 
     const persistViewportNow = (viewport: Viewport) => {
@@ -7849,8 +7858,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 dragSource={() => {
                                     const state = championDragState();
                                     if (!state.armed || !state.source) return null;
-                                    if (state.source.placementId !== pool.id)
-                                        return null;
+                                    if (state.source.placementId !== pool.id) return null;
                                     return {
                                         role: state.source.role,
                                         championId: state.source.championId
@@ -7884,8 +7892,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     zoom 0.5 and half at 2x. */}
                 <Show when={championDragPreview()}>
                     {(state) => {
-                        const champ = () =>
-                            championById.get(state().source.championId);
+                        const champ = () => championById.get(state().source.championId);
                         const size = () => POOL_PORTRAIT_PX * props.viewport().zoom;
                         return (
                             <div

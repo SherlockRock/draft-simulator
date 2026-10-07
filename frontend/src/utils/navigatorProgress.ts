@@ -35,7 +35,9 @@ export function heartbeatMatchesState(
     draftId: string | null,
     latestEventId: string | null
 ): boolean {
-    return draftId !== null && hb.draftId === draftId && hb.afterEventId === latestEventId;
+    return (
+        draftId !== null && hb.draftId === draftId && hb.afterEventId === latestEventId
+    );
 }
 
 export interface ComputingInput {
