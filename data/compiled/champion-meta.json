@@ -1,22 +1,27 @@
 {
   "version": "16.13.1",
   "patch": "16.13.1",
-  "compiledAt": "2026-09-05T23:37:27.317Z",
+  "compiledAt": "2026-10-07T03:45:26.841Z",
   "sources": {
     "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
     "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
     "positions": {
       "kind": "corpus",
       "patches": [
-        "16.15",
-        "16.16"
+        "16.18",
+        "16.19"
       ],
-      "games": 300885,
+      "games": 816793,
+      "rule": "latest-patch",
+      "minPicks": 300,
+      "decidingPatch": "16.19",
+      "decidingGames": 277103,
+      "fallback": {},
       "threshold": 0.1,
-      "generatedAt": "2026-09-05T23:37:07.735Z",
+      "generatedAt": "2026-10-07T03:45:26.730Z",
       "feasibility": {
-        "sets": 34159,
-        "bothSides": 0.785
+        "sets": 102100,
+        "bothSides": 0.738
       }
     }
   },
@@ -258,8 +263,8 @@
       "id": "Amumu",
       "name": "Amumu",
       "positions": [
-        "SUPPORT",
-        "JUNGLE"
+        "JUNGLE",
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0,
@@ -296,7 +301,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5027
+      "winRate": 0.4965
     },
     "Anivia": {
       "id": "Anivia",
@@ -343,8 +348,7 @@
       "id": "Annie",
       "name": "Annie",
       "positions": [
-        "MIDDLE",
-        "SUPPORT"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -681,8 +685,8 @@
       "id": "Brand",
       "name": "Brand",
       "positions": [
-        "BOTTOM",
         "SUPPORT",
+        "BOTTOM",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -714,7 +718,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5292
+      "winRate": 0.503
     },
     "Braum": {
       "id": "Braum",
@@ -836,8 +840,8 @@
       "id": "Camille",
       "name": "Camille",
       "positions": [
-        "SUPPORT",
-        "TOP"
+        "TOP",
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0.75,
@@ -873,7 +877,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4678
+      "winRate": 0.5045
     },
     "Cassiopeia": {
       "id": "Cassiopeia",
@@ -920,9 +924,8 @@
       "id": "Chogath",
       "name": "Cho'Gath",
       "positions": [
-        "TOP",
-        "MIDDLE",
-        "JUNGLE"
+        "JUNGLE",
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0,
@@ -952,13 +955,14 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.504
+      "winRate": 0.5074
     },
     "Corki": {
       "id": "Corki",
       "name": "Corki",
       "positions": [
         "BOTTOM",
+        "TOP",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -1154,8 +1158,8 @@
       "id": "Ekko",
       "name": "Ekko",
       "positions": [
-        "JUNGLE",
-        "MIDDLE"
+        "MIDDLE",
+        "JUNGLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -1183,7 +1187,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5052
+      "winRate": 0.502
     },
     "Elise": {
       "id": "Elise",
@@ -1456,8 +1460,7 @@
       "id": "Gangplank",
       "name": "Gangplank",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0.8,
@@ -1491,8 +1494,7 @@
       "id": "Garen",
       "name": "Garen",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0.9,
@@ -1729,8 +1731,8 @@
       "name": "Heimerdinger",
       "positions": [
         "TOP",
-        "BOTTOM",
         "MIDDLE",
+        "BOTTOM",
         "SUPPORT"
       ],
       "damageProfile": {
@@ -1993,8 +1995,7 @@
       "id": "Jax",
       "name": "Jax",
       "positions": [
-        "TOP",
-        "JUNGLE"
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0.68,
@@ -2851,8 +2852,7 @@
       "id": "Locke",
       "name": "Locke",
       "positions": [
-        "MIDDLE",
-        "JUNGLE"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.5,
@@ -2883,7 +2883,8 @@
       "id": "Lucian",
       "name": "Lucian",
       "positions": [
-        "BOTTOM"
+        "BOTTOM",
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.83,
@@ -3158,8 +3159,8 @@
       "id": "Mel",
       "name": "Mel",
       "positions": [
-        "BOTTOM",
         "MIDDLE",
+        "BOTTOM",
         "SUPPORT"
       ],
       "damageProfile": {
@@ -3189,7 +3190,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4723
+      "winRate": 0.4498
     },
     "Milio": {
       "id": "Milio",
@@ -3300,7 +3301,6 @@
       "name": "Morgana",
       "positions": [
         "SUPPORT",
-        "JUNGLE",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -3418,7 +3418,6 @@
       "name": "Nasus",
       "positions": [
         "TOP",
-        "JUNGLE",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -3802,8 +3801,9 @@
       "id": "Pantheon",
       "name": "Pantheon",
       "positions": [
-        "SUPPORT",
         "TOP",
+        "SUPPORT",
+        "MIDDLE",
         "JUNGLE"
       ],
       "damageProfile": {
@@ -3833,7 +3833,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4827
+      "winRate": 0.5088
     },
     "Poppy": {
       "id": "Poppy",
@@ -3951,8 +3951,8 @@
       "id": "Quinn",
       "name": "Quinn",
       "positions": [
-        "TOP",
         "JUNGLE",
+        "TOP",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -3982,7 +3982,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5117
+      "winRate": 0.4486
     },
     "Rakan": {
       "id": "Rakan",
@@ -4030,8 +4030,7 @@
       "id": "Rammus",
       "name": "Rammus",
       "positions": [
-        "JUNGLE",
-        "SUPPORT"
+        "JUNGLE"
       ],
       "damageProfile": {
         "physical": 0.6,
@@ -4296,8 +4295,7 @@
       "id": "Rumble",
       "name": "Rumble",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0,
@@ -4448,8 +4446,7 @@
       "id": "Senna",
       "name": "Senna",
       "positions": [
-        "SUPPORT",
-        "BOTTOM"
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0.9,
@@ -4600,8 +4597,8 @@
       "id": "Shen",
       "name": "Shen",
       "positions": [
-        "SUPPORT",
-        "TOP"
+        "TOP",
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0.75,
@@ -4635,7 +4632,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.483
+      "winRate": 0.5161
     },
     "Shyvana": {
       "id": "Shyvana",
@@ -4932,8 +4929,8 @@
       "id": "Swain",
       "name": "Swain",
       "positions": [
-        "BOTTOM",
         "SUPPORT",
+        "BOTTOM",
         "MIDDLE",
         "TOP"
       ],
@@ -4969,15 +4966,14 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5299
+      "winRate": 0.4744
     },
     "Sylas": {
       "id": "Sylas",
       "name": "Sylas",
       "positions": [
-        "MIDDLE",
         "JUNGLE",
-        "SUPPORT"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -5007,7 +5003,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4921
+      "winRate": 0.4904
     },
     "Syndra": {
       "id": "Syndra",
@@ -5053,8 +5049,7 @@
       "name": "Tahm Kench",
       "positions": [
         "SUPPORT",
-        "TOP",
-        "BOTTOM"
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0,
@@ -5095,8 +5090,7 @@
       "name": "Taliyah",
       "positions": [
         "MIDDLE",
-        "JUNGLE",
-        "BOTTOM"
+        "JUNGLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -5325,8 +5319,7 @@
       "name": "Trundle",
       "positions": [
         "TOP",
-        "JUNGLE",
-        "SUPPORT"
+        "JUNGLE"
       ],
       "damageProfile": {
         "physical": 0.75,
@@ -5577,8 +5570,8 @@
       "id": "Vayne",
       "name": "Vayne",
       "positions": [
-        "TOP",
-        "BOTTOM"
+        "BOTTOM",
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0.9,
@@ -5606,7 +5599,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5033
+      "winRate": 0.5054
     },
     "Veigar": {
       "id": "Veigar",
@@ -5650,8 +5643,8 @@
       "name": "Vel'Koz",
       "positions": [
         "SUPPORT",
-        "BOTTOM",
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ],
       "damageProfile": {
         "physical": 0,
@@ -5913,8 +5906,8 @@
       "id": "Warwick",
       "name": "Warwick",
       "positions": [
-        "TOP",
-        "JUNGLE"
+        "JUNGLE",
+        "TOP"
       ],
       "damageProfile": {
         "physical": 0.6,
@@ -5944,7 +5937,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5112
+      "winRate": 0.4921
     },
     "MonkeyKing": {
       "id": "MonkeyKing",
@@ -6019,9 +6012,9 @@
       "id": "Xerath",
       "name": "Xerath",
       "positions": [
-        "BOTTOM",
         "MIDDLE",
-        "SUPPORT"
+        "SUPPORT",
+        "BOTTOM"
       ],
       "damageProfile": {
         "physical": 0,
@@ -6050,7 +6043,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5179
+      "winRate": 0.5146
     },
     "XinZhao": {
       "id": "XinZhao",
@@ -6457,8 +6450,7 @@
       "id": "Zilean",
       "name": "Zilean",
       "positions": [
-        "SUPPORT",
-        "MIDDLE"
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0,
@@ -6531,8 +6523,7 @@
       "name": "Zyra",
       "positions": [
         "JUNGLE",
-        "SUPPORT",
-        "BOTTOM"
+        "SUPPORT"
       ],
       "damageProfile": {
         "physical": 0,

@@ -18,6 +18,17 @@ import { eventsToConfirmedTurns, synthesizeFullTree } from "../../utils/treeReco
 import { TURN_SEQUENCE } from "../../utils/turnSequence";
 import NavigatorDrafting from "./NavigatorDrafting";
 
+// The item5 snapshot is an engine recording made under the positions table
+// champions.json carried on 2026-09-05 (positions refresh slice 1); the role
+// line and role-gap strip asserted below are solved locally from that table,
+// so the test reads the frozen copy rather than the live file, which follows
+// the latest patch (recency rule, 2026-10-06).
+vi.mock("../../data/champions.json", async () => ({
+    default: (
+        await import("../../utils/__fixtures__/champions-2026-09-05-positions.json")
+    ).default
+}));
+
 // The canvas list query is enabled once a line is selected and the palette is open;
 // never let it reach the network from jsdom.
 vi.mock("../../utils/actions", () => ({

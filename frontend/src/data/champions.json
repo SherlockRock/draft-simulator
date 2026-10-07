@@ -4,15 +4,20 @@
   "positionsSource": {
     "kind": "corpus",
     "patches": [
-      "16.15",
-      "16.16"
+      "16.18",
+      "16.19"
     ],
-    "games": 300885,
+    "games": 816793,
+    "rule": "latest-patch",
+    "minPicks": 300,
+    "decidingPatch": "16.19",
+    "decidingGames": 277103,
+    "fallback": {},
     "threshold": 0.1,
-    "generatedAt": "2026-09-05T23:37:07.735Z",
+    "generatedAt": "2026-10-07T03:45:26.730Z",
     "feasibility": {
-      "sets": 34159,
-      "bothSides": 0.785
+      "sets": 102100,
+      "bothSides": 0.738
     }
   },
   "champions": [
@@ -65,8 +70,8 @@
       "name": "Amumu",
       "id": "Amumu",
       "positions": [
-        "SUPPORT",
-        "JUNGLE"
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -82,8 +87,7 @@
       "name": "Annie",
       "id": "Annie",
       "positions": [
-        "MIDDLE",
-        "SUPPORT"
+        "MIDDLE"
       ]
     },
     {
@@ -149,8 +153,8 @@
       "name": "Brand",
       "id": "Brand",
       "positions": [
-        "BOTTOM",
         "SUPPORT",
+        "BOTTOM",
         "MIDDLE"
       ]
     },
@@ -179,8 +183,8 @@
       "name": "Camille",
       "id": "Camille",
       "positions": [
-        "SUPPORT",
-        "TOP"
+        "TOP",
+        "SUPPORT"
       ]
     },
     {
@@ -196,9 +200,8 @@
       "name": "Cho'Gath",
       "id": "Chogath",
       "positions": [
-        "TOP",
-        "MIDDLE",
-        "JUNGLE"
+        "JUNGLE",
+        "TOP"
       ]
     },
     {
@@ -206,6 +209,7 @@
       "id": "Corki",
       "positions": [
         "BOTTOM",
+        "TOP",
         "MIDDLE"
       ]
     },
@@ -244,8 +248,8 @@
       "name": "Ekko",
       "id": "Ekko",
       "positions": [
-        "JUNGLE",
-        "MIDDLE"
+        "MIDDLE",
+        "JUNGLE"
       ]
     },
     {
@@ -306,16 +310,14 @@
       "name": "Gangplank",
       "id": "Gangplank",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ]
     },
     {
       "name": "Garen",
       "id": "Garen",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ]
     },
     {
@@ -362,8 +364,8 @@
       "id": "Heimerdinger",
       "positions": [
         "TOP",
-        "BOTTOM",
         "MIDDLE",
+        "BOTTOM",
         "SUPPORT"
       ]
     },
@@ -415,8 +417,7 @@
       "name": "Jax",
       "id": "Jax",
       "positions": [
-        "TOP",
-        "JUNGLE"
+        "TOP"
       ]
     },
     {
@@ -586,15 +587,15 @@
       "name": "Locke",
       "id": "Locke",
       "positions": [
-        "MIDDLE",
-        "JUNGLE"
+        "MIDDLE"
       ]
     },
     {
       "name": "Lucian",
       "id": "Lucian",
       "positions": [
-        "BOTTOM"
+        "BOTTOM",
+        "MIDDLE"
       ]
     },
     {
@@ -647,8 +648,8 @@
       "name": "Mel",
       "id": "Mel",
       "positions": [
-        "BOTTOM",
         "MIDDLE",
+        "BOTTOM",
         "SUPPORT"
       ]
     },
@@ -678,7 +679,6 @@
       "id": "Morgana",
       "positions": [
         "SUPPORT",
-        "JUNGLE",
         "MIDDLE"
       ]
     },
@@ -702,7 +702,6 @@
       "id": "Nasus",
       "positions": [
         "TOP",
-        "JUNGLE",
         "MIDDLE"
       ]
     },
@@ -776,8 +775,9 @@
       "name": "Pantheon",
       "id": "Pantheon",
       "positions": [
-        "SUPPORT",
         "TOP",
+        "SUPPORT",
+        "MIDDLE",
         "JUNGLE"
       ]
     },
@@ -809,8 +809,8 @@
       "name": "Quinn",
       "id": "Quinn",
       "positions": [
-        "TOP",
         "JUNGLE",
+        "TOP",
         "MIDDLE"
       ]
     },
@@ -825,8 +825,7 @@
       "name": "Rammus",
       "id": "Rammus",
       "positions": [
-        "JUNGLE",
-        "SUPPORT"
+        "JUNGLE"
       ]
     },
     {
@@ -876,8 +875,7 @@
       "name": "Rumble",
       "id": "Rumble",
       "positions": [
-        "TOP",
-        "MIDDLE"
+        "TOP"
       ]
     },
     {
@@ -907,8 +905,7 @@
       "name": "Senna",
       "id": "Senna",
       "positions": [
-        "SUPPORT",
-        "BOTTOM"
+        "SUPPORT"
       ]
     },
     {
@@ -938,8 +935,8 @@
       "name": "Shen",
       "id": "Shen",
       "positions": [
-        "SUPPORT",
-        "TOP"
+        "TOP",
+        "SUPPORT"
       ]
     },
     {
@@ -1007,8 +1004,8 @@
       "name": "Swain",
       "id": "Swain",
       "positions": [
-        "BOTTOM",
         "SUPPORT",
+        "BOTTOM",
         "MIDDLE",
         "TOP"
       ]
@@ -1017,9 +1014,8 @@
       "name": "Sylas",
       "id": "Sylas",
       "positions": [
-        "MIDDLE",
         "JUNGLE",
-        "SUPPORT"
+        "MIDDLE"
       ]
     },
     {
@@ -1035,8 +1031,7 @@
       "id": "TahmKench",
       "positions": [
         "SUPPORT",
-        "TOP",
-        "BOTTOM"
+        "TOP"
       ]
     },
     {
@@ -1044,8 +1039,7 @@
       "id": "Taliyah",
       "positions": [
         "MIDDLE",
-        "JUNGLE",
-        "BOTTOM"
+        "JUNGLE"
       ]
     },
     {
@@ -1091,8 +1085,7 @@
       "id": "Trundle",
       "positions": [
         "TOP",
-        "JUNGLE",
-        "SUPPORT"
+        "JUNGLE"
       ]
     },
     {
@@ -1144,8 +1137,8 @@
       "name": "Vayne",
       "id": "Vayne",
       "positions": [
-        "TOP",
-        "BOTTOM"
+        "BOTTOM",
+        "TOP"
       ]
     },
     {
@@ -1161,8 +1154,8 @@
       "id": "Velkoz",
       "positions": [
         "SUPPORT",
-        "BOTTOM",
-        "MIDDLE"
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1215,8 +1208,8 @@
       "name": "Warwick",
       "id": "Warwick",
       "positions": [
-        "TOP",
-        "JUNGLE"
+        "JUNGLE",
+        "TOP"
       ]
     },
     {
@@ -1238,9 +1231,9 @@
       "name": "Xerath",
       "id": "Xerath",
       "positions": [
-        "BOTTOM",
         "MIDDLE",
-        "SUPPORT"
+        "SUPPORT",
+        "BOTTOM"
       ]
     },
     {
@@ -1331,8 +1324,7 @@
       "name": "Zilean",
       "id": "Zilean",
       "positions": [
-        "SUPPORT",
-        "MIDDLE"
+        "SUPPORT"
       ]
     },
     {
@@ -1348,8 +1340,7 @@
       "id": "Zyra",
       "positions": [
         "JUNGLE",
-        "SUPPORT",
-        "BOTTOM"
+        "SUPPORT"
       ]
     }
   ]

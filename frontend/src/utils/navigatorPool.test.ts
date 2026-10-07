@@ -1,6 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { TeamPool } from "@draft-sim/shared-types";
 import { detectStaleBuckets, rebucketDisplay, staleBucketSummary } from "./navigatorPool";
+
+// These cases were written against the positions champions.json carried on
+// 2026-09-05 (Vayne TOP+ADC, Sylas MID+JUNGLE+SUPPORT). They test the
+// detection algorithm, not the current meta, so they read that frozen table:
+// the live file follows the latest patch (recency rule, 2026-10-06).
+vi.mock("../data/champions.json", async () => ({
+    default: (await import("./__fixtures__/champions-2026-09-05-positions.json")).default
+}));
 
 const pool = (
     display: Partial<TeamPool["display"]>,
