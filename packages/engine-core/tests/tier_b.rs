@@ -9,9 +9,10 @@ use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
+use engine_core::reference::entries::role_key;
 use engine_core::reference::feasibility::{
-    action_charge, critical_pool, off_pool, pool_can_complete, side_feasible, FeasibilityMemo,
-    FeasibilityRule, Price,
+    action_charge, critical_pool, off_pool, placements, pool_can_complete, side_feasible,
+    FeasibilityMemo, FeasibilityRule, Placement, Price,
 };
 use engine_core::reference::live::LiveUniverse;
 use engine_core::reference::node::legal_actions_under;
@@ -19,7 +20,7 @@ use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{search, SearchParams, Shortlist};
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{Category, RoleVerdict, TierBError, TierBFixture, Verdict};
-use engine_core::reference::universe::{Universe, DEFAULT_OFF_POOL_COST};
+use engine_core::reference::universe::{ChampionIdx, Universe, DEFAULT_OFF_POOL_COST};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -384,18 +385,27 @@ fn a_verdict_and_the_off_pool_category_round_trip() {
 
 // ---------------------------------------------------------------- the report (B-proper § 3)
 
-/// One rule-and-P the report runs every position under.
+/// One rule-and-price the report runs every position under (engine-role-grade G8: the `roster` arms
+/// are the product of the P and Q sweeps).
 #[derive(Clone, Copy, Debug)]
 enum Arm {
     PoolOrRoster,
-    Roster(f64),
+    Roster { p: f64, q: f64 },
 }
 
 impl Arm {
     fn label(self, u: &Universe) -> String {
         match self {
             Arm::PoolOrRoster => format!("pool_or_roster (P = L = {:.1})", u.off_pool_cost()),
-            Arm::Roster(p) => format!("roster P = {p}"),
+            Arm::Roster { p, q } => format!("roster P = {p} Q = {q}"),
+        }
+    }
+
+    /// The memo price the arm's search prices at — what the marker's charge and trace must read too.
+    fn price(self, u: &Universe) -> Price {
+        match self {
+            Arm::PoolOrRoster => Price::of(u.off_pool_cost(), 0.0),
+            Arm::Roster { p, q } => Price::of(p, q),
         }
     }
 }
@@ -415,9 +425,11 @@ where
         .collect()
 }
 
-/// What the roster sweep says about one pick root (B-proper § 3; the shapes review round 1 named).
-/// `in_pool_at` / `off_pool_at` are the sweep P values (ascending) at which the top action was in-pool
-/// / off-pool, after the arms that cannot speak were left out (partial, mixed top set).
+/// What a sweep says about one pick root (B-proper § 3; the shapes review round 1 named). The two
+/// lists are the sweep values (ascending) at which the top action was in-pool / off-pool, after the
+/// arms that cannot speak were left out (partial, mixed top set). The same shapes read a P sweep and a
+/// Q sweep (engine-role-grade G8): over Q "in-pool" is also "not the judged graded top" for a
+/// `role_verdict`.
 #[derive(Clone, Debug, PartialEq)]
 enum BreakEven {
     BanRoot,
@@ -428,12 +440,12 @@ enum BreakEven {
     OffPoolAtEvery {
         largest: f64,
     },
-    /// Off-pool at low P, in-pool at high P — the one shape a single bound reads.
+    /// Off-pool at low values, in-pool at high — the one shape a single bound reads.
     Monotone {
         largest_off: f64,
         smallest_in: f64,
     },
-    /// The top is off-pool at some P above a P where it was in-pool: no single bound exists.
+    /// The top is off-pool at some value above one where it was in-pool: no single bound exists.
     NonMonotone {
         in_pool_at: Vec<f64>,
         off_pool_at: Vec<f64>,
@@ -462,18 +474,21 @@ fn break_even(pick_root: bool, in_pool_at: &[f64], off_pool_at: &[f64]) -> Break
 }
 
 impl BreakEven {
-    fn describe(&self) -> String {
+    /// `var` names the sweep variable: `P` or `Q`.
+    fn describe(&self, var: &str) -> String {
         match self {
             BreakEven::BanRoot => "no off-pool question at a ban root".into(),
             BreakEven::NoArm => {
                 "no roster arm could speak (every arm partial, a mixed tie or a failed search)".into()
             }
-            BreakEven::InPoolAtEvery { .. } => "top in-pool at every P".into(),
-            BreakEven::OffPoolAtEvery { .. } => "top off-pool at every P".into(),
+            BreakEven::InPoolAtEvery { .. } => format!("top in-pool at every {var}"),
+            BreakEven::OffPoolAtEvery { .. } => format!("top off-pool at every {var}"),
             BreakEven::Monotone {
                 largest_off,
                 smallest_in,
-            } => format!("top in-pool at P ≥ {smallest_in}; top off-pool at P ≤ {largest_off}"),
+            } => format!(
+                "top in-pool at {var} ≥ {smallest_in}; top off-pool at {var} ≤ {largest_off}"
+            ),
             BreakEven::NonMonotone {
                 in_pool_at,
                 off_pool_at,
@@ -484,9 +499,10 @@ impl BreakEven {
     }
 }
 
-/// A verdict's constraint on P: half-open bounds over the sweep points (`None` = unbounded on that
-/// side), or the reason the verdict cannot bound P. `off_pool: true` needs P below every P where the
-/// top was in-pool; `false` needs P above every P where it was off-pool.
+/// A verdict's constraint on the sweep variable: half-open bounds over the sweep points (`None` =
+/// unbounded on that side), or the reason the verdict cannot bound it. `off_pool: true` needs the
+/// variable below every value where the top was in-pool; `false` needs it above every value where it
+/// was off-pool.
 #[derive(Clone, Debug, PartialEq)]
 enum Constraint {
     Bounds {
@@ -511,7 +527,7 @@ fn constraint(off_pool: bool, be: &BreakEven) -> Constraint {
             note: "",
         },
         (true, InPoolAtEvery { smallest }) if *smallest <= 0.0 => Constraint::Unusable(
-            "the top was in-pool even at P = 0; no P meets this verdict".into(),
+            "the top was in-pool even at 0; no value meets this verdict".into(),
         ),
         (true, InPoolAtEvery { smallest }) => Constraint::Bounds {
             lo: None,
@@ -521,7 +537,7 @@ fn constraint(off_pool: bool, be: &BreakEven) -> Constraint {
         (true, OffPoolAtEvery { .. }) => Constraint::Bounds {
             lo: None,
             hi: None,
-            note: " (satisfied at every sweep P)",
+            note: " (satisfied at every sweep point)",
         },
         (false, Monotone { largest_off, .. }) => Constraint::Bounds {
             lo: Some(*largest_off),
@@ -536,28 +552,121 @@ fn constraint(off_pool: bool, be: &BreakEven) -> Constraint {
         (false, InPoolAtEvery { .. }) => Constraint::Bounds {
             lo: None,
             hi: None,
-            note: " (satisfied at every sweep P)",
+            note: " (satisfied at every sweep point)",
         },
     }
 }
 
 impl Constraint {
-    fn describe(&self) -> String {
+    fn describe(&self, var: &str) -> String {
         match self {
             Constraint::Bounds { lo, hi, note } => {
-                let lo = lo.map_or(String::new(), |l| format!("P > {l}"));
-                let hi = hi.map_or(String::new(), |h| format!("P < {h}"));
+                let lo = lo.map_or(String::new(), |l| format!("{var} > {l}"));
+                let hi = hi.map_or(String::new(), |h| format!("{var} < {h}"));
                 let both = match (lo.is_empty(), hi.is_empty()) {
-                    (true, true) => "P unbounded".to_string(),
+                    (true, true) => format!("{var} unbounded"),
                     (false, true) => lo,
                     (true, false) => hi,
                     (false, false) => format!("{lo} and {hi}"),
                 };
                 format!("{both}{note}")
             }
-            Constraint::Unusable(why) => format!("cannot bound P — {why}"),
+            Constraint::Unusable(why) => format!("cannot bound {var} — {why}"),
         }
     }
+}
+
+/// The three-way class of a top action, PER ARM (engine-role-grade G7): in-pool by today's `d_off`
+/// (Q-independent); else graded when the key's grade delta is non-zero or an off-pool champion of the
+/// action is placed in a graded role (the weighted trace, which moves with Q); else base.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TopClass {
+    InPool,
+    Base,
+    Graded,
+}
+
+impl TopClass {
+    fn name(self) -> &'static str {
+        match self {
+            TopClass::InPool => "in-pool",
+            TopClass::Base => "off-pool base",
+            TopClass::Graded => "off-pool graded",
+        }
+    }
+}
+
+/// One roster arm's reading of a pick root, for the break-even and the role verdict: the sweep point,
+/// the top action with its class and placements, or why the arm cannot speak.
+#[derive(Clone, Debug)]
+struct Sample {
+    p: f64,
+    q: f64,
+    top: Option<(Action, TopClass, Vec<Placement>)>,
+}
+
+/// A `role_verdict` read over the Q sweep (engine-role-grade G8 / § 6): the sampled Qs at which the
+/// judged action, in the judged roles, is the top (`judged_at`) and the rest (`not_at`), through the
+/// same shapes as `off_pool` — a non-monotone set gets no bound. `None` with a reason when the verdict
+/// cannot be read at all: never a graded top at any sampled Q (skipped), a graded top the user never
+/// judged (another action, or the judged action in other roles) at some sampled Q.
+fn role_verdict_constraint(
+    rv: &RoleVerdict,
+    samples: &[&Sample],
+    names: &dyn Fn(&Action) -> String,
+) -> Result<(Constraint, Vec<f64>, Vec<f64>), String> {
+    let mut judged_at = Vec::new();
+    let mut not_at = Vec::new();
+    let mut graded_anywhere = false;
+    for s in samples {
+        let Some((top, class, placements)) = &s.top else {
+            continue;
+        };
+        if *class == TopClass::Graded {
+            graded_anywhere = true;
+        }
+        if *top == rv.action {
+            let roles: Vec<Role> = placements.iter().map(|pl| pl.role).collect();
+            if roles == rv.roles {
+                judged_at.push(s.q);
+                continue;
+            }
+            if *class == TopClass::Graded {
+                return Err(format!(
+                    "roles differ, unjudged: {} placed {} at Q = {}",
+                    names(top),
+                    placements
+                        .iter()
+                        .map(|pl| role_key(pl.role))
+                        .collect::<Vec<_>>()
+                        .join("+"),
+                    s.q
+                ));
+            }
+        } else if *class == TopClass::Graded {
+            return Err(format!(
+                "new graded top, unjudged: {} at Q = {}",
+                names(top),
+                s.q
+            ));
+        }
+        not_at.push(s.q);
+    }
+    if judged_at.is_empty() || !graded_anywhere {
+        return Err(format!(
+            "{} as {} is not a graded top at any sampled Q — skipped",
+            names(&rv.action),
+            rv.roles
+                .iter()
+                .map(|r| role_key(*r))
+                .collect::<Vec<_>>()
+                .join("+")
+        ));
+    }
+    // `ok: true` keeps the judged top: Q below the smallest Q where it is not (the leave shape);
+    // `ok: false` wants it gone: Q above the largest Q where it is (the stay shape).
+    let be = break_even(true, &not_at, &judged_at);
+    Ok((constraint(rv.ok, &be), judged_at, not_at))
 }
 
 /// The report's per-search limits: the node budget (cumulative across iterations;
@@ -585,10 +694,10 @@ fn report_mode(horizon: usize) -> Mode {
     Mode::Horizon(horizon)
 }
 
-/// The arms: `pool_or_roster`, then `roster` at each P of `ps` (ascending).
-fn arms(ps: &[f64], loss: f64) -> Vec<Arm> {
+/// The arms: `pool_or_roster`, then `roster` at the product of `qs` and `ps`, ascending by (Q, P).
+fn arms(ps: &[f64], qs: &[f64], loss: f64) -> Vec<Arm> {
     // Validated before any search runs (review round 2): a bad sweep entry must not panic mid-report.
-    // P ≤ L is `resolve_off_pool_cost`'s own bound.
+    // P ≤ L and P + Q ≤ L are the oracle's own bounds.
     for p in ps {
         assert!(
             p.is_finite() && *p >= 0.0,
@@ -596,32 +705,59 @@ fn arms(ps: &[f64], loss: f64) -> Vec<Arm> {
         );
         assert!(*p <= loss, "TIER_B_P: {p} exceeds L = {loss}");
     }
-    let mut sorted = ps.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite P"));
+    for q in qs {
+        assert!(
+            q.is_finite() && *q >= 0.0,
+            "TIER_B_Q: {q} is not a finite non-negative logit"
+        );
+        for p in ps {
+            assert!(
+                p + q <= loss,
+                "TIER_B_Q: {q} with P = {p} exceeds L = {loss} (P + Q ≤ L)"
+            );
+        }
+    }
+    let mut sorted_p = ps.to_vec();
+    sorted_p.sort_by(|a, b| a.partial_cmp(b).expect("finite P"));
+    let mut sorted_q = qs.to_vec();
+    sorted_q.sort_by(|a, b| a.partial_cmp(b).expect("finite Q"));
     std::iter::once(Arm::PoolOrRoster)
-        .chain(sorted.into_iter().map(Arm::Roster))
+        .chain(
+            sorted_q
+                .iter()
+                .flat_map(|q| sorted_p.iter().map(move |p| Arm::Roster { p: *p, q: *q })),
+        )
         .collect()
 }
 
-/// The report for `loaded`, as text (B-proper § 3): per position, one block per arm — the top three,
-/// each marked `[in-pool]` / `[off-pool n]` at a pick root, its value, ending and line, plus "searched
-/// k of N"; `actual_next`'s pool membership and rank per arm; the break-even from the roster sweep;
-/// the verdict's constraint on P; and a corpus summary with the verdict intersection (or the conflict,
-/// or "no verdicts" — never a green line for an empty corpus).
+/// The report for `loaded`, as text (B-proper § 3; engine-role-grade G7, G8): per position, one block
+/// per arm — the top class, the top three, each marked `[in-pool]` / `[off-pool n]` at a pick root
+/// with ` · grade g` when the key's grade delta is non-zero and the placed role of each off-pool
+/// champion with its share ratio, its value, ending (both sides' off-pool counts and grades) and line,
+/// plus "searched k of N"; `actual_next`'s pool membership and rank per arm; the break-even over
+/// whichever variable the sweep moves (P when `qs` has one value, Q when `ps` has one, per Q column
+/// when both have several); the verdict's constraint; the `role_verdict`'s constraint over Q; and a
+/// corpus summary with the verdict intersection (or the conflict, or "no verdicts" — never a green
+/// line for an empty corpus).
 fn render_report(
     loaded: &[Result<engine_core::reference::tier_b::Loaded, TierBError>],
     live: &LiveUniverse,
     mode: Mode,
     shortlist: Shortlist,
     ps: &[f64],
+    qs: &[f64],
     limits: ReportLimits,
 ) -> String {
     use std::fmt::Write as _;
     let u = &live.universe;
     let mut out = String::new();
-    let arms = arms(ps, u.loss());
-    // (id, verdict, constraint) per position with a verdict.
+    let arms = arms(ps, qs, u.loss());
+    // Which variable the sweep moves: P (one Q), Q (one P), or both (read per Q column).
+    let (over_q, both) = (qs.len() > 1 && ps.len() == 1, qs.len() > 1 && ps.len() > 1);
+    let var = if over_q { "Q" } else { "P" };
+    // (id, verdict, constraint) per position with a verdict, over the swept variable.
     let mut constraints: Vec<(String, Verdict, Constraint)> = Vec::new();
+    let mut role_constraints: Vec<(String, RoleVerdict, Constraint)> = Vec::new();
     for l in loaded {
         let l = match l {
             Ok(l) => l,
@@ -645,32 +781,11 @@ fn render_report(
             .next_slot()
             .expect("a loaded position has a next slot");
         let pick_root = root.action == ActionType::Pick;
-        // The mover's action charge (role-aware pools design § 2): the marker and the break-even's class
-        // read what the search's root split reads. The same under either live rule.
-        let charge = action_charge(
-            &mut FeasibilityMemo::new(Price::ZERO),
-            FeasibilityRule::Roster,
-            root.side,
-            &position,
-            &fx.root.pools,
-            u,
-        );
         let names = |a: &Action| {
             a.champions()
                 .map(|c| u.id(c).to_string())
                 .collect::<Vec<_>>()
                 .join("+")
-        };
-        let mark = |a: &Action| -> String {
-            if !pick_root {
-                return String::new();
-            }
-            let off = charge.of(*a).d_off;
-            if off == 0 {
-                " [in-pool]".to_string()
-            } else {
-                format!(" [off-pool {off}]")
-            }
         };
         let _ = writeln!(
             out,
@@ -681,14 +796,65 @@ fn render_report(
             position.slot_index(),
             fx.notes
         );
-        let mut in_pool_at: Vec<f64> = Vec::new();
-        let mut off_pool_at: Vec<f64> = Vec::new();
-        let mut left_out: Vec<f64> = Vec::new();
+        let mut samples: Vec<Sample> = Vec::new();
         let mut actual_ranks: Vec<String> = Vec::new();
         for arm in &arms {
-            let (feasibility, off_pool_cost) = match arm {
-                Arm::PoolOrRoster => (FeasibilityRule::PoolOrRoster, None),
-                Arm::Roster(p) => (FeasibilityRule::Roster, Some(*p)),
+            let (feasibility, off_pool_cost, off_role_cost) = match arm {
+                Arm::PoolOrRoster => (FeasibilityRule::PoolOrRoster, None, None),
+                Arm::Roster { p, q } => (FeasibilityRule::Roster, Some(*p), Some(*q)),
+            };
+            // The mover's action charge and trace at THIS arm's price (role-aware pools design § 2;
+            // engine-role-grade G7): the marker, the class and the break-even read what the search's
+            // own key and root split read. The in-pool half is the same at every price.
+            let mut arm_memo = FeasibilityMemo::new(arm.price(u));
+            let charge = action_charge(
+                &mut arm_memo,
+                feasibility,
+                root.side,
+                &position,
+                &fx.root.pools,
+                u,
+            );
+            let mut trace = |a: &Action| -> Vec<Placement> {
+                if !pick_root {
+                    return Vec::new();
+                }
+                placements(&mut arm_memo, root.side, &position, &fx.root.pools, u, *a)
+            };
+            let share_ratio = |pl: &Placement| -> String {
+                match (
+                    u.share(pl.champion, pl.role),
+                    u.share(pl.champion, u.primary(pl.champion)),
+                ) {
+                    (Some(s), Some(primary)) if primary > 0.0 => format!("{:.2}", s / primary),
+                    _ => "?".to_string(),
+                }
+            };
+            let mut mark = |a: &Action| -> (String, TopClass, Vec<Placement>) {
+                if !pick_root {
+                    return (String::new(), TopClass::InPool, Vec::new());
+                }
+                let c = charge.of(*a);
+                let placed = trace(a);
+                let mut text = if c.is_in_pool() {
+                    " [in-pool]".to_string()
+                } else {
+                    format!(" [off-pool {}]", c.d_off)
+                };
+                if c.d_grade != 0 {
+                    let _ = write!(text, " · grade {:+}", c.d_grade);
+                }
+                for pl in placed.iter().filter(|pl| !pl.in_pool) {
+                    let _ = write!(text, " as {} r {}", role_key(pl.role), share_ratio(pl));
+                }
+                let class = if c.is_in_pool() {
+                    TopClass::InPool
+                } else if c.d_grade != 0 || placed.iter().any(|pl| !pl.in_pool && pl.grade > 0) {
+                    TopClass::Graded
+                } else {
+                    TopClass::Base
+                };
+                (text, class, placed)
             };
             let out_come = search(
                 &OracleInput {
@@ -700,8 +866,7 @@ fn render_report(
                     mode,
                     epsilon: 1e-9,
                     off_pool_cost,
-                    // Q = 0 on every live position here: the slice-7 record.
-                    off_role_cost: off_pool_cost.map(|_| 0.0),
+                    off_role_cost,
                 },
                 &SearchParams {
                     node_budget: Some(limits.node_budget),
@@ -722,8 +887,12 @@ fn render_report(
                         arm.label(u),
                         fx.id
                     );
-                    if let (true, Arm::Roster(p)) = (pick_root, arm) {
-                        left_out.push(*p);
+                    if let (true, Arm::Roster { p, q }) = (pick_root, arm) {
+                        samples.push(Sample {
+                            p: *p,
+                            q: *q,
+                            top: None,
+                        });
                     }
                     if fx.actual_next.is_some() {
                         actual_ranks.push(format!("search failed ({})", arm.label(u)));
@@ -731,33 +900,41 @@ fn render_report(
                     continue;
                 }
             };
+            let top_mark = out_come.ranked.first().map(|r| mark(&r.action));
             let _ = writeln!(
                 out,
-                "  rule {} depth {} (partial {}) searched {} of {} top set {}",
+                "  rule {} depth {} (partial {}) searched {} of {} top set {}{}",
                 arm.label(u),
                 out_come.depth,
                 out_come.partial,
                 out_come.ranked.len(),
                 out_come.root_fan,
-                out_come.top_set.len()
+                out_come.top_set.len(),
+                top_mark.as_ref().filter(|_| pick_root).map_or(
+                    String::new(),
+                    |(_, class, _)| format!(" top class {}", class.name())
+                )
             );
             for r in out_come.ranked.iter().take(limits.top) {
                 let padded = r
                     .action
                     .champions()
                     .any(|c| live.padded.iter().any(|p| p == u.id(c)));
+                let (marker, _, _) = mark(&r.action);
                 let _ = writeln!(
                     out,
-                    "    {:<24} {:>10.4}{}{}  ends {:?} blue_feasible={} red_feasible={} off-pool blue {} red {}  line {}",
+                    "    {:<24} {:>10.4}{}{}  ends {:?} blue_feasible={} red_feasible={} off-pool blue {} red {} grade {} {}  line {}",
                     names(&r.action),
                     r.value,
-                    mark(&r.action),
+                    marker,
                     if padded { " [padded: no FM row]" } else { "" },
                     r.ends.kind,
                     r.ends.blue_feasible,
                     r.ends.red_feasible,
                     r.ends.blue_off_pool,
                     r.ends.red_off_pool,
+                    r.ends.blue_grade,
+                    r.ends.red_grade,
                     r.continuation
                         .iter()
                         .map(names)
@@ -765,25 +942,30 @@ fn render_report(
                         .join(" > ")
                 );
             }
-            if let (Some(top), Arm::Roster(p)) = (out_come.ranked.first(), arm) {
+            if let (Some(top), Arm::Roster { p, q }) = (out_come.ranked.first(), arm) {
                 if pick_root {
                     let in_pool = |a: &Action| charge.of(*a).is_in_pool();
                     let mixed = out_come.top_set.iter().any(in_pool)
                         && out_come.top_set.iter().any(|a| !in_pool(a));
-                    if out_come.partial {
+                    let spoke = if out_come.partial {
                         let _ = writeln!(out, "    (partial: excluded from the break-even)");
-                        left_out.push(*p);
+                        None
                     } else if mixed {
                         let _ = writeln!(
                             out,
                             "    (top set mixes in-pool and off-pool actions — a tie broken canonically; excluded from the break-even)"
                         );
-                        left_out.push(*p);
-                    } else if in_pool(&top.action) {
-                        in_pool_at.push(*p);
+                        None
                     } else {
-                        off_pool_at.push(*p);
-                    }
+                        top_mark
+                            .as_ref()
+                            .map(|(_, class, placed)| (top.action, *class, placed.clone()))
+                    };
+                    samples.push(Sample {
+                        p: *p,
+                        q: *q,
+                        top: spoke,
+                    });
                 }
             }
             if let Some(actual) = &fx.actual_next {
@@ -811,48 +993,188 @@ fn render_report(
             }
         }
         if let Some(actual) = &fx.actual_next {
+            // The membership at the LAST roster arm's price (the class is the same at every price).
+            let last = arms.last().copied().unwrap_or(Arm::PoolOrRoster);
+            let mut memo = FeasibilityMemo::new(last.price(u));
+            let charge = action_charge(
+                &mut memo,
+                FeasibilityRule::Roster,
+                root.side,
+                &position,
+                &fx.root.pools,
+                u,
+            );
+            let membership = if !pick_root {
+                String::new()
+            } else if charge.of(*actual).is_in_pool() {
+                " [in-pool]".to_string()
+            } else {
+                format!(" [off-pool {}]", charge.of(*actual).d_off)
+            };
             let _ = writeln!(
                 out,
                 "  actual next {}{} ranked {}",
                 names(actual),
-                mark(actual),
+                membership,
                 actual_ranks.join(", ")
             );
         }
-        let be = break_even(pick_root, &in_pool_at, &off_pool_at);
-        let _ = writeln!(out, "  break-even: {}", be.describe());
+        // The break-even over the swept variable. Arms that could not speak are named: they widen
+        // any bracket across them.
+        let spoken: Vec<&Sample> = samples.iter().filter(|s| s.top.is_some()).collect();
+        let left_out: Vec<String> = samples
+            .iter()
+            .filter(|s| s.top.is_none())
+            .map(|s| format!("(P = {}, Q = {})", s.p, s.q))
+            .collect();
+        let lists = |pick: &dyn Fn(&Sample) -> f64, keep: &dyn Fn(&Sample) -> bool| {
+            let mut in_pool_at: Vec<f64> = Vec::new();
+            let mut off_pool_at: Vec<f64> = Vec::new();
+            for s in spoken.iter().filter(|s| keep(s)) {
+                match s.top.as_ref().map(|t| t.1) {
+                    Some(TopClass::InPool) => in_pool_at.push(pick(s)),
+                    Some(_) => off_pool_at.push(pick(s)),
+                    None => {}
+                }
+            }
+            (in_pool_at, off_pool_at)
+        };
+        let be = if both {
+            let _ = writeln!(out, "  break-even: two sweep variables — read per Q column");
+            let mut qs_sorted = qs.to_vec();
+            qs_sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite Q"));
+            for q in &qs_sorted {
+                let (i, o) = lists(&|s| s.p, &|s| s.q == *q);
+                let _ = writeln!(
+                    out,
+                    "    Q = {q}: {}",
+                    break_even(pick_root, &i, &o).describe("P")
+                );
+            }
+            None
+        } else if over_q {
+            let (i, o) = lists(&|s| s.q, &|_| true);
+            let be = break_even(pick_root, &i, &o);
+            let _ = writeln!(
+                out,
+                "  break-even over Q at P = {}: {}",
+                ps[0],
+                be.describe("Q")
+            );
+            Some(be)
+        } else {
+            let (i, o) = lists(&|s| s.p, &|_| true);
+            let be = break_even(pick_root, &i, &o);
+            let _ = writeln!(out, "  break-even: {}", be.describe("P"));
+            Some(be)
+        };
         if !left_out.is_empty() {
             let _ = writeln!(
                 out,
-                "  (roster arms left out of the break-even, which widens any bracket across them: P = {left_out:?})"
+                "  (roster arms left out of the break-even, which widens any bracket across them: {})",
+                left_out.join(", ")
             );
         }
-        // Every verdict is classified — a ban root's is `Unusable`, so the summary counts and names it
-        // (the loader already warned; review round 2, Codex E).
+        // Every verdict is classified — a ban root's is `Unusable`, so the summary counts and names
+        // it (the loader already warned; review round 2, Codex E). Over Q (G8): a STAY verdict that
+        // no sampled Q satisfies is an observation over the samples, never "Q > largest" — more Q
+        // need not help (fact 12), and a base top cannot move at all.
         if let Some(v) = fx.verdict {
-            let c = constraint(v.off_pool, &be);
+            let c = match &be {
+                None => Constraint::Unusable("two sweep variables — read per Q column".into()),
+                Some(BreakEven::OffPoolAtEvery { .. }) if over_q && !v.off_pool => {
+                    let largest = spoken
+                        .iter()
+                        .max_by(|a, b| a.q.partial_cmp(&b.q).expect("finite Q"))
+                        .and_then(|s| s.top.as_ref().map(|t| t.1));
+                    Constraint::Unusable(format!(
+                        "unsatisfied at every sampled Q; the top at the largest Q is {}",
+                        largest.map_or("unknown", TopClass::name)
+                    ))
+                }
+                Some(be) => constraint(v.off_pool, be),
+            };
             let _ = writeln!(
                 out,
                 "  verdict off_pool = {} → {}",
                 v.off_pool,
-                c.describe()
+                c.describe(var)
             );
             constraints.push((fx.id.clone(), v, c));
+        }
+        // The role verdict, read over Q alone (engine-role-grade § 6).
+        if let Some(rv) = &fx.role_verdict {
+            let judged = format!(
+                "{} as {}",
+                names(&rv.action),
+                rv.roles
+                    .iter()
+                    .map(|r| role_key(*r))
+                    .collect::<Vec<_>>()
+                    .join("+")
+            );
+            if !over_q {
+                let _ = writeln!(
+                    out,
+                    "  role verdict ok = {} on {judged} → read over a Q sweep only (one P, several Q)",
+                    rv.ok
+                );
+            } else if !pick_root {
+                let _ = writeln!(
+                    out,
+                    "  role verdict ok = {} on {judged} → cannot bound Q — no role question at a ban root",
+                    rv.ok
+                );
+            } else {
+                match role_verdict_constraint(rv, &spoken, &names) {
+                    Ok((c, judged_at, not_at)) => {
+                        let _ = writeln!(
+                            out,
+                            "  role verdict ok = {} on {judged} (top at Q {judged_at:?}, not at Q {not_at:?}) → {}",
+                            rv.ok,
+                            c.describe("Q")
+                        );
+                        role_constraints.push((fx.id.clone(), rv.clone(), c));
+                    }
+                    Err(why) => {
+                        let _ = writeln!(out, "  role verdict ok = {} on {judged} → {why}", rv.ok);
+                        if !why.ends_with("skipped") {
+                            role_constraints.push((
+                                fx.id.clone(),
+                                rv.clone(),
+                                Constraint::Unusable(why),
+                            ));
+                        }
+                    }
+                }
+            }
         }
         if !fx.review.is_empty() {
             let _ = writeln!(out, "  review: {}", fx.review);
         }
     }
-    // The intersection over every verdict: lo = the largest "P >", hi = the smallest "P <".
+    // The intersection over every verdict: lo = the largest "> ", hi = the smallest "< ", over the
+    // swept variable; the role verdicts join the Q summary.
     let _ = writeln!(out);
-    if constraints.is_empty() {
+    let mut all: Vec<(String, String, Constraint)> = constraints
+        .iter()
+        .map(|(id, v, c)| (id.clone(), format!("off_pool = {}", v.off_pool), c.clone()))
+        .collect();
+    if over_q {
+        all.extend(
+            role_constraints
+                .iter()
+                .map(|(id, rv, c)| (id.clone(), format!("role ok = {}", rv.ok), c.clone())),
+        );
+    }
+    if all.is_empty() {
         let _ = writeln!(out, "summary: no verdicts — nothing to calibrate against");
     } else {
-        let usable: Vec<&(String, Verdict, Constraint)> = constraints
+        let usable: Vec<&(String, String, Constraint)> = all
             .iter()
             .filter(|(_, _, c)| matches!(c, Constraint::Bounds { .. }))
             .collect();
-        let unusable: Vec<String> = constraints
+        let unusable: Vec<String> = all
             .iter()
             .filter_map(|(id, _, c)| match c {
                 Constraint::Unusable(why) => Some(format!("{id} ({why})")),
@@ -862,7 +1184,7 @@ fn render_report(
         if !unusable.is_empty() {
             let _ = writeln!(
                 out,
-                "summary: {} verdict(s) could not bound P: {}",
+                "summary: {} verdict(s) could not bound {var}: {}",
                 unusable.len(),
                 unusable.join("; ")
             );
@@ -894,13 +1216,13 @@ fn render_report(
         } else if empty {
             let _ = writeln!(
                 out,
-                "summary: verdict interval over {} position(s) is EMPTY — P > {} and P < {} conflict; the positions: {}",
+                "summary: verdict interval over {} position(s) is EMPTY — {var} > {} and {var} < {} conflict; the positions: {}",
                 usable.len(),
                 lo.expect("empty needs both bounds"),
                 hi.expect("empty needs both bounds"),
                 usable
                     .iter()
-                    .map(|(id, v, c)| format!("{id} (off_pool = {}, {})", v.off_pool, c.describe()))
+                    .map(|(id, v, c)| format!("{id} ({v}, {})", c.describe(var)))
                     .collect::<Vec<_>>()
                     .join("; ")
             );
@@ -909,8 +1231,8 @@ fn render_report(
                 out,
                 "summary: verdict interval over {} position(s): {} and {} (sweep points; refine the sweep inside it)",
                 usable.len(),
-                lo.map_or("P ≥ 0".to_string(), |l| format!("P > {l}")),
-                hi.map_or("P unbounded above".to_string(), |h| format!("P < {h}")),
+                lo.map_or(format!("{var} ≥ 0"), |l| format!("{var} > {l}")),
+                hi.map_or(format!("{var} unbounded above"), |h| format!("{var} < {h}")),
             );
         }
     }
@@ -931,34 +1253,35 @@ fn the_break_even_and_the_constraint_read_every_sweep_shape() {
             smallest_in: 0.15
         }
     );
-    assert_eq!(constraint(true, &mono).describe(), "P < 0.15");
-    assert_eq!(constraint(false, &mono).describe(), "P > 0.05");
+    assert_eq!(constraint(true, &mono).describe("P"), "P < 0.15");
+    assert_eq!(constraint(false, &mono).describe("P"), "P > 0.05");
+    assert_eq!(constraint(false, &mono).describe("Q"), "Q > 0.05");
     let in_every = break_even(true, &[0.05, 0.15], &[]);
     assert_eq!(in_every, InPoolAtEvery { smallest: 0.05 });
     assert_eq!(
-        constraint(true, &in_every).describe(),
+        constraint(true, &in_every).describe("P"),
         "P < 0.05 (below the whole sweep: widen it downward)"
     );
     assert_eq!(
-        constraint(false, &in_every).describe(),
-        "P unbounded (satisfied at every sweep P)"
+        constraint(false, &in_every).describe("P"),
+        "P unbounded (satisfied at every sweep point)"
     );
     let off_every = break_even(true, &[], &[0.05, 0.15]);
     assert_eq!(off_every, OffPoolAtEvery { largest: 0.15 });
     assert_eq!(
-        constraint(false, &off_every).describe(),
+        constraint(false, &off_every).describe("P"),
         "P > 0.15 (above the whole sweep: widen it upward)"
     );
     // In-pool at 0.05, off-pool at 0.25: the top flipped the wrong way — no single bound.
     let non_mono = break_even(true, &[0.05, 0.15], &[0.25]);
     assert!(matches!(non_mono, NonMonotone { .. }), "{non_mono:?}");
-    assert!(non_mono.describe().starts_with("NON-MONOTONE"));
+    assert!(non_mono.describe("P").starts_with("NON-MONOTONE"));
     assert_eq!(
         constraint(true, &non_mono),
         Constraint::Unusable("the sweep is non-monotone; refine it".into())
     );
     assert_eq!(
-        constraint(false, &non_mono).describe(),
+        constraint(false, &non_mono).describe("P"),
         "cannot bound P — the sweep is non-monotone; refine it"
     );
     // A flip back and forth is non-monotone too.
@@ -972,16 +1295,31 @@ fn the_break_even_and_the_constraint_read_every_sweep_shape() {
     // Review round 2: "leave the pool" where the top was in-pool even at P = 0 has no P to offer.
     assert_eq!(
         constraint(true, &break_even(true, &[0.0, 0.15], &[])),
-        Constraint::Unusable("the top was in-pool even at P = 0; no P meets this verdict".into())
+        Constraint::Unusable("the top was in-pool even at 0; no value meets this verdict".into())
     );
-    // A bad sweep entry is refused before any search runs.
-    assert!(std::panic::catch_unwind(|| arms(&[-0.1], 1.0)).is_err());
-    assert!(std::panic::catch_unwind(|| arms(&[f64::NAN], 1.0)).is_err());
-    assert_eq!(arms(&[0.15, 0.05], 1.0).len(), 3);
+    // A bad sweep entry is refused before any search runs; so is a pair with P + Q > L.
+    assert!(std::panic::catch_unwind(|| arms(&[-0.1], &[0.0], 1.0)).is_err());
+    assert!(std::panic::catch_unwind(|| arms(&[f64::NAN], &[0.0], 1.0)).is_err());
+    assert!(std::panic::catch_unwind(|| arms(&[0.1], &[-0.1], 1.0)).is_err());
+    assert!(std::panic::catch_unwind(|| arms(&[0.6], &[0.5], 1.0)).is_err());
+    assert_eq!(arms(&[0.15, 0.05], &[0.0], 1.0).len(), 3);
+    // The product, ascending by (Q, P).
+    let labels: Vec<String> = arms(&[0.15, 0.05], &[0.1, 0.0], 1.0)
+        .iter()
+        .map(|a| match a {
+            Arm::PoolOrRoster => "por".to_string(),
+            Arm::Roster { p, q } => format!("{p}/{q}"),
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        vec!["por", "0.05/0", "0.15/0", "0.05/0.1", "0.15/0.1"]
+    );
 }
 
 /// D7: a report read by a human, never a gate (B-proper § 3: the calibration instrument). Env:
-/// `TIER_B_P` (comma list of logits, default `0.05,0.1,0.15`), `TIER_B_WIDTHS`
+/// `TIER_B_P` (comma list of logits, default `0.05,0.1,0.15`), `TIER_B_Q` (comma list, default
+/// `0.05`; the `roster` arms are the product — engine-role-grade G8), `TIER_B_WIDTHS`
 /// (`singles,pairs,root_off_pool`, default `30,60,100`), `TIER_B_HORIZON` (default 2), `TIER_B_TOP`
 /// (ranked actions printed per arm, default 3).
 #[test]
@@ -991,6 +1329,7 @@ fn tier_b_report() {
     let corpus = dir("fixtures/tier-b");
     let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
     let ps: Vec<f64> = env_list("TIER_B_P", "0.05,0.1,0.15");
+    let qs: Vec<f64> = env_list("TIER_B_Q", "0.05");
     let widths: Vec<usize> = env_list("TIER_B_WIDTHS", "30,60,100");
     let horizon: Vec<usize> = env_list("TIER_B_HORIZON", "2");
     let mode = report_mode(horizon[0]);
@@ -1006,10 +1345,11 @@ fn tier_b_report() {
         root_off_pool: widths[2],
     };
     println!(
-        "{} Tier B position(s) in {} — P sweep {:?}, widths {:?}, horizon {}",
+        "{} Tier B position(s) in {} — P sweep {:?}, Q sweep {:?}, widths {:?}, horizon {}",
         loaded.len(),
         corpus.display(),
         ps,
+        qs,
         shortlist,
         horizon[0]
     );
@@ -1021,6 +1361,7 @@ fn tier_b_report() {
             mode,
             shortlist,
             &ps,
+            &qs,
             ReportLimits {
                 top: top[0],
                 ..ReportLimits::DEFAULT
@@ -1077,6 +1418,7 @@ fn a_failed_search_is_named_and_the_report_continues() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
+        &[0.0],
         ReportLimits {
             node_budget: 1,
             ..ReportLimits::DEFAULT
@@ -1127,6 +1469,7 @@ fn the_report_prints_the_requested_number_of_ranked_actions() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
+        &[0.0],
         ReportLimits {
             top: 5,
             ..ReportLimits::DEFAULT
@@ -1145,10 +1488,14 @@ fn the_report_prints_the_requested_number_of_ranked_actions() {
 fn a_p_above_l_and_a_zero_horizon_are_refused_before_any_search() {
     let l = live().universe.loss();
     let text = panic_text(|| {
-        arms(&[0.15, 5000.0], l);
+        arms(&[0.15, 5000.0], &[0.0], l);
     });
     assert!(text.contains("TIER_B_P: 5000 exceeds L = "), "{text}");
-    assert_eq!(arms(&[l], l).len(), 2, "P = L itself is a legal arm");
+    assert_eq!(
+        arms(&[l], &[0.0], l).len(),
+        2,
+        "P = L itself is a legal arm"
+    );
     let text = panic_text(|| {
         report_mode(0);
     });
@@ -1183,6 +1530,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.15, 0.05],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     println!("{text}");
@@ -1197,7 +1545,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         "actual next Jinx [in-pool] ranked",
         "break-even: no off-pool question at a ban root",
         "break-even: top off-pool at every P",
-        "verdict off_pool = true → P unbounded (satisfied at every sweep P)",
+        "verdict off_pool = true → P unbounded (satisfied at every sweep point)",
         "summary: verdict interval over 2 position(s)",
     ] {
         assert!(text.contains(needle), "missing {needle:?} in:\n{text}");
@@ -1206,7 +1554,9 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
     // "stay in pool" yields a lower bound or "unbounded below" — both are stated, never silent.
     assert!(
         text.contains("verdict off_pool = false → P > ")
-            || text.contains("verdict off_pool = false → P unbounded (satisfied at every sweep P)"),
+            || text.contains(
+                "verdict off_pool = false → P unbounded (satisfied at every sweep point)"
+            ),
         "{text}"
     );
     assert_eq!(
@@ -1227,6 +1577,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05, 0.15],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     println!("{text}");
@@ -1254,6 +1605,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05, 0.15],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     assert!(
@@ -1284,10 +1636,11 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
             root_off_pool: 1,
         },
         &[0.15],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     assert!(
-        text.contains("actual next Zac [off-pool 1] ranked unsearched of 93 (pool_or_roster (P = L = 1026.4)), unsearched of 94 (roster P = 0.15)"),
+        text.contains("actual next Zac [off-pool 1] ranked unsearched of 93 (pool_or_roster (P = L = 1026.4)), unsearched of 94 (roster P = 0.15 Q = 0)"),
         "{text}"
     );
     // No verdicts at all: said so, never green.
@@ -1298,6 +1651,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     assert!(text.contains("summary: no verdicts"), "{text}");
@@ -1309,6 +1663,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     assert!(
@@ -1337,6 +1692,7 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
         Mode::Horizon(1),
         narrow,
         &[0.05],
+        &[0.0],
         ReportLimits::DEFAULT,
     );
     assert!(
@@ -1755,6 +2111,7 @@ fn the_report_marks_an_off_role_fill_off_pool() {
             Mode::Horizon(1),
             widths,
             &[0.05, 0.25],
+            &[0.0],
             ReportLimits {
                 top: 4,
                 ..ReportLimits::DEFAULT
@@ -2067,6 +2424,7 @@ fn the_report_classes_an_in_set_off_role_pair_off_pool() {
             root_off_pool: 100,
         },
         &[0.10],
+        &[0.0],
         ReportLimits {
             top: 2,
             ..ReportLimits::DEFAULT
@@ -2339,4 +2697,283 @@ fn a_role_verdict_round_trips_and_every_mistake_is_named() {
         "{:?}",
         loaded.warnings
     );
+}
+
+/// A corpus file with `field` spliced in before `review`.
+fn corpus_with(
+    name: &str,
+    field: &str,
+    live: &LiveUniverse,
+) -> Result<engine_core::reference::tier_b::Loaded, TierBError> {
+    corpus_edited(name, "\"review\":", &format!("{field} \"review\":"), live)
+}
+
+/// A corpus file with one text replacement.
+fn corpus_edited(
+    name: &str,
+    from: &str,
+    to: &str,
+    live: &LiveUniverse,
+) -> Result<engine_core::reference::tier_b::Loaded, TierBError> {
+    let raw = std::fs::read_to_string(dir("fixtures/tier-b").join(format!("{name}.json")))
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
+    assert!(raw.contains(from), "{name} lacks {from:?}");
+    TierBFixture::from_json(&raw.replace(from, to), name, live)
+}
+
+/// Engine-role-grade design § 7 test 8: at one P and several Q the report prints one `roster` arm per
+/// Q with the top's class, the marker's grade delta and placement trace (`as adc r 0.29` on Zyra), the
+/// leaf's grade column (gated at the last pick: `grade 0 71`, forced 0), the break-even over Q, the
+/// `role_verdict` read through the same shapes (Zyra-at-adc judged `ok: false`: Q above the largest
+/// sampled Q at which it is the top), a stay verdict a base top can never satisfy ("unsatisfied at
+/// every sampled Q; the top at the largest Q is off-pool base"), and a Q summary; with several P and
+/// several Q it reads per Q column. The sweep's own values are printed first (fact 6 re-derived by
+/// the engine): Zyra is the top at Q = 0 and 0.05, Ashe at 0.1.
+#[test]
+fn the_report_sweeps_q_at_fixed_p_and_reads_the_role_verdict() {
+    let live = live();
+    let supp_19 = "2026-10-04-supp-pinch-slot-19-kittens";
+    let mid_19 = "2026-09-29-mid-pinch-slot-19-kittens";
+    let loaded = vec![
+        corpus_with(
+            supp_19,
+            r#""role_verdict": {"action": "Zyra", "roles": ["adc"], "ok": false},"#,
+            &live,
+        ),
+        // Its own verdict is "leave"; a STAY on a base top is the case that no Q can satisfy.
+        corpus_edited(mid_19, r#""off_pool": true"#, r#""off_pool": false"#, &live),
+    ];
+    let widths = Shortlist {
+        singles: 30,
+        pairs: 60,
+        root_off_pool: 100,
+    };
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(2),
+        widths,
+        &[0.105],
+        &[0.0, 0.05, 0.1],
+        ReportLimits::DEFAULT,
+    );
+    println!("{text}");
+    for needle in [
+        "rule roster P = 0.105 Q = 0 depth",
+        "rule roster P = 0.105 Q = 0.05 depth",
+        "rule roster P = 0.105 Q = 0.1 depth",
+        "top class off-pool graded",
+        "top class in-pool",
+        "top class off-pool base",
+        "Zyra                    ",
+        "[off-pool 1] · grade +71 as adc r 0.29",
+        "off-pool blue 0 red 1 grade 0 71",
+        "break-even over Q at P = 0.105: top in-pool at Q ≥ 0.1; top off-pool at Q ≤ 0.05",
+        "role verdict ok = false on Zyra as adc (top at Q [0.0, 0.05], not at Q [0.1]) → Q > 0.05",
+        "verdict off_pool = false → cannot bound Q — unsatisfied at every sampled Q; the top at the largest Q is off-pool base",
+        "summary: 1 verdict(s) could not bound Q: 2026-09-29-mid-pinch-slot-19-kittens (unsatisfied at every sampled Q; the top at the largest Q is off-pool base)",
+        "summary: verdict interval over 2 position(s): Q > 0.05 and Q unbounded above (sweep points; refine the sweep inside it)",
+        "Annie                        0.2436 [off-pool 1] as mid r 1.00",
+    ] {
+        assert!(text.contains(needle), "missing {needle:?} in:\n{text}");
+    }
+    assert_eq!(text.matches("rule roster P = 0.105 Q = ").count(), 6);
+
+    // Several P AND several Q: one P break-even per Q column, the verdicts unusable, said so.
+    let loaded = vec![corpus_with(supp_19, "", &live)];
+    let text = render_report(
+        &loaded,
+        &live,
+        Mode::Horizon(2),
+        widths,
+        &[0.1, 0.105],
+        &[0.0, 0.05],
+        ReportLimits::DEFAULT,
+    );
+    println!("{text}");
+    for needle in [
+        "break-even: two sweep variables — read per Q column",
+        "    Q = 0: top off-pool at every P",
+        "    Q = 0.05: top off-pool at every P",
+        "verdict off_pool = false → cannot bound P — two sweep variables — read per Q column",
+    ] {
+        assert!(text.contains(needle), "missing {needle:?} in:\n{text}");
+    }
+    assert_eq!(text.matches("rule roster P = ").count(), 4);
+}
+
+/// The `role_verdict` reader on synthetic Q samples (engine-role-grade § 6, review round 3): the
+/// judged action in the judged roles at some Qs and not at others reads through `break_even`'s shapes
+/// — monotone gives a bound, non-monotone none; a graded top the user never judged, or the judged
+/// action in other roles, is "unjudged"; an action that is never a graded top is skipped.
+#[test]
+fn the_role_verdict_reads_the_q_samples_through_the_same_shapes() {
+    let (a, b) = (ChampionIdx(1), ChampionIdx(2));
+    let placed = |c: ChampionIdx, role: Role, grade: u8| Placement {
+        champion: c,
+        role,
+        grade,
+        in_pool: false,
+    };
+    let sample =
+        |q: f64, top: Option<(Action, TopClass, Vec<Placement>)>| Sample { p: 0.105, q, top };
+    let zyra_adc = |q: f64| {
+        sample(
+            q,
+            Some((
+                Action::Pick(a),
+                TopClass::Graded,
+                vec![placed(a, Role::Adc, 71)],
+            )),
+        )
+    };
+    let ashe = |q: f64| {
+        sample(
+            q,
+            Some((
+                Action::Pick(b),
+                TopClass::InPool,
+                vec![placed(b, Role::Adc, 0)],
+            )),
+        )
+    };
+    let names = |action: &Action| match action {
+        Action::Pick(c) if *c == a => "Zyra".to_string(),
+        Action::Pick(c) if *c == b => "Ashe".to_string(),
+        other => format!("{other:?}"),
+    };
+    let rv = |ok: bool| RoleVerdict {
+        action: Action::Pick(a),
+        roles: vec![Role::Adc],
+        ok,
+    };
+    let read = |ok: bool, samples: &[Sample]| {
+        let refs: Vec<&Sample> = samples.iter().collect();
+        role_verdict_constraint(&rv(ok), &refs, &names)
+    };
+    // Monotone: judged top at 0 and 0.05, Ashe at 0.1.
+    let mono = [zyra_adc(0.0), zyra_adc(0.05), ashe(0.1)];
+    let (c, judged_at, not_at) = read(false, &mono).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!((judged_at, not_at), (vec![0.0, 0.05], vec![0.1]));
+    assert_eq!(c.describe("Q"), "Q > 0.05");
+    let (c, _, _) = read(true, &mono).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(c.describe("Q"), "Q < 0.1");
+    // Non-monotone: top at 0 and 0.1, not at 0.05 — no bound either way.
+    let wobble = [zyra_adc(0.0), ashe(0.05), zyra_adc(0.1)];
+    for ok in [true, false] {
+        let (c, _, _) = read(ok, &wobble).unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            matches!(c, Constraint::Unusable(ref why) if why.contains("non-monotone")),
+            "{c:?}"
+        );
+    }
+    // A graded top the user never judged at some Q: unjudged, no bound.
+    let poppy = sample(
+        0.1,
+        Some((
+            Action::Pick(b),
+            TopClass::Graded,
+            vec![placed(b, Role::Top, 72)],
+        )),
+    );
+    let err = read(false, &[zyra_adc(0.0), zyra_adc(0.05), poppy]).expect_err("unjudged");
+    assert_eq!(err, "new graded top, unjudged: Ashe at Q = 0.1");
+    // The judged action in other roles: unjudged.
+    let zyra_mid = sample(
+        0.1,
+        Some((
+            Action::Pick(a),
+            TopClass::Graded,
+            vec![placed(a, Role::Middle, 40)],
+        )),
+    );
+    let err = read(false, &[zyra_adc(0.0), zyra_mid]).expect_err("unjudged");
+    assert_eq!(err, "roles differ, unjudged: Zyra placed mid at Q = 0.1");
+    // Never a graded top: skipped (an in-pool or base top does not move with Q).
+    let err = read(false, &[ashe(0.0), ashe(0.05)]).expect_err("skipped");
+    assert!(err.ends_with("— skipped"), "{err}");
+    let base = sample(
+        0.0,
+        Some((
+            Action::Pick(a),
+            TopClass::Base,
+            vec![placed(a, Role::Jungle, 0)],
+        )),
+    );
+    let err = read(true, &[base]).expect_err("skipped: the judged action is top but base");
+    assert!(err.ends_with("— skipped"), "{err}");
+}
+
+/// Engine-role-grade design § 7 test 9 — the acceptance probe, a measurement before a pin: on the
+/// re-derived supp-19 (the one kept P conflict) at P = 0.10 the top is Zyra at adc for Q ∈ {0, 0.05}
+/// and Ashe for Q ∈ {0.08, 0.1}; fact 6 derived the flip at Q > 0.0770 from the engine's own output,
+/// and the engine's reading here is printed before it is asserted. The default Q = 0.05 does NOT flip
+/// it; the sweep does.
+#[test]
+fn on_supp_19_ashe_overtakes_zyra_at_adc_between_q_0_05_and_0_08() {
+    let live = live();
+    let u = &live.universe;
+    let fx = TierBFixture::load_file(
+        &dir("fixtures/tier-b").join("2026-10-04-supp-pinch-slot-19-kittens.json"),
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"))
+    .fixture;
+    let position = fx.root.position(u).unwrap_or_else(|e| panic!("{e}"));
+    let mut tops = Vec::new();
+    for q in [0.0, 0.05, 0.08, 0.1] {
+        let o = search(
+            &OracleInput {
+                position: &position,
+                universe: u,
+                pools: &fx.root.pools,
+                objective: u,
+                feasibility: FeasibilityRule::Roster,
+                mode: Mode::Horizon(2),
+                epsilon: 1e-9,
+                off_pool_cost: Some(0.10),
+                off_role_cost: Some(q),
+            },
+            &SearchParams {
+                node_budget: Some(ReportLimits::DEFAULT.node_budget),
+                wall_budget: Duration::from_secs(300),
+                shortlist: Some(Shortlist {
+                    singles: 30,
+                    pairs: 60,
+                    root_off_pool: 100,
+                }),
+                ..SearchParams::default()
+            },
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let line = |r: &engine_core::reference::search::RankedAction| {
+            format!(
+                "{} {:.4} (off {} grade {})",
+                r.action
+                    .champions()
+                    .map(|c| u.id(c))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                r.value,
+                r.ends.red_off_pool,
+                r.ends.red_grade
+            )
+        };
+        println!(
+            "Q = {q}: {}",
+            o.ranked
+                .iter()
+                .take(3)
+                .map(line)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        );
+        tops.push(line(&o.ranked[0]));
+    }
+    assert!(tops[0].starts_with("Zyra "), "{tops:?}");
+    assert!(tops[1].starts_with("Zyra "), "{tops:?}");
+    assert!(tops[2].starts_with("Ashe "), "{tops:?}");
+    assert!(tops[3].starts_with("Ashe "), "{tops:?}");
 }
