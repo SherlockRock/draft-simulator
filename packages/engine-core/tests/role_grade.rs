@@ -13,8 +13,9 @@ use engine_core::pools::Role;
 use engine_core::reference::feasibility::{FeasibilityMemo, FeasibilityRule, Price};
 use engine_core::reference::format::Format;
 use engine_core::reference::live::LiveUniverse;
+use engine_core::reference::objective::{net_live, Leaf, Objective};
 use engine_core::reference::oracle::{evaluate, Mode, OracleError, OracleInput};
-use engine_core::reference::search::{search, SearchParams};
+use engine_core::reference::search::{search, SearchOutcome, SearchParams};
 use engine_core::reference::state::{Pools, Position};
 use engine_core::reference::universe::{Champion, Universe, UniverseError, UniverseSpec};
 use serde::Deserialize;
@@ -700,4 +701,199 @@ fn a_champion_whose_removal_raises_the_price_is_critical_under_weights() {
     println!("critical at ZERO {zero:?}; at (0.105, 0.1) {weighted:?}");
     assert_eq!(zero, vec!["A1", "J1", "S1"]);
     assert_eq!(weighted, vec!["A1", "J1", "S1", "T1"]);
+}
+
+// ---------------------------------------------------------------- the leaf (G5)
+
+/// Design § 7 test 6, the arithmetic: the two sides' counts are netted as integers, then one
+/// operation per term — `(board + net_off · P) + net_grade · Q/100` — and a term is skipped when its
+/// net OR its unit is zero: Q = 0 adds no `+0.0` (a `−0.0` board stays `−0.0`, bit for bit), equal
+/// counts leave the board, P = 0 skips the P term. Through `net_live` and through
+/// `Universe::value_under` on a real board.
+#[test]
+fn the_leaf_nets_integer_counts_and_skips_zero_terms() {
+    let (p, q) = (0.1, 0.05);
+    let b = 0.123_456_789;
+    // One op per term, in order.
+    assert_eq!(
+        net_live(b, p, q, 1, 0, 50, 0).to_bits(),
+        ((b + -p) + -(50.0 * (q / 100.0))).to_bits()
+    );
+    assert_eq!(
+        net_live(b, p, q, 0, 2, 0, 130).to_bits(),
+        ((b + 2.0 * p) + 130.0 * (q / 100.0)).to_bits()
+    );
+    // Q = 0: no second operation at all.
+    assert_eq!(
+        net_live(b, p, 0.0, 1, 0, 50, 0).to_bits(),
+        (b + -p).to_bits()
+    );
+    // Nets of zero leave the board, bits included — a `−0.0` board in particular.
+    assert_eq!(
+        net_live(-0.0, p, q, 2, 2, 70, 70).to_bits(),
+        (-0.0f64).to_bits()
+    );
+    assert_eq!(
+        net_live(-0.0, p, 0.0, 0, 0, 0, 50).to_bits(),
+        (-0.0f64).to_bits(),
+        "Q = 0 skips the grade term"
+    );
+    assert_eq!(
+        net_live(-0.0, 0.0, q, 0, 3, 0, 0).to_bits(),
+        (-0.0f64).to_bits(),
+        "P = 0 skips the off term"
+    );
+    // P = 0 with a grade net: the grade term alone.
+    assert_eq!(
+        net_live(b, 0.0, q, 2, 0, 0, 30).to_bits(),
+        (b + 30.0 * (q / 100.0)).to_bits()
+    );
+
+    // The universe: a real board, both rules; under pool_or_roster the caller's Q is 0.
+    let u = with_fill(&[]);
+    let (t1, j1, t2) = (idx(&u, "T1"), idx(&u, "J1"), idx(&u, "T2"));
+    let leaf = Leaf {
+        blue: &[t1, j1],
+        red: &[t2],
+        blue_feasible: true,
+        red_feasible: true,
+    };
+    let board = u.board_value(&[t1, j1], &[t2]);
+    assert_eq!(
+        u.value_under(&leaf, FeasibilityRule::Roster, p, q, 1, 0, 89, 0)
+            .to_bits(),
+        ((board + -p) + -(89.0 * (q / 100.0))).to_bits()
+    );
+    assert_eq!(
+        u.value_under(&leaf, FeasibilityRule::Roster, p, q, 1, 1, 0, 89)
+            .to_bits(),
+        (board + 89.0 * (q / 100.0)).to_bits()
+    );
+    assert_eq!(
+        u.value_under(
+            &leaf,
+            FeasibilityRule::PoolOrRoster,
+            u.off_pool_cost(),
+            0.0,
+            0,
+            1,
+            0,
+            89
+        )
+        .to_bits(),
+        (board + u.off_pool_cost()).to_bits(),
+        "pool_or_roster at Q = 0: the grade count is carried and prices nothing"
+    );
+}
+
+/// Design § 7 test 6 end to end: Red's last pick (slot 19) with Middle locked; the roster's `X`
+/// (Middle primary, Support at 89) must take Support, `S2` (Support) is a roster support, `Z` is in
+/// pool. Every board is 0, so the search's values are the charges alone: Z 0, S2 P, X P + 89 · Q/100
+/// exactly, in that order for Red; at Q = 0 X and S2 tie at P. The oracle says the same, and the
+/// leaf's ending carries the grade.
+#[test]
+fn a_graded_last_pick_is_priced_p_plus_its_grade_at_the_leaf() {
+    let u = with_fill(&[
+        ("X", &["Middle", "Support"], &[0.9, 0.1], 0.0),
+        ("Z", &["Support"], &[1.0], 0.0),
+    ]);
+    let red = tags(
+        &u,
+        &[
+            (Role::Top, &["T2"]),
+            (Role::Jungle, &["J2"]),
+            (Role::Middle, &["M2"]),
+            (Role::Adc, &["A2"]),
+            (Role::Support, &["Z"]),
+        ],
+    );
+    let pools = Pools {
+        blue: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Red, red);
+    let format = Format::standard();
+    let entries = board(
+        &format,
+        &u,
+        &["T1", "J1", "M1", "A1", "S1"],
+        &["T2", "J2", "M2", "A2"],
+    );
+    let position = at(&format, &entries, &u);
+    assert_eq!(
+        (position.slot_index(), position.mover()),
+        (19, Some(Side::Red))
+    );
+    let (p, q) = (0.1, 0.05);
+    let input = |q: f64| OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: FeasibilityRule::Roster,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+        off_pool_cost: Some(p),
+        off_role_cost: Some(q),
+    };
+    let run = |q: f64| -> SearchOutcome {
+        search(
+            &input(q),
+            &SearchParams::default(),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+    };
+    let value = |o: &SearchOutcome, id: &str| {
+        o.ranked
+            .iter()
+            .find(|r| r.action == Action::Pick(idx(&u, id)))
+            .unwrap_or_else(|| panic!("{id} is not ranked"))
+            .clone()
+    };
+    let o = run(q);
+    let (x, s2, z) = (value(&o, "X"), value(&o, "S2"), value(&o, "Z"));
+    println!(
+        "Q {q}: Z {} S2 {} X {} (X ends {:?})",
+        z.value, s2.value, x.value, x.ends
+    );
+    assert_eq!(z.value.to_bits(), 0.0f64.to_bits());
+    assert_eq!(s2.value.to_bits(), (0.0 + 1.0 * p).to_bits());
+    assert_eq!(
+        x.value.to_bits(),
+        ((0.0 + 1.0 * p) + 89.0 * (q / 100.0)).to_bits()
+    );
+    assert_eq!(
+        (x.ends.red_off_pool, x.ends.red_grade, x.ends.blue_grade),
+        (1, 89, 0)
+    );
+    assert_eq!((s2.ends.red_off_pool, s2.ends.red_grade), (1, 0));
+    let names: Vec<&str> = o
+        .ranked
+        .iter()
+        .map(|r| {
+            u.id(match r.action {
+                Action::Pick(c) => c,
+                other => panic!("{other:?}"),
+            })
+        })
+        .collect();
+    assert_eq!(&names[..3], &["Z", "S2", "X"]);
+    let o0 = run(0.0);
+    assert_eq!(
+        value(&o0, "X").value.to_bits(),
+        (0.0 + 1.0 * p).to_bits(),
+        "Q = 0: the grade prices nothing"
+    );
+    // The oracle, same values.
+    let oracle = evaluate(&input(q)).unwrap_or_else(|e| panic!("{e}"));
+    for r in &o.ranked {
+        let theirs = oracle
+            .ranked
+            .iter()
+            .find(|a| a.action == r.action)
+            .expect("ranked alike");
+        assert_eq!(theirs.value.to_bits(), r.value.to_bits(), "{:?}", r.action);
+    }
 }

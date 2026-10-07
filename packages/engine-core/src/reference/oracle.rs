@@ -218,6 +218,7 @@ struct Search<'a> {
     input: &'a OracleInput<'a>,
     memo: FeasibilityMemo,
     off_pool_cost: f64,
+    off_role_cost: f64,
     leaves: u64,
     nodes: u64,
 }
@@ -245,8 +246,11 @@ impl Search<'_> {
             },
             self.input.feasibility,
             self.off_pool_cost,
+            self.off_role_cost,
             end.blue_off_pool,
             end.red_off_pool,
+            end.blue_grade,
+            end.red_grade,
         )
     }
 
@@ -318,6 +322,7 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
         input,
         memo: FeasibilityMemo::new(Price::of(off_pool_cost, off_role_cost)),
         off_pool_cost,
+        off_role_cost,
         leaves: 0,
         nodes: 0,
     };

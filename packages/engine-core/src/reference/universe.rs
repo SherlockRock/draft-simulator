@@ -486,8 +486,9 @@ impl Universe {
     }
 
     /// `L'` (slice-5 U10): the infeasibility band under the live rules, `L + 10·L` — strictly larger
-    /// than the gap between any two feasible live leaves, off-pool term included, for every P ≤ L
-    /// (`objective.rs`, `live_leaf_value`; feasible live leaves span `board ± 5P ⊂ board ± 5L`);
+    /// than the gap between any two feasible live leaves, off-pool and grade terms included, for every
+    /// P + Q ≤ L (`objective.rs`, `live_leaf_value`; feasible live leaves span `board ± 5(P + Q) ⊂
+    /// board ± 5L`; `oracle::resolve_off_role_cost` refuses P + Q > L);
     /// `from_tables` also guarantees that the largest live leaf, `Σ + 5L + L'`, is finite. Tier A's
     /// `loss` is unchanged.
     pub fn live_loss(&self) -> f64 {

@@ -3,7 +3,7 @@
 //! mismatch. Feasibility is a leaf INPUT, never a terminal (R1): it is read only when a node is a leaf.
 
 use super::feasibility::{
-    off_pool_count, pool_can_complete, side_feasible, FeasibilityMemo, FeasibilityRule,
+    off_pool, pool_can_complete, side_feasible, FeasibilityMemo, FeasibilityRule,
 };
 use super::format::Slot;
 use super::state::{Action, Pools, Position};
@@ -29,6 +29,10 @@ pub struct LeafEnd {
     /// U10: off-pool picks made plus forced ones to come, per side (0 under `On` / `Off`).
     pub blue_off_pool: usize,
     pub red_off_pool: usize,
+    /// Engine-role-grade G5: the grade units the side's charged placements carry (`OffPool::grade`;
+    /// 0 under `On` / `Off`, on a list-form side, and under `pool_or_roster` where Q = 0 prices it).
+    pub blue_grade: usize,
+    pub red_grade: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -91,14 +95,16 @@ pub fn classify(
     let leaf = |kind: LeafKind, memo: &mut FeasibilityMemo| {
         let blue_feasible = side_feasible(memo, rule, Side::Blue, position, pools, universe);
         let red_feasible = side_feasible(memo, rule, Side::Red, position, pools, universe);
-        let blue_off_pool = off_pool_count(memo, rule, Side::Blue, position, pools, universe);
-        let red_off_pool = off_pool_count(memo, rule, Side::Red, position, pools, universe);
+        let blue = off_pool(memo, rule, Side::Blue, position, pools, universe);
+        let red = off_pool(memo, rule, Side::Red, position, pools, universe);
         NodeKind::Leaf(LeafEnd {
             kind,
             blue_feasible,
             red_feasible,
-            blue_off_pool,
-            red_off_pool,
+            blue_off_pool: blue.total(),
+            red_off_pool: red.total(),
+            blue_grade: blue.grade,
+            red_grade: red.grade,
         })
     };
     let Some(slot) = position.next_slot() else {

@@ -336,8 +336,10 @@ struct Shared {
     memo: FeasibilityMemo,
     table: TranspositionTable,
     nodes_total: u64,
-    /// P for this search (`oracle::resolve_off_pool_cost`), fixed before the first iteration.
+    /// P and Q for this search (`oracle::resolve_off_pool_cost`, `resolve_off_role_cost`), fixed
+    /// before the first iteration; the memo above was built at the same price.
     off_pool_cost: f64,
+    off_role_cost: f64,
 }
 
 /// One iteration at `depth`. Two lifetimes on purpose: `'i` is this iteration's borrows (the driver's
@@ -384,8 +386,11 @@ impl Iteration<'_, '_> {
             },
             self.input.feasibility,
             self.shared.off_pool_cost,
+            self.shared.off_role_cost,
             end.blue_off_pool,
             end.red_off_pool,
+            end.blue_grade,
+            end.red_grade,
         )
     }
 
@@ -725,6 +730,7 @@ pub fn search(
         table: TranspositionTable::default(),
         nodes_total: 0,
         off_pool_cost,
+        off_role_cost,
     };
     let feasible = |memo: &mut FeasibilityMemo, side| {
         side_feasible(

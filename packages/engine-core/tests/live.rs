@@ -3642,23 +3642,23 @@ fn equal_off_pool_counts_leave_the_board_bit_for_bit() {
     );
     for k in 0..=5 {
         assert_eq!(
-            u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, k, k)
+            u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 0.0, k, k, 0, 0)
                 .to_bits(),
             board.to_bits(),
             "{k} off-pool picks each"
         );
     }
     assert_eq!(
-        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 0, 2),
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 0.0, 0, 2, 0, 0),
         board + 2.0 * p
     );
     assert_eq!(
-        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 3, 1),
+        u.value_under(&leaf, FeasibilityRule::PoolOrRoster, p, 0.0, 3, 1, 0, 0),
         board - 2.0 * p
     );
     for rule in [FeasibilityRule::On, FeasibilityRule::Off] {
         assert_eq!(
-            u.value_under(&leaf, rule, 0.0, 0, 0).to_bits(),
+            u.value_under(&leaf, rule, 0.0, 0.0, 0, 0, 0, 0).to_bits(),
             u.value(&leaf).to_bits()
         );
     }
@@ -3671,7 +3671,7 @@ fn equal_off_pool_counts_leave_the_board_bit_for_bit() {
         red_feasible: true,
     };
     assert_eq!(
-        u.value_under(&broken, FeasibilityRule::PoolOrRoster, p, 0, 0),
+        u.value_under(&broken, FeasibilityRule::PoolOrRoster, p, 0.0, 0, 0, 0, 0),
         board - u.live_loss()
     );
     assert_eq!(u.value(&broken), board - u.loss());
@@ -4512,7 +4512,22 @@ fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
         (
             o.ranked
                 .iter()
-                .map(|r| (r.action, r.value.to_bits(), r.continuation.clone(), r.ends))
+                // The ending without its grade counts: a map grades a displaced roster champion,
+                // a list never does; at Q = 0 the grades price nothing (the values prove it).
+                .map(|r| {
+                    (
+                        r.action,
+                        r.value.to_bits(),
+                        r.continuation.clone(),
+                        (
+                            r.ends.kind,
+                            r.ends.blue_feasible,
+                            r.ends.red_feasible,
+                            r.ends.blue_off_pool,
+                            r.ends.red_off_pool,
+                        ),
+                    )
+                })
                 .collect::<Vec<_>>(),
             o.top_set.clone(),
             (o.root_fan, o.depth, o.partial, o.value.to_bits()),

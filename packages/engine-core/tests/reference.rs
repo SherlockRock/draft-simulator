@@ -916,19 +916,30 @@ impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
         (self.1)(self.0.value(leaf))
     }
 
-    /// Slice-5 U10: the map applies after the whole leaf rule, off-pool term and band included.
+    /// Slice-5 U10: the map applies after the whole leaf rule, off-pool and grade terms and band
+    /// included.
+    #[allow(clippy::too_many_arguments)]
     fn value_under(
         &self,
         leaf: &Leaf<'_>,
         rule: FeasibilityRule,
         off_pool_cost: f64,
+        off_role_cost: f64,
         blue_off: usize,
         red_off: usize,
+        blue_grade: usize,
+        red_grade: usize,
     ) -> f64 {
-        (self.1)(
-            self.0
-                .value_under(leaf, rule, off_pool_cost, blue_off, red_off),
-        )
+        (self.1)(self.0.value_under(
+            leaf,
+            rule,
+            off_pool_cost,
+            off_role_cost,
+            blue_off,
+            red_off,
+            blue_grade,
+            red_grade,
+        ))
     }
 }
 
