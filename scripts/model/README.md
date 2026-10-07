@@ -43,11 +43,22 @@ until 1a/2b have run). Rust harness unit tests: `cargo test -p engine-node`.
 and `data/training/fm-weights-seed{1,2}.json` (noise floor for the search A/B). Prerequisite: the
 Task 5 harness has been re-run so `evaluator_sibling_scores.csv` carries `comp_strength`.
 
-Per-patch retrain: `prepare.py <new parquet>` → **`node ../refresh-champion-positions.mjs && node ../compile-champion-meta.mjs && node ../validate-compiled-data.mjs`** (positions from
+Per-patch retrain: `EXPORT_MIN_PATCH=<oldest patch to keep> ../match-pipeline/export-parquet.sh` (the
+collector keeps every patch; the export windows server-side) → `prepare.py <new parquet>
+[--min-patch X] [--max-patch Y]` → **`node ../refresh-champion-positions.mjs && node ../compile-champion-meta.mjs && node ../validate-compiled-data.mjs`** (positions from
 `role_percentages.json`, the TRAIN split's play rates at threshold 0.10, ordered by rate — design
-`docs/designs/champion-meta-positions-refresh-design.md`; it prints the primary flips and the
-both-sides feasibility of the holdout next to the previous run's and aborts a recurring run on a
-> 2-point drop or > 10 flips) → re-run the Task 5 harness (it bakes champion-meta's `winRate` into
+`docs/designs/champion-meta-positions-refresh-design.md`; **recency rule since 2026-10-06:** each
+champion's shares are the NEWEST patch's in the file's `by_patch` block with ≥ 300 train picks of
+that champion, falling back patch by patch and then to the pooled shares, so the primary follows the
+latest patch rather than the window's average — Camille was SUPPORT 0.71 pooled over 16.15+16.16 but
+TOP 0.56 on 16.16; the provenance block records `rule`, `decidingPatch` and every champion decided
+otherwise under `fallback`. Keep the window to the newest two or three patches: the time split puts
+the newest patch at the test edge, and a wide window leaves it few or no TRAIN games — the script
+warns when `patch_vocab.json` names a patch `by_patch` lacks. It prints the primary flips, each with
+the deciding patch's shares next to the pooled ones, and the both-sides feasibility of the holdout
+next to the previous run's, and aborts a recurring run on a
+> 2-point drop or > 10 flips; a new corpus changes the holdout too, so the previous number is not
+strictly comparable — read the flip list, then `--force`) → re-run the Task 5 harness (it bakes champion-meta's `winRate` into
 `comp_strength`, which `ship_fm.py` turns into `scale`, so it must see the meta that will ship) →
 `ship_fm.py` → `fm_retrain_gate.py` (blocks the commit on a paired sibling-MRR regression beyond both
 the MDE and the card's 3-seed spread) → `cargo test -p engine-core --test fm_parity` → commit weights +

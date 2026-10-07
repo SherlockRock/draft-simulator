@@ -423,7 +423,9 @@ export const NavigatorCommandPalette: Component<NavigatorCommandPaletteProps> = 
                                             <span
                                                 class={`font-bold tabular-nums ${noSignal() ? "italic text-slate-500" : "text-slate-50"}`}
                                             >
-                                                {noSignal() ? NO_BAN_SIGNAL_LABEL : t.score.toFixed(2)}
+                                                {noSignal()
+                                                    ? NO_BAN_SIGNAL_LABEL
+                                                    : t.score.toFixed(2)}
                                             </span>
                                         </button>
                                     )}

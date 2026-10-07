@@ -24,6 +24,18 @@
  * preserved. The script never adds or removes champions — that is
  * update-champions.mjs's job.
  *
+ * Recency (corpus source, 2026-10-06): a champion's shares are the NEWEST
+ * patch's in role_percentages.json's `by_patch` block with >= 300 train picks
+ * of that champion (derive.mjs MIN_PICKS), falling back patch by patch and then
+ * to the pooled shares — so the primary follows the latest patch instead of
+ * the window's pooled average (Camille: SUPPORT 0.71 pooled, TOP 0.56 on the
+ * newest patch). The provenance block records rule, decidingPatch and every
+ * champion decided otherwise (`fallback`). If patch_vocab.json names a patch
+ * newer than any in `by_patch`, the newest corpus patch has NO train games
+ * (the time split put it all in val/test) — narrow the window with prepare.py
+ * --min-patch; the script warns and the deciding patch is the newest that has
+ * train games.
+ *
  * Prints the diff (primary flips with rates, roles lost/gained, kept champions)
  * and, when the corpus and scripts/model/.venv are present, the both-sides
  * feasibility of the evaluable holdout under the new table next to the previous
@@ -47,8 +59,8 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { assertChampionRows } from "./champion-positions/invariants.mjs";
 import {
-  POSITIONS_THRESHOLD, ratesFromCorpus, ratesFromUgg, refreshPositions, diffPositions,
-  buildProvenance, formatPositionsSource, evaluateGate, formatDiff,
+  POSITIONS_THRESHOLD, RECENCY_RULE, ratesFromCorpus, ratesFromUgg, refreshPositions, diffPositions,
+  buildProvenance, formatPositionsSource, evaluateGate, formatDiff, comparePatches,
 } from "./champion-positions/derive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -70,9 +82,15 @@ function loadSource(source) {
     if (!existsSync(CORPUS_PATH)) {
       throw new Error(`${CORPUS_PATH} not found — run scripts/model/prepare.py on this machine, or use --source ugg`);
     }
-    const { rates, games, kind } = ratesFromCorpus(readJson(CORPUS_PATH));
-    const patches = Object.keys(readJson(PATCH_VOCAB_PATH).patch_to_index);
-    return { rates, games, kind, patches };
+    const corpus = ratesFromCorpus(readJson(CORPUS_PATH));
+    const vocabPatches = Object.keys(readJson(PATCH_VOCAB_PATH).patch_to_index).sort(comparePatches);
+    const trainless = vocabPatches.filter((patch) => !corpus.patches.includes(patch));
+    if (trainless.length > 0) {
+      console.log(`WARNING: patch_vocab.json names ${trainless.join(",")} but the TRAIN split has no games there (the time split put the newest edge in val/test) — the deciding patch is ${corpus.decidingPatch}, not the corpus's newest ${vocabPatches[vocabPatches.length - 1]}; narrow the window with prepare.py --min-patch if the newest patch should decide`);
+    }
+    // `patches` in the provenance = the window the corpus holds (patch_vocab),
+    // as before; the rule's fields say which of them decided.
+    return { ...corpus, patches: vocabPatches, rule: RECENCY_RULE };
   }
   if (source === "ugg") {
     const doc = readJson(UGG_PATH);
@@ -116,16 +134,24 @@ function main() {
   const outPath = values.out ?? values.in;
 
   const doc = readJson(values.in);
-  const { rates, games, kind, patches } = loadSource(values.source);
+  const { rates, pooled, games, kind, patches, rule, minPicks, decidingPatch, decidingGames, chosen, fallback } = loadSource(values.source);
   console.log(`source: ${kind} patches=${patches.join(",")} games=${games}${kind === "ugg" ? " (champion-matches)" : ""} champions=${rates.size} threshold=${POSITIONS_THRESHOLD}`);
   if (kind === "ugg") {
     console.log("WARNING: --source ugg is the unmeasured-at-parity fallback (winrates.json is patch " + patches[0] + ", scraped with a hard-coded PATCH; 0.607 both-sides vs the corpus's 0.785 at the last measurement). Prefer the corpus when it is on this machine.");
+  }
+  if (rule) {
+    const byPatch = new Map();
+    for (const patch of chosen.values()) byPatch.set(patch, (byPatch.get(patch) ?? 0) + 1);
+    const tally = [...byPatch.entries()].sort((a, b) => b[1] - a[1]).map(([patch, n]) => `${patch} x${n}`).join(", ");
+    console.log(`rule: ${rule} — shares from the newest patch with >= ${minPicks} train picks per champion; deciding patch ${decidingPatch} (${decidingGames} train games); decided by: ${tally}`);
+    const fallbackEntries = Object.entries(fallback);
+    console.log(`fallback (${fallbackEntries.length}): ${fallbackEntries.map(([id, by]) => `${id} -> ${by}`).join(", ")}`);
   }
 
   const { rows, kept } = refreshPositions(doc.champions, rates);
   assertChampionRows(rows, { label: "refresh", expectedCount: doc.champions.length, requirePositions: false });
   const diff = diffPositions(doc.champions, rows);
-  console.log(formatDiff(diff, rates, kept, rows));
+  console.log(formatDiff(diff, rates, kept, pooled, rows));
   const empty = rows.filter((row) => row.positions.length === 0).map((row) => row.id);
   if (empty.length > 0) {
     console.log(`WARNING: ${empty.length} champion(s) still have no positions (no source data): ${empty.join(", ")} — the compile will refuse them; hand-enter positions until the next retrain`);
@@ -178,6 +204,7 @@ function main() {
       feasibility: recordedFeasibility,
       gamesUnit: kind === "ugg" ? "champion-matches" : undefined,
       unmeasuredAtParity: kind === "ugg" ? true : undefined,
+      rule, minPicks, decidingPatch, decidingGames, fallback,
     }),
     champions: rows,
   };

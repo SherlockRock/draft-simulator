@@ -1,6 +1,15 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { NavigatorWeightedAssignment } from "../contexts/NavigatorContext";
 import item5 from "./__fixtures__/navigator-item5-snapshot.json";
+
+// The item5/item4 snapshots are engine recordings made under the positions
+// table champions.json carried on 2026-09-05 (positions refresh slice 1). These
+// tests check the frontend solver's PARITY with those recordings, so they read
+// the same frozen table: the live file follows the latest patch (recency rule,
+// 2026-10-06) and would move the expected distributions every refresh.
+vi.mock("../data/champions.json", async () => ({
+    default: (await import("./__fixtures__/champions-2026-09-05-positions.json")).default
+}));
 import item4 from "./__fixtures__/navigator-item4-snapshot.json";
 import { NavigatorTreeNodeSchema } from "./navigatorTreeSchema";
 import {

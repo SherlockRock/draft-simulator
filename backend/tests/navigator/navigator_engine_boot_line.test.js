@@ -21,6 +21,17 @@ describe("formatPositionsSourceLine", () => {
     expect(line).toBe("[navigator] champion-meta positions: corpus patches=16.15,16.16 threshold=0.1 generated=2026-09-05T10:00:00.000Z feasibility=0.785");
   });
 
+  it("names the recency rule and its deciding patch, and counts the champions decided otherwise", () => {
+    const block = { kind: "corpus", patches: ["16.18", "16.19"], games: 200000, rule: "latest-patch", minPicks: 300, decidingPatch: "16.19",
+      decidingGames: 120000, fallback: {}, threshold: 0.1, generatedAt: "2026-10-06T00:00:00.000Z", feasibility: { sets: 40000, bothSides: 0.8 } };
+    expect(formatPositionsSourceLine({ positions: block })).toBe(
+      "[navigator] champion-meta positions: corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 threshold=0.1 generated=2026-10-06T00:00:00.000Z feasibility=0.8",
+    );
+    expect(formatPositionsSourceLine({ positions: { ...block, fallback: { Nilah: "16.18", Zaahen: "pooled" } } })).toBe(
+      "[navigator] champion-meta positions: corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 fallback=2 threshold=0.1 generated=2026-10-06T00:00:00.000Z feasibility=0.8",
+    );
+  });
+
   it("shows a carried-forward feasibility and an unmeasured-at-parity source", () => {
     expect(formatPositionsSourceLine({ positions: { kind: "corpus", patches: ["16.17"], games: 1, threshold: 0.1, generatedAt: "2026-10-01T00:00:00.000Z",
       feasibility: { sets: 34159, bothSides: 0.785, carriedFrom: { generatedAt: "2026-09-05T10:00:00.000Z", kind: "corpus" } } } })).toBe(

@@ -22,7 +22,10 @@ describe("createLatestWins", () => {
 
     it("keeps only the newest value while one is in flight, then runs it once", async () => {
         const first = deferred();
-        const run = vi.fn().mockImplementationOnce(() => first.promise).mockResolvedValue(undefined);
+        const run = vi
+            .fn()
+            .mockImplementationOnce(() => first.promise)
+            .mockResolvedValue(undefined);
         const flight = createLatestWins<number>(run);
         flight.send(1);
         flight.send(2);
@@ -39,7 +42,10 @@ describe("createLatestWins", () => {
 
     it("still runs the pending value when the in-flight run rejects", async () => {
         const first = deferred();
-        const run = vi.fn().mockImplementationOnce(() => first.promise).mockResolvedValue(undefined);
+        const run = vi
+            .fn()
+            .mockImplementationOnce(() => first.promise)
+            .mockResolvedValue(undefined);
         const flight = createLatestWins<number>(run);
         flight.send(1);
         flight.send(2);
@@ -62,7 +68,10 @@ describe("createLatestWins", () => {
 
     it("cancel drops the pending value but not the in-flight run", async () => {
         const first = deferred();
-        const run = vi.fn().mockImplementationOnce(() => first.promise).mockResolvedValue(undefined);
+        const run = vi
+            .fn()
+            .mockImplementationOnce(() => first.promise)
+            .mockResolvedValue(undefined);
         const flight = createLatestWins<number>(run);
         flight.send(1);
         flight.send(2);
@@ -74,7 +83,8 @@ describe("createLatestWins", () => {
     });
 
     it("handles synchronous throw like a rejection", async () => {
-        const run = vi.fn()
+        const run = vi
+            .fn()
             .mockImplementationOnce(() => {
                 throw new Error("sync throw");
             })

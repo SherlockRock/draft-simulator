@@ -10,7 +10,8 @@ const TONE: Record<EngineStatus["kind"], string> = {
     complete: "border-slate-600 text-slate-300",
     thinking: "border-amber-500/60 bg-amber-950/40 text-amber-300",
     ready: "border-emerald-600/60 bg-emerald-950/40 text-emerald-300",
-    empty: "border-red-600/70 bg-red-950/40 text-red-300"
+    empty: "border-red-600/70 bg-red-950/40 text-red-300",
+    failed: "border-red-600/70 bg-red-950/40 text-red-300"
 };
 const STALE_TONE = "border-red-500/70 bg-red-950/40 text-red-300";
 

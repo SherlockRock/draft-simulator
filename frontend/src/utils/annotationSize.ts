@@ -13,7 +13,7 @@ export const defaultAnnotationSize = (
     layout: CardLayout
 ): { width: number; height: number } => ({
     width: cardWidth(layout),
-    height: 120
+    height: 200
 });
 
 /**

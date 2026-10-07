@@ -233,7 +233,10 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                         <Show
                                             when={!banSignalAbsent(column().nodes)}
                                             fallback={
-                                                <span data-no-ban-signal class="text-[11px] italic text-slate-500">
+                                                <span
+                                                    data-no-ban-signal
+                                                    class="text-[11px] italic text-slate-500"
+                                                >
                                                     {NO_BAN_SIGNAL_LABEL}
                                                 </span>
                                             }

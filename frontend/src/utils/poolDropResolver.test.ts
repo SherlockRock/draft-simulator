@@ -11,8 +11,12 @@ const mapWith = (overrides: Partial<RolePoolMap>): RolePoolMap => ({
     ...overrides
 });
 
-const row = (role: "top" | "jungle", index: number, placementId = PLACEMENT_A) =>
-    ({ kind: "role-row" as const, placementId, role, index });
+const row = (role: "top" | "jungle", index: number, placementId = PLACEMENT_A) => ({
+    kind: "role-row" as const,
+    placementId,
+    role,
+    index
+});
 
 describe("resolvePoolDrop", () => {
     it("row -> other row (not already containing) resolves to a move: remove then add", () => {
@@ -72,7 +76,9 @@ describe("resolvePoolDrop", () => {
 
         expect(result).toEqual({
             kind: "reorder",
-            ops: [{ type: "reorder", role: "top", championIds: ["Gnar", "Aatrox", "Sett"] }]
+            ops: [
+                { type: "reorder", role: "top", championIds: ["Gnar", "Aatrox", "Sett"] }
+            ]
         });
     });
 
@@ -92,7 +98,9 @@ describe("resolvePoolDrop", () => {
 
         expect(result).toEqual({
             kind: "reorder",
-            ops: [{ type: "reorder", role: "top", championIds: ["Sett", "Aatrox", "Gnar"] }]
+            ops: [
+                { type: "reorder", role: "top", championIds: ["Sett", "Aatrox", "Gnar"] }
+            ]
         });
     });
 
@@ -129,7 +137,9 @@ describe("resolvePoolDrop", () => {
             ]
         });
         expect(
-            result.kind === "move" ? result.ops.reduce(applyPoolChampionOp, targetChampions) : null
+            result.kind === "move"
+                ? result.ops.reduce(applyPoolChampionOp, targetChampions)
+                : null
         ).toEqual(mapWith({ top: [], jungle: ["LeeSin", "Aatrox", "Vi"] }));
     });
 

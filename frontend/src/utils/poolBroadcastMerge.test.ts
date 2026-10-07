@@ -71,10 +71,16 @@ describe("opReflected", () => {
 
     it("reports a reorder as reflected once the bucket already reads that way", () => {
         expect(
-            opReflected(makeMap({ mid: ["Zed", "Ahri"] }), reorder("mid", ["Zed", "Ahri"]))
+            opReflected(
+                makeMap({ mid: ["Zed", "Ahri"] }),
+                reorder("mid", ["Zed", "Ahri"])
+            )
         ).toBe(true);
         expect(
-            opReflected(makeMap({ mid: ["Ahri", "Zed"] }), reorder("mid", ["Zed", "Ahri"]))
+            opReflected(
+                makeMap({ mid: ["Ahri", "Zed"] }),
+                reorder("mid", ["Zed", "Ahri"])
+            )
         ).toBe(false);
     });
 
@@ -136,7 +142,10 @@ describe("pushPendingOp", () => {
             [reorder("mid", ["Ahri", "Zed"])],
             reorder("top", ["Gnar"])
         );
-        expect(pending).toEqual([reorder("mid", ["Ahri", "Zed"]), reorder("top", ["Gnar"])]);
+        expect(pending).toEqual([
+            reorder("mid", ["Ahri", "Zed"]),
+            reorder("top", ["Gnar"])
+        ]);
     });
 
     // Membership and order are independent concerns: collapsing across them

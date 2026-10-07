@@ -17,7 +17,8 @@ const base: EngineStatusInput = {
     reason: () => "should not be called",
     progress: null,
     budgetHit: false,
-    heartbeatStaleMs: null
+    heartbeatStaleMs: null,
+    computeFailed: false
 };
 
 describe("deriveEngineStatus (design § 4 table)", () => {
@@ -81,6 +82,31 @@ describe("deriveEngineStatus (design § 4 table)", () => {
     });
 });
 
+describe("failed compute (target note D10 item 2)", () => {
+    test("a failed compute is its own pill, not thinking and not ready", () => {
+        const s = deriveEngineStatus({
+            ...base,
+            computeFailed: true,
+            hasSnapshot: false,
+            fanCount: 0
+        });
+        expect(s).toEqual({ kind: "failed" });
+        expect(formatEngineStatus(s)).toBe(
+            "✕ Engine failed · next pick, ban or undo retries"
+        );
+    });
+    test("a failed recompute over an earlier final still reads failed, not ready", () => {
+        expect(deriveEngineStatus({ ...base, computeFailed: true })).toEqual({
+            kind: "failed"
+        });
+    });
+    test("draft complete beats failed", () => {
+        expect(
+            deriveEngineStatus({ ...base, computeFailed: true, draftComplete: true })
+        ).toEqual({ kind: "complete" });
+    });
+});
+
 describe("streaming states (design § 4)", () => {
     test("thinking before any partial shows the depth being searched and the node count", () => {
         const s = deriveEngineStatus({
@@ -90,7 +116,9 @@ describe("streaming states (design § 4)", () => {
             elapsedMs: 400,
             progress: { depthPainted: 0, depthInProgress: 1, nodes: 120 }
         });
-        expect(formatEngineStatus(s)).toBe("◐ Thinking · searching depth 1 · 0.4 s · 120 nodes");
+        expect(formatEngineStatus(s)).toBe(
+            "◐ Thinking · searching depth 1 · 0.4 s · 120 nodes"
+        );
     });
     test("thinking with a painted depth names the candidates and both depths", () => {
         const s = deriveEngineStatus({
@@ -130,8 +158,14 @@ describe("streaming states (design § 4)", () => {
         expect(formatEngineStatus(s)).not.toContain("no heartbeat");
     });
     test("ready after a deadline cut says budget hit", () => {
-        const s = deriveEngineStatus({ ...base, meta: { depthReached: 2, computeTimeMs: 5003 }, budgetHit: true });
-        expect(formatEngineStatus(s)).toBe("● 8 candidates · depth 2 · 5003 ms · budget hit");
+        const s = deriveEngineStatus({
+            ...base,
+            meta: { depthReached: 2, computeTimeMs: 5003 },
+            budgetHit: true
+        });
+        expect(formatEngineStatus(s)).toBe(
+            "● 8 candidates · depth 2 · 5003 ms · budget hit"
+        );
     });
     test("a stale check never applies outside thinking", () => {
         expect(isHeartbeatStale(deriveEngineStatus(base))).toBe(false);

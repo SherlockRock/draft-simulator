@@ -132,6 +132,26 @@ def test_patch_cut_drops_rows_after_max_patch(tmp_path, id_pool):
     assert len(prepare.patch_cut(df, None, [])) == 60
 
 
+def test_patch_cut_drops_rows_before_min_patch_and_windows_both_ends(tmp_path, id_pool):
+    parquet = make_fixture(tmp_path, id_pool, n=60, both_false_rows=0)
+    df = prepare.apply_filters(prepare.flatten(parquet), [])
+    df.loc[:9, ["patch_major", "patch_minor"]] = [16, 17]
+    df.loc[10:14, ["patch_major", "patch_minor"]] = [15, 20]   # older major: not "15.20 > 16.16"
+    # The fixture itself mixes 16.15 (days 1-4) and 16.16, so derive the expectation.
+    at_least_16_16 = (df.patch_major > 16) | ((df.patch_major == 16) & (df.patch_minor >= 16))
+    cut = prepare.patch_cut(df, None, [], min_patch=(16, 16))
+    assert len(cut) == at_least_16_16.sum() < 55
+    assert (cut.patch_major.eq(16) & cut.patch_minor.eq(17)).sum() == 10   # newer rows kept
+    assert not cut.patch_major.eq(15).any()                                 # older major dropped
+    assert not (cut.patch_major.eq(16) & cut.patch_minor.eq(15)).any()
+    window = prepare.patch_cut(df, (16, 16), [], min_patch=(16, 16))
+    assert len(window) == (df.patch_major.eq(16) & df.patch_minor.eq(16)).sum() > 0
+    assert (window.patch_major.eq(16) & window.patch_minor.eq(16)).all()
+    report = []
+    prepare.patch_cut(df, (16, 17), report, min_patch=(16, 16))
+    assert "keep 16.16 <= patch <= 16.17" in report[0]
+
+
 def test_parse_patch():
     assert prepare.parse_patch("16.16") == (16, 16)
     with pytest.raises(ValueError):
@@ -192,6 +212,38 @@ def test_role_percentages_sum_to_one(prepared):
         assert sum(entry["roles"].values()) == pytest.approx(1.0)
         assert set(entry["roles"]) == set(POSITIONS)
         assert entry["games"] > 0
+
+
+def test_role_percentages_by_patch_partitions_the_train_picks(prepared):
+    """`by_patch` is the recency rule's input (derive.mjs): per champion, the
+    per-patch pick counts sum to the pooled `games`, each patch's shares sum to
+    one in champion-meta's vocabulary, patches are keyed "major.minor" in
+    release order, and every patch is one the train split actually holds."""
+    rp = json.loads((prepared / "role_percentages.json").read_text())
+    ds = pd.read_parquet(prepared / "dataset.parquet", columns=["patch", "split"])
+    train_patches = set(ds[ds.split == "train"].patch)
+    assert len(train_patches) >= 2, "the fixture spans 16.15 and 16.16"
+    seen = set()
+    for entry in rp.values():
+        assert entry["by_patch"], entry["alias"]
+        assert sum(p["games"] for p in entry["by_patch"].values()) == entry["games"]
+        keys = list(entry["by_patch"])
+        assert keys == sorted(keys, key=prepare.parse_patch)
+        for patch, block in entry["by_patch"].items():
+            assert patch in train_patches
+            assert block["games"] > 0
+            assert sum(block["meta_roles"].values()) == pytest.approx(1.0)
+            assert set(block["meta_roles"]) == {"TOP", "JUNGLE", "MIDDLE", "BOTTOM", "SUPPORT"}
+            seen.add(patch)
+    assert seen == train_patches
+    # Per patch, the picks across champions are ten per train game on that patch.
+    per_patch = {}
+    for entry in rp.values():
+        for patch, block in entry["by_patch"].items():
+            per_patch[patch] = per_patch.get(patch, 0) + block["games"]
+    train = ds[ds.split == "train"]
+    for patch, picks in per_patch.items():
+        assert picks == 10 * int((train.patch == patch).sum())
 
 
 # --- encoding --------------------------------------------------------------

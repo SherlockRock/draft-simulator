@@ -65,6 +65,11 @@ def diff(new, base):
 def main():
     meta = load_meta()
     sets = load_sets_with_patch()
+    # The corpus window's patches in release order (patch_vocab); [1] labels the
+    # pooled table with them and [2] compares the two newest — the first run was
+    # 16.15 -> 16.16, the 2026-10 recency run 16.18 -> 16.19.
+    patch_order = list(json.load(open(TRAIN_DIR / "patch_vocab.json"))["patch_to_index"])
+    prev_patch, newest_patch = patch_order[-2], patch_order[-1]
     rp = {v["alias"]: v for v in json.load(open(TRAIN_DIR / "role_percentages.json")).values()}
     corpus = {a: {r: rp[a]["roles"].get(r, 0.0) for r in ROLE_ORDER} for a in meta if a in rp}
     ugg_raw = json.load(open(ROOT / "data/compiled/winrates.json"))
@@ -89,7 +94,7 @@ def main():
 
     row("current compiled meta", meta)
     row("recompile from champions.json", cj)
-    for name, src in (("corpus 16.15+16.16 train", corpus), (f"u.gg {ugg_raw['patch']} {ugg_raw['rank']}", ugg)):
+    for name, src in ((f"corpus {'+'.join(patch_order)} train", corpus), (f"u.gg {ugg_raw['patch']} {ugg_raw['rank']}", ugg)):
         for t in THRESHOLDS:
             row(f"{name} t>={t:.2f}", derive(src, t, keep_when_absent=meta))
     for t in (0.10, 0.15):
@@ -100,7 +105,7 @@ def main():
                     m[a]["positions"].append(r)
         row(f"corpus t>={t:.2f} ∪ current", m)
 
-    print("\n[2] one-patch-forward — positions from ONE patch's games, feasibility on the 16.16 holdout")
+    print(f"\n[2] one-patch-forward — positions from ONE patch's games, feasibility on the {newest_patch} holdout")
     vocab = json.load(open(TRAIN_DIR / "champion_vocab.json"))
     i2a = {int(k): v for k, v in vocab["index_to_alias"].items()}
     r2i = {int(k): int(v) for k, v in vocab["riot_id_to_index"].items()}
@@ -118,18 +123,20 @@ def main():
     max_delta = max(abs(train[a][r] - corpus[a][r]) for a in corpus for r in ROLE_ORDER)
     assert max_delta < 1e-9, f"slot layout mismatch vs role_percentages.json: {max_delta}"
     print(f"instrument check: train rates recomputed from dataset.parquet == role_percentages.json (max |Δ| {max_delta:.1e})")
-    sources = {"16.15 all splits (forward)": rates_from(df[df.patch == "16.15"]),
-               "16.16 train only (in-sample)": rates_from(df[(df.patch == "16.16") & (df.split == "train")]),
+    forward_name = f"{prev_patch} all splits (forward)"
+    newest_name = f"{newest_patch} train only (in-sample)"
+    sources = {forward_name: rates_from(df[df.patch == prev_patch]),
+               newest_name: rates_from(df[(df.patch == newest_patch) & (df.split == "train")]),
                "train, both patches (= [1])": train}
     print(f"{'source':34s} " + " ".join(f"t>={t:.2f}" for t in (0.05, 0.10, 0.15)))
     for name, src in sources.items():
         print(f"{name:34s} " + " ".join(f"{feasibility(sets, derive(src, t, keep_when_absent=meta))[2]:7.3f}"
                                         for t in (0.05, 0.10, 0.15)))
     for t in (0.05, 0.10, 0.15):
-        a = derive(sources["16.15 all splits (forward)"], t); b = derive(sources["16.16 train only (in-sample)"], t)
+        a = derive(sources[forward_name], t); b = derive(sources[newest_name], t)
         sd = [x for x in a if x in b and set(a[x]["positions"]) != set(b[x]["positions"])]
         pd_ = [x for x in a if x in b and a[x]["positions"][:1] != b[x]["positions"][:1]]
-        print(f"  t>={t:.2f}: 16.15 vs 16.16 sets differ for {len(sd)} champions, primary for {len(pd_)}: {pd_}")
+        print(f"  t>={t:.2f}: {prev_patch} vs {newest_patch} sets differ for {len(sd)} champions, primary for {len(pd_)}: {pd_}")
 
     print("\n[3] champion-level diff, corpus t>=0.10 vs current compiled meta")
     m = derive(corpus, 0.10, keep_when_absent=meta)

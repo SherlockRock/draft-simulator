@@ -20,7 +20,12 @@ import {
     stripUnsyncableGroupMetadata,
     syncLocalCanvasToServer
 } from "./syncLocalCanvas";
-import type { CanvasAnnotation, CanvasDraft, CanvasGroup, CanvasPoolPlacement } from "./schemas";
+import type {
+    CanvasAnnotation,
+    CanvasDraft,
+    CanvasGroup,
+    CanvasPoolPlacement
+} from "./schemas";
 import {
     createAnnotation,
     createCanvas,
@@ -71,7 +76,10 @@ const localAnnotation = (
     ...over
 });
 
-const localPool = (id: string, over: Partial<CanvasPoolPlacement["Pool"]> = {}): CanvasPoolPlacement => ({
+const localPool = (
+    id: string,
+    over: Partial<CanvasPoolPlacement["Pool"]> = {}
+): CanvasPoolPlacement => ({
     id,
     canvas_id: "local",
     pool_id: `${id}-pool`,

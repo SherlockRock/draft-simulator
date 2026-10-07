@@ -244,13 +244,6 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
         if (!isTextFocused() && textSignal() !== stored) setTextSignal(stored);
     });
 
-    createEffect(() => {
-        if (props.editingAnnotationId() === props.annotation.id) {
-            textareaRef?.focus();
-            textareaRef?.select();
-        }
-    });
-
     const isEditing = () => props.editingAnnotationId() === props.annotation.id;
 
     createEffect(() => {
@@ -556,7 +549,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                 // NOT `textareaRef?.focus()` — at rest the textarea is not
                 // mounted, so the ref is undefined and that would silently do
                 // nothing. Ask Canvas to set editingAnnotationId; the <Show>
-                // below then mounts the textarea and the effect above focuses
+                // below then mounts the textarea and its ref callback focuses
                 // it. §4 requires double-click to enter edit.
                 props.onStartEditing(props.annotation.id);
             }}
@@ -677,14 +670,7 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                                 class="pointer-events-none min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words p-2 text-darius-text-primary"
                                 style={{
                                     "font-size": `${fontPx()}px`,
-                                    "line-height": "1.25",
-                                    // Ellipsis/fade at rest (D7). An inner scroll
-                                    // container was rejected: a scrollable element
-                                    // inside a scale()d world layer fights canvas zoom
-                                    // for wheel events, and hides content from a view
-                                    // whose whole purpose is seeing everything at once.
-                                    "mask-image":
-                                        "linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)"
+                                    "line-height": "1.25"
                                 }}
                             >
                                 <SegmentedText segments={segments()} />
@@ -692,7 +678,25 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                         }
                     >
                         <textarea
-                            ref={textareaRef}
+                            ref={(el) => {
+                                textareaRef = el;
+                                // A newly created note can already be editing
+                                // while its containing subtree is still detached.
+                                // Focus after DOM insertion and menu teardown.
+                                queueMicrotask(() =>
+                                    untrack(() => {
+                                        if (
+                                            !el.isConnected ||
+                                            !isEditing() ||
+                                            !props.canEdit() ||
+                                            props.lockedByName()
+                                        )
+                                            return;
+                                        el.focus({ preventScroll: true });
+                                        el.select();
+                                    })
+                                );
+                            }}
                             value={textSignal()}
                             disabled={!props.canEdit()}
                             // `readOnly`, NOT `disabled`, and only for the LOCK
@@ -704,12 +708,24 @@ export const CanvasAnnotation = (props: CanvasAnnotationProps) => {
                             // `commitText` runs on blur, so disabling on a lock
                             // arriving mid-edit would drop what was typed.
                             readOnly={Boolean(props.lockedByName())}
-                            class="annotation-editor-surface h-full w-full resize-none bg-transparent p-2 text-darius-text-primary outline-none"
+                            class="annotation-editor-surface custom-scrollbar min-h-0 w-full flex-1 resize-none overscroll-contain bg-transparent p-2 text-darius-text-primary outline-none"
                             style={{
                                 "font-size": `${fontPx()}px`,
                                 "line-height": "1.25"
                             }}
                             onFocus={() => setIsTextFocused(true)}
+                            onWheel={(e) => {
+                                const editor = e.currentTarget;
+                                if (
+                                    document.activeElement === editor &&
+                                    (editor.scrollHeight > editor.clientHeight ||
+                                        editor.scrollWidth > editor.clientWidth)
+                                ) {
+                                    // Keep native scrolling, including at the edges,
+                                    // out of the canvas's window-level zoom handler.
+                                    e.stopPropagation();
+                                }
+                            }}
                             onInput={(e) => {
                                 if (insertSelection) {
                                     insertSelection = null;

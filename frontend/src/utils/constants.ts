@@ -649,7 +649,6 @@ const INTERNAL_NAME_OVERRIDES: Record<string, string> = {
 // adding an entry.
 const SPECIAL_SPLASH_URLS: Record<string, string> = {
     Locke: `${CD_BASE}/locke/skins/base/images/locke_splash_centered_0.locke.jpg`,
-    Shyvana: `${CD_BASE}/shyvana/skins/base/images/shyvana_splash_centered_0.shyvana_rework.jpg`,
     "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.jpg`
 };
 

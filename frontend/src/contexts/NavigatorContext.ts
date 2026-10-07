@@ -144,6 +144,8 @@ export interface NavigatorWorkflowContextValue {
     syntheticTree: Accessor<NavigatorTreeNode | null>;
     effectiveScenarios: Accessor<NavigatorScenario[]>;
     isComputing: Accessor<boolean>;
+    /** The compute for the current state ended without a result (D10 item 2). */
+    computeFailed: Accessor<boolean>;
     /** The meta block to show in the Computing readout. Reads the persisted
      *  snapshot's meta. Null when there is no meta block. */
     currentMeta: Accessor<NavigatorSnapshotData["meta"]>;

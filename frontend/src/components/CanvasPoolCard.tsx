@@ -152,7 +152,6 @@ const ROW_GAP_PX = 4;
  * tiles the hit-test is trying to read.
  */
 
-
 const DropCaret: Component = () => (
     <div
         class="relative z-10 shrink-0 rounded-full bg-darius-purple-bright"
@@ -326,75 +325,79 @@ export const CanvasPoolCard: Component<CanvasPoolCardProps> = (props) => {
                                             );
                                         };
                                         return (
-                                          <>
-                                            <div
-                                                class="group relative overflow-hidden rounded transition-opacity"
-                                                data-champion-id={championId}
-                                                classList={{
-                                                    "cursor-grab": props.canEdit(),
-                                                    "opacity-35 grayscale":
-                                                        isDragSource(),
-                                                    // A flexed champion reads as a CLASS at any
-                                                    // zoom: the whole tile is outlined, not a 12px
-                                                    // corner wedge that dropped out below ~0.5
-                                                    // zoom and never said which tiles were the
-                                                    // same champion. The tooltip still names the
-                                                    // other roles.
-                                                    "border-2 border-amber-400": !!flexed(),
-                                                    "border border-darius-border": !flexed()
-                                                }}
-                                                style={{
-                                                    width: `${POOL_PORTRAIT_PX}px`,
-                                                    height: `${POOL_PORTRAIT_PX}px`
-                                                }}
-                                                title={flexTitle()}
-                                                // Arms a pending champion drag (Task 18) —
-                                                // stopPropagation keeps the card root's own
-                                                // onMouseDown (card drag) from also firing.
-                                                // Gated on canEdit so a view-only user's
-                                                // mousedown still bubbles to the card root
-                                                // exactly as before this task (where it
-                                                // no-ops on that handler's own canEdit check).
-                                                onMouseDown={(e) => {
-                                                    if (!props.canEdit()) return;
-                                                    e.stopPropagation();
-                                                    props.onPortraitMouseDown(
-                                                        e,
-                                                        props.placement.id,
-                                                        role,
-                                                        championId
-                                                    );
-                                                }}
-                                            >
-                                                <Show
-                                                    when={champ()}
-                                                    fallback={
-                                                        <div class="flex h-full w-full items-center justify-center bg-darius-card text-[9px] text-darius-text-secondary">
-                                                            {championId}
-                                                        </div>
-                                                    }
+                                            <>
+                                                <div
+                                                    class="group relative overflow-hidden rounded transition-opacity"
+                                                    data-champion-id={championId}
+                                                    classList={{
+                                                        "cursor-grab": props.canEdit(),
+                                                        "opacity-35 grayscale":
+                                                            isDragSource(),
+                                                        // A flexed champion reads as a CLASS at any
+                                                        // zoom: the whole tile is outlined, not a 12px
+                                                        // corner wedge that dropped out below ~0.5
+                                                        // zoom and never said which tiles were the
+                                                        // same champion. The tooltip still names the
+                                                        // other roles.
+                                                        "border-2 border-amber-400":
+                                                            !!flexed(),
+                                                        "border border-darius-border":
+                                                            !flexed()
+                                                    }}
+                                                    style={{
+                                                        width: `${POOL_PORTRAIT_PX}px`,
+                                                        height: `${POOL_PORTRAIT_PX}px`
+                                                    }}
+                                                    title={flexTitle()}
+                                                    // Arms a pending champion drag (Task 18) —
+                                                    // stopPropagation keeps the card root's own
+                                                    // onMouseDown (card drag) from also firing.
+                                                    // Gated on canEdit so a view-only user's
+                                                    // mousedown still bubbles to the card root
+                                                    // exactly as before this task (where it
+                                                    // no-ops on that handler's own canEdit check).
+                                                    onMouseDown={(e) => {
+                                                        if (!props.canEdit()) return;
+                                                        e.stopPropagation();
+                                                        props.onPortraitMouseDown(
+                                                            e,
+                                                            props.placement.id,
+                                                            role,
+                                                            championId
+                                                        );
+                                                    }}
                                                 >
-                                                    {(c) => (
-                                                        <img
-                                                            src={c().img}
-                                                            alt={c().name}
-                                                            draggable={false}
-                                                            class="h-full w-full object-cover"
-                                                        />
-                                                    )}
-                                                </Show>
-                                            </div>
-                                            {/* The caret for the slot AFTER
+                                                    <Show
+                                                        when={champ()}
+                                                        fallback={
+                                                            <div class="flex h-full w-full items-center justify-center bg-darius-card text-[9px] text-darius-text-secondary">
+                                                                {championId}
+                                                            </div>
+                                                        }
+                                                    >
+                                                        {(c) => (
+                                                            <img
+                                                                src={c().img}
+                                                                alt={c().name}
+                                                                draggable={false}
+                                                                class="h-full w-full object-cover"
+                                                            />
+                                                        )}
+                                                    </Show>
+                                                </div>
+                                                {/* The caret for the slot AFTER
                                                 this tile. A fragment keeps it a
                                                 sibling, so it never lands
                                                 inside a [data-champion-id]
                                                 element the hit-test measures. */}
-                                            <Show
-                                                when={caretIndex() === tileIndex() + 1}
-                                            >
-                                                <DropCaret />
-                                            </Show>
-                                          </>
+                                                <Show
+                                                    when={
+                                                        caretIndex() === tileIndex() + 1
+                                                    }
+                                                >
+                                                    <DropCaret />
+                                                </Show>
+                                            </>
                                         );
                                     }}
                                 </For>
