@@ -5,7 +5,7 @@
 //! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
 //! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
-use crate::feasibility::{champion_role_mask, RoleMask};
+use crate::feasibility::{champion_role_mask, RoleMask, ROLES};
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
@@ -127,6 +127,13 @@ pub struct Champion {
     pub id: String,
     pub positions: Vec<Role>,
     pub linear: f64,
+    /// The Master+ play share of each listed role, aligned with `positions`, or empty = unknown
+    /// (engine-role-grade design § 1, G10). Tier A fixtures omit it; the live universe copies
+    /// `ChampionMeta::position_shares`. `from_tables` validates it (one finite share in (0, 1] per
+    /// position, the maximum first — `positions[0]` is the primary by construction) and precomputes
+    /// each role's grade from it.
+    #[serde(default)]
+    pub shares: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -171,6 +178,10 @@ pub enum UniverseError {
     /// `from_tables`: a table is not `n × n` for the `n` champions given.
     #[error("{0} table is not {1}×{1}")]
     Shape(&'static str, usize),
+    /// `Champion::shares` is neither empty nor one finite share in (0, 1] per listed position with the
+    /// maximum first (engine-role-grade design § 1).
+    #[error("{0:?}: shares must be empty or one finite share in (0, 1] per listed position, the maximum first")]
+    Shares(String),
 }
 
 #[derive(Clone, Debug)]
@@ -186,6 +197,42 @@ pub struct Universe {
     /// Each champion's meta roles as the incumbent's mask (`crate::feasibility::champion_role_mask`),
     /// by index — what a role-tagged pool is read against (role-aware pools design § 1).
     role_masks: Vec<RoleMask>,
+    /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1): 0 at the
+    /// primary, `round(100 · (1 − share(role) / share(primary)))` at another listed role, 100 at a role
+    /// never played; all 0 when the shares are unknown. Read only for a placement outside the side's
+    /// pool entries in a meta role (`reference::feasibility`).
+    grades: Vec<[u8; 5]>,
+}
+
+/// `x` as a `u8` for an integral `x` in `0..=100` (a rounded, clamped grade), without a numeric cast.
+fn grade_unit(x: f64) -> u8 {
+    (0..=100u8)
+        .find(|g| f64::from(*g) == x)
+        .expect("a rounded, clamped grade is an integer in 0..=100")
+}
+
+/// G1 for one champion: the grade of every role from its shares. `f64::round` — half away from zero:
+/// shares `[0.8, 0.1]` grade the second role 88, not 87 (`1 − 0.125 = 0.875`, exactly representable).
+fn grades_of(c: &Champion) -> Result<[u8; 5], UniverseError> {
+    if c.shares.is_empty() {
+        return Ok([0; 5]);
+    }
+    let primary = c.shares[0];
+    let well_formed = c.shares.len() == c.positions.len()
+        && c.shares
+            .iter()
+            .all(|s| s.is_finite() && *s > 0.0 && *s <= 1.0 && *s <= primary);
+    if !well_formed {
+        return Err(UniverseError::Shares(c.id.clone()));
+    }
+    let mut grades = [100u8; 5];
+    for (bit, role) in ROLES.iter().enumerate() {
+        if let Some(i) = c.positions.iter().position(|r| r == role) {
+            let shortfall = (100.0 * (1.0 - c.shares[i] / primary)).round();
+            grades[bit] = grade_unit(shortfall.clamp(0.0, 100.0));
+        }
+    }
+    Ok(grades)
 }
 
 /// Interns ids in list order; refuses more than `MAX_CHAMPIONS` and duplicate ids. Shared by both
@@ -286,6 +333,10 @@ impl Universe {
                 return Err(UniverseError::NoPositions(c.id.clone()));
             }
         }
+        let grades = champions
+            .iter()
+            .map(grades_of)
+            .collect::<Result<Vec<_>, _>>()?;
         let index = intern(&champions)?;
         if synergy.len() != n || synergy.iter().any(|row| row.len() != n) {
             return Err(UniverseError::Shape("synergy", n));
@@ -373,6 +424,7 @@ impl Universe {
             live_loss,
             meta,
             role_masks,
+            grades,
         })
     }
 
@@ -447,6 +499,16 @@ impl Universe {
     /// The meta's roles for `c` as a mask (bit `i` = `crate::feasibility::ROLES[i]`).
     pub(crate) fn role_mask(&self, c: ChampionIdx) -> RoleMask {
         self.role_masks[usize::from(c.0)]
+    }
+
+    /// `c`'s grade in `role` (engine-role-grade design G1, `Universe::grades`): 0 at the primary and
+    /// whenever the shares are unknown, 100 at a role never played.
+    pub fn grade(&self, c: ChampionIdx, role: Role) -> u8 {
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        self.grades[usize::from(c.0)][bit]
     }
 
     pub fn names(&self, champions: &[ChampionIdx]) -> Vec<String> {

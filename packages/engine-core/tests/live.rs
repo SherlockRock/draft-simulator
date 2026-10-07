@@ -374,6 +374,7 @@ fn synthetic(n: usize) -> Result<Universe, UniverseError> {
             id: format!("C{i}"),
             positions: vec![Role::Top],
             linear: 0.0,
+            shares: Vec::new(),
         })
         .collect();
     let zero = vec![vec![0.0; n]; n];
@@ -398,6 +399,7 @@ fn from_tables_names_a_wrong_shape_and_a_non_finite_entry() {
                 id: format!("C{i}"),
                 positions: vec![Role::Top],
                 linear: 0.0,
+                shares: Vec::new(),
             })
             .collect()
     };
@@ -1681,6 +1683,7 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
         id: id.into(),
         positions: vec![role],
         linear: 0.0,
+        shares: Vec::new(),
     };
     let champions = vec![
         mk("T1", Role::Top),
@@ -3061,6 +3064,7 @@ fn band_universe(named: &[(&str, Role, f64)]) -> Universe {
         id: id.into(),
         positions: vec![role],
         linear,
+        shares: Vec::new(),
     };
     let mut champions: Vec<Champion> = named
         .iter()
@@ -3088,6 +3092,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
         id: id.into(),
         positions: positions.to_vec(),
         linear: 0.0,
+        shares: Vec::new(),
     };
     let mut champions = vec![
         mk("BJ", &[Role::Jungle]),
@@ -3737,11 +3742,13 @@ fn a_universe_whose_largest_live_leaf_overflows_is_refused() {
                 id: "A".into(),
                 positions: vec![Role::Top],
                 linear,
+                shares: Vec::new(),
             },
             Champion {
                 id: "B".into(),
                 positions: vec![Role::Support],
                 linear: 0.0,
+                shares: Vec::new(),
             },
         ]
     };

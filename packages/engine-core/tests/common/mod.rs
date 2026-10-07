@@ -38,6 +38,9 @@ struct ChampionMetaFile {
 struct ChampionMetaEntry {
     id: String,
     positions: Vec<String>,
+    /// `positionShares` (engine-role-grade design § 1): absent on a file from before the shares.
+    #[serde(default)]
+    position_shares: HashMap<String, f64>,
     damage_profile: DamageProfileFile,
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
@@ -111,6 +114,35 @@ pub fn parse_role(s: &str) -> Role {
     }
 }
 
+/// `positionShares` aligned with `positions` (engine-role-grade design § 1): empty when the file has
+/// none, else one share per listed role in the positions' order. A key for a role outside `positions`,
+/// or a listed role the map lacks, is a loading mistake, named.
+pub fn aligned_shares(
+    id: &str,
+    positions: &[String],
+    shares: &HashMap<String, f64>,
+) -> Result<Vec<f64>, String> {
+    if shares.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut keys: Vec<&String> = shares.keys().collect();
+    keys.sort();
+    if let Some(extra) = keys.iter().find(|k| !positions.contains(k)) {
+        return Err(format!(
+            "{id}: positionShares names {extra}, which positions does not list"
+        ));
+    }
+    positions
+        .iter()
+        .map(|p| {
+            shares
+                .get(p)
+                .copied()
+                .ok_or_else(|| format!("{id}: positionShares lacks the listed role {p}"))
+        })
+        .collect()
+}
+
 pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
     let root = repo_root();
     let champion_file: ChampionMetaFile = serde_json::from_str(
@@ -131,6 +163,12 @@ pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
         champion_meta.insert(
             id,
             ChampionMeta {
+                position_shares: aligned_shares(
+                    &entry.id,
+                    &entry.positions,
+                    &entry.position_shares,
+                )
+                .unwrap_or_else(|e| panic!("champion-meta.json: {e}")),
                 id: entry.id,
                 positions: entry.positions.iter().map(|s| parse_role(s)).collect(),
                 damage_profile: DamageProfile {

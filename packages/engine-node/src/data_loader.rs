@@ -26,6 +26,9 @@ pub enum EngineLoadError {
     },
     #[error("invalid {field} value {value:?}")]
     InvalidEnum { field: &'static str, value: String },
+    /// `positionShares` does not match `positions` (engine-role-grade design § 1).
+    #[error("champion {id}: {reason}")]
+    InvalidShares { id: String, reason: String },
 }
 
 #[derive(Deserialize)]
@@ -39,6 +42,9 @@ struct ChampionMetaFile {
 struct ChampionMetaEntry {
     id: String,
     positions: Vec<String>,
+    /// `positionShares` (engine-role-grade design § 1): absent on a file from before the shares.
+    #[serde(default)]
+    position_shares: HashMap<String, f64>,
     damage_profile: DamageProfileFile,
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
@@ -146,15 +152,51 @@ where
     })
 }
 
+/// `positionShares` aligned with `positions` (engine-role-grade design § 1): empty when the file has
+/// none, else one share per listed role in the positions' order. A key for a role outside `positions`,
+/// or a listed role the map lacks, is a load error — the engine would otherwise grade a role by
+/// another role's share.
+fn aligned_shares(
+    id: &str,
+    positions: &[String],
+    shares: &HashMap<String, f64>,
+) -> Result<Vec<f64>, EngineLoadError> {
+    if shares.is_empty() {
+        return Ok(Vec::new());
+    }
+    let invalid = |reason: String| EngineLoadError::InvalidShares {
+        id: id.to_string(),
+        reason,
+    };
+    let mut keys: Vec<&String> = shares.keys().collect();
+    keys.sort();
+    if let Some(extra) = keys.iter().find(|k| !positions.contains(k)) {
+        return Err(invalid(format!(
+            "positionShares names {extra}, which positions does not list"
+        )));
+    }
+    positions
+        .iter()
+        .map(|p| {
+            shares
+                .get(p)
+                .copied()
+                .ok_or_else(|| invalid(format!("positionShares lacks the listed role {p}")))
+        })
+        .collect()
+}
+
 fn convert_entry(entry: ChampionMetaEntry) -> Result<ChampionMeta, EngineLoadError> {
     let positions = entry
         .positions
         .iter()
         .map(|s| parse_role(s))
         .collect::<Result<Vec<_>, _>>()?;
+    let position_shares = aligned_shares(&entry.id, &entry.positions, &entry.position_shares)?;
     Ok(ChampionMeta {
         id: entry.id,
         positions,
+        position_shares,
         damage_profile: DamageProfile {
             physical: entry.damage_profile.physical,
             magic: entry.damage_profile.magic,
@@ -243,6 +285,62 @@ mod tests {
         let meta_path = write_tmp("meta2.json", &ENTRY.replace("WIN", r#","winRate":0.52"#));
         let (meta, _) = load_engine_data(&meta_path, &matchup_path).unwrap();
         assert_eq!(meta.win_rates["Ahri"], 0.52);
+    }
+
+    /// engine-role-grade design § 1, test 10: `positionShares` parses into a vector aligned with
+    /// `positions` whatever order the map's keys come in; a key outside `positions` fails; absent → empty.
+    #[test]
+    fn position_shares_parse_aligned_with_positions() {
+        let matchup_path = write_tmp(
+            "matchup-shares.json",
+            r#"{"counters":{},"synergyRules":[]}"#,
+        );
+        let with = |shares: &str| {
+            ENTRY.replace("WIN", "").replace(
+                r#""positions":["MIDDLE"]"#,
+                &format!(r#""positions":["MIDDLE","BOTTOM"]{shares}"#),
+            )
+        };
+        let meta_path = write_tmp(
+            "meta-shares.json",
+            &with(r#","positionShares":{"BOTTOM":0.3,"MIDDLE":0.6}"#),
+        );
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(
+            meta["Ahri"].position_shares,
+            vec![0.6, 0.3],
+            "aligned with positions, not the map's order"
+        );
+        assert_eq!(meta["Ahri"].share_of(Role::Adc), Some(0.3));
+        assert_eq!(meta["Ahri"].share_of(Role::Top), None);
+        let meta_path = write_tmp("meta-noshares.json", &with(""));
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta["Ahri"].position_shares, Vec::<f64>::new());
+        assert_eq!(meta["Ahri"].share_of(Role::Middle), None);
+        let meta_path = write_tmp(
+            "meta-extra.json",
+            &with(r#","positionShares":{"MIDDLE":0.6,"BOTTOM":0.3,"TOP":0.1}"#),
+        );
+        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
+            panic!("a key outside positions must fail");
+        };
+        assert!(
+            err.to_string()
+                .contains("positionShares names TOP, which positions does not list"),
+            "{err}"
+        );
+        let meta_path = write_tmp(
+            "meta-missing.json",
+            &with(r#","positionShares":{"MIDDLE":0.6}"#),
+        );
+        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
+            panic!("a listed role without a share must fail");
+        };
+        assert!(
+            err.to_string()
+                .contains("positionShares lacks the listed role BOTTOM"),
+            "{err}"
+        );
     }
 
     #[test]

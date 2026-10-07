@@ -33,10 +33,29 @@ pub struct ChampionTags {
 pub struct ChampionMeta {
     pub id: String,
     pub positions: Vec<Role>,
+    /// The Master+ play share of each listed role, aligned with `positions` (champion-meta.json's
+    /// `positionShares`; engine-role-grade design § 1, G10). Empty = unknown: a hand-entered champion,
+    /// or a file from before the shares were shipped. Nothing in the incumbent reads it; the reference
+    /// universe grades an off-role pick by `share(role) / share(primary)`.
+    pub position_shares: Vec<f64>,
     pub damage_profile: DamageProfile,
     pub scaling_profile: ScalingProfile,
     pub cc_profile: CcProfile,
     pub tags: ChampionTags,
+}
+
+impl ChampionMeta {
+    /// `role`'s share: `None` when the shares are unknown (empty, or not aligned with `positions`) or
+    /// the role is not listed.
+    pub fn share_of(&self, role: Role) -> Option<f64> {
+        if self.position_shares.len() != self.positions.len() {
+            return None;
+        }
+        self.positions
+            .iter()
+            .position(|r| *r == role)
+            .map(|i| self.position_shares[i])
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -127,6 +127,10 @@ impl LiveUniverse {
                 id: id.clone(),
                 positions,
                 linear,
+                shares: meta
+                    .get(id)
+                    .map(|m| m.position_shares.clone())
+                    .expect("ids are champion-meta keys"),
             });
             rows.push((s, a, b));
         }
