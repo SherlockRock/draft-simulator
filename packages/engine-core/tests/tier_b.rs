@@ -1078,7 +1078,8 @@ fn render_report(
         // Every verdict is classified — a ban root's is `Unusable`, so the summary counts and names
         // it (the loader already warned; review round 2, Codex E). Over Q (G8): a STAY verdict that
         // no sampled Q satisfies is an observation over the samples, never "Q > largest" — more Q
-        // need not help (fact 12), and a base top cannot move at all.
+        // need not help (fact 12), and at horizon ≥ 2 any top can move either way through its
+        // continuation's grades (the grid's smoke-2 root; plan deviation 9).
         if let Some(v) = fx.verdict {
             let c = match &be {
                 None => Constraint::Unusable("two sweep variables — read per Q column".into()),
@@ -2629,7 +2630,8 @@ fn a_role_verdict_round_trips_and_every_mistake_is_named() {
     let pair = TierBFixture::from_json(
         &splice(
             &supp_17,
-            r#""role_verdict": {"action": ["Renata", "Syndra"], "roles": ["support", "adc"], "ok": true}"#,
+            // Named in the NON-canonical order, so the re-pairing to the action's order is exercised.
+            r#""role_verdict": {"action": ["Syndra", "Renata"], "roles": ["adc", "support"], "ok": true}"#,
         ),
         "edited",
         &live,
@@ -2889,7 +2891,8 @@ fn the_role_verdict_reads_the_q_samples_through_the_same_shapes() {
     );
     let err = read(false, &[zyra_adc(0.0), zyra_mid]).expect_err("unjudged");
     assert_eq!(err, "roles differ, unjudged: Zyra placed mid at Q = 0.1");
-    // Never a graded top: skipped (an in-pool or base top does not move with Q).
+    // Never a graded top: skipped (its own placements carry no grade, so nothing the verdict
+    // judges is priced by Q — whether or not its continuation moves it).
     let err = read(false, &[ashe(0.0), ashe(0.05)]).expect_err("skipped");
     assert!(err.ends_with("— skipped"), "{err}");
     let base = sample(
@@ -2976,4 +2979,69 @@ fn on_supp_19_ashe_overtakes_zyra_at_adc_between_q_0_05_and_0_08() {
     assert!(tops[1].starts_with("Zyra "), "{tops:?}");
     assert!(tops[2].starts_with("Ashe "), "{tops:?}");
     assert!(tops[3].starts_with("Ashe "), "{tops:?}");
+}
+
+/// Design fact 11 (review round 2, `r2_doff.py`, random masks): a class read from the WEIGHTED
+/// cheapest arrangement can drift with Q. The class (`Charge::is_in_pool`) reads today's unweighted
+/// count, so it is the same at every price — asserted here on every pick action of every position of
+/// the corpus at P = 0.105, Q = 0.1 against the unpriced reading. The instances where the weighted
+/// reading WOULD differ are counted and printed, an observation: the dry run found none on this
+/// corpus (0 of 690 915), so the drift is pinned on a band board instead
+/// (`tests/role_grade.rs`, `the_split_is_the_least_totals_own_argmin`).
+#[test]
+fn the_in_pool_class_reads_the_unweighted_table_at_every_q() {
+    let live = live();
+    let u = &live.universe;
+    let loaded =
+        TierBFixture::load_dir(&dir("fixtures/tier-b"), &live).unwrap_or_else(|e| panic!("{e}"));
+    let (mut actions, mut drift) = (0u64, 0u64);
+    for l in loaded {
+        let fx = l.unwrap_or_else(|e| panic!("{e}")).fixture;
+        for n in 0..=fx.root.entries.len() {
+            let position = Position::new(&fx.root.format, &fx.root.entries[..n], &fx.root.pools, u)
+                .unwrap_or_else(|e| panic!("{} at {n}: {e}", fx.id))
+                .with_excluded(fx.root.excluded);
+            let Some(slot) = position.next_slot() else {
+                continue;
+            };
+            if slot.action != ActionType::Pick {
+                continue;
+            }
+            let pool = fx.root.pools.for_side(slot.side);
+            let weighted = action_charge(
+                &mut FeasibilityMemo::new(Price::of(0.105, 0.1)),
+                FeasibilityRule::Roster,
+                slot.side,
+                &position,
+                &fx.root.pools,
+                u,
+            );
+            let unpriced = action_charge(
+                &mut FeasibilityMemo::new(Price::ZERO),
+                FeasibilityRule::Roster,
+                slot.side,
+                &position,
+                &fx.root.pools,
+                u,
+            );
+            for a in position.pick_actions_from(position.available(u)) {
+                let c = weighted.of(a);
+                actions += 1;
+                assert_eq!(
+                    c.is_in_pool(),
+                    unpriced.of(a).is_in_pool(),
+                    "{} at {n} {a:?}: the class moved with the price",
+                    fx.id
+                );
+                let outside = a.champions().filter(|c| !pool.contains(*c)).count();
+                let weighted_in_pool =
+                    c.d_off_key.max(i8::try_from(outside).unwrap_or(i8::MAX)) == 0;
+                drift += u64::from(weighted_in_pool != c.is_in_pool());
+            }
+        }
+    }
+    println!(
+        "{actions} pick actions over the corpus's positions, {drift} whose weighted class differs"
+    );
+    assert!(actions > 100_000, "{actions}");
 }

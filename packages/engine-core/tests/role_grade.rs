@@ -483,6 +483,59 @@ fn the_split_is_the_least_totals_own_argmin() {
     );
     // At Q = 0 the same arrangement is the cheapest alone too (fact 8: made = today's made).
     assert_eq!(unweighted, weighted);
+
+    // The same board with the pool's Support entry removed (the engine's reading, printed first):
+    // the total's argmin a-Top, b-Middle leaves Jungle / Adc / Support free and the net fills two of
+    // them, so one pick is forced — `made 1, grade 50, forced 1` (2.5 + 1 against a-Jungle, b-Top's
+    // 2 + 2). With a pick to fill, the split is still the total's own cost and fills, never the
+    // cheapest arrangement's `made` with `forced` read as the difference.
+    let short = tags(
+        &u,
+        &[
+            (Role::Top, &["a"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Adc, &["A1"]),
+        ],
+    );
+    let short_pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, short);
+    let forced = off_pool(
+        &mut FeasibilityMemo::new(Price::of(1.0, 3.0)),
+        FeasibilityRule::Roster,
+        Side::Blue,
+        &position,
+        &short_pools,
+        &u,
+    );
+    println!("fact 10 board without the Support entry, at (1, 3): {forced:?}");
+    assert_eq!(
+        forced,
+        OffPool {
+            made: 1,
+            grade: 50,
+            forced: 1
+        }
+    );
+
+    // Fact 11's shape on this board (the engine's reading, printed first): picking M1 (outside the
+    // pool, Middle only) sends b to Top and a to Jungle — a leaves its in-role Top and M1 is outside,
+    // so today's count rises by TWO, while the weighted cheapest rises by one ((2, 0) → (3, 0)). The
+    // marker's count is today's at every price; the weighted delta rides the key alone.
+    let charge = action_charge(
+        &mut FeasibilityMemo::new(Price::of(1.0, 3.0)),
+        FeasibilityRule::Roster,
+        Side::Blue,
+        &position,
+        &pools,
+        &u,
+    );
+    let m1 = charge.of(Action::Pick(idx(&u, "M1")));
+    println!("M1 at (1, 3): {m1:?}");
+    assert_eq!((m1.d_off, m1.d_off_key, m1.d_grade), (2, 1, 0));
+    assert!(!m1.is_in_pool());
 }
 
 /// Design § 7 test 7 (b) and (c): a child whose RAW weighted deltas are (−1, +80) — locked `A`
@@ -1021,4 +1074,58 @@ fn the_trace_reports_the_roles_the_key_priced() {
     // A child that cannot be arranged: two Middle-only champions.
     let m1 = idx(&u, "M1");
     assert!(trace(&pools_b, Side::Blue, &pair_root, Action::pair(z2, m1)).is_empty());
+}
+
+/// RA4 under weights (the design's "not examined": no corpus pool exercises it): a pool entry under a
+/// role the meta does not list makes that role playable for the side and IN-ROLE, so no grade is read
+/// — `Y` (Top only, shares 1.0) listed under Jungle is charged nothing at Jungle, traced in-pool at
+/// grade 0, and the leaf carries no grade for it; for the other side Y cannot play Jungle at all.
+#[test]
+fn a_pool_entry_under_a_non_meta_role_is_in_role_and_never_graded() {
+    let u = with_fill(&[("Y", &["Top"], &[1.0], 0.0)]);
+    let blue = tags(&u, &[(Role::Top, &["T1"]), (Role::Jungle, &["Y"])]);
+    let pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["T1"], &["T2", "J2"]);
+    let position = at(&format, &entries, &u);
+    let price = Price::of(0.1, 0.05);
+    let y = idx(&u, "Y");
+    let charge = action_charge(
+        &mut FeasibilityMemo::new(price),
+        FeasibilityRule::Roster,
+        Side::Blue,
+        &position,
+        &pools,
+        &u,
+    );
+    let c = charge.of(Action::Pick(y));
+    let traced = placements(
+        &mut FeasibilityMemo::new(price),
+        Side::Blue,
+        &position,
+        &pools,
+        &u,
+        Action::Pick(y),
+    );
+    println!("Y under Jungle: {c:?} {traced:?}");
+    assert_eq!((c.d_off, c.d_off_key, c.d_grade), (0, 0, 0));
+    assert!(c.is_in_pool());
+    assert_eq!(
+        traced,
+        vec![Placement {
+            champion: y,
+            role: Role::Jungle,
+            grade: 0,
+            in_pool: true
+        }]
+    );
+    assert_eq!(
+        u.grade(y, Role::Jungle),
+        100,
+        "the meta never lists it: a role never played"
+    );
 }

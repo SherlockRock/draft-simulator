@@ -1427,7 +1427,8 @@ mod tests {
     /// (one- and two-role masks, every listing, every {0, 100} grade pattern on the unlisted playable
     /// roles) and every pool net of up to two listed champions, at a dyadic weighted price; then 20 000
     /// larger draws (up to five locked, six in the pool net, any masks, grades 0..=100) at dyadic
-    /// (P, q_unit) with q_unit ∈ {0, P/128, P/64, P/32}, so prices add exactly. On each: `most_in_role`
+    /// (P, q_unit) with P ∈ {0, 1/4, 1/2, 1, 2} and q_unit ∈ {0, P/128, P/64, P/32}, so prices add
+    /// exactly (at P = 0 every price is 0 and the comparator's integer keys alone decide). On each: `most_in_role`
     /// and W (today's tables), the cheapest cost and the least total (price AND the comparator's split)
     /// equal brute force; the off-role count and — with up to four roster champions the pool does not
     /// list — the lower bound: the least total's price is never above the least price over every
@@ -1508,7 +1509,7 @@ mod tests {
             };
             let (locked_len, net_len) = (next(6), next(7));
             let (locked, net) = (draw(locked_len, &mut next), draw(net_len, &mut next));
-            let p = [0.25, 0.5, 1.0, 2.0][usize::try_from(next(4)).unwrap_or(0)];
+            let p = [0.0, 0.25, 0.5, 1.0, 2.0][usize::try_from(next(5)).unwrap_or(0)];
             let q_unit =
                 [0.0, p / 128.0, p / 64.0, p / 32.0][usize::try_from(next(4)).unwrap_or(0)];
             let price = Price { p, q_unit };

@@ -25,8 +25,11 @@ use std::collections::{HashMap, HashSet};
 /// as the verdicts did. Caveats recorded with the verdicts: the user read the engine's scores
 /// (not blind) and reports some inaccuracy, and the meta's position lists are loose (Syndra, Hwei
 /// and Katarina at BOTTOM, Camille at SUPPORT), so roster options the user would never play reach
-/// the ranking — the champion-meta `playable` floor (positions refresh slice 2) is the fix, and
-/// re-reading P after it is cheap (the report, the same files).
+/// the ranking — a secondary-role option was the engine's top on 4 of the 21 positions. That is
+/// what the graded off-role cost prices (`DEFAULT_OFF_ROLE_COST`, engine slice 8; the champion-meta
+/// `playable` floor is NOT the fix — it only widens the mask); re-read P once Q is calibrated (the
+/// report, the same files). The one kept conflict is a role question: under the grade Zyra-at-adc
+/// pays for its secondary role and Ashe is the top from Q ≈ 0.077.
 pub const DEFAULT_OFF_POOL_COST: f64 = 0.10;
 
 /// The graded off-role cost Q under `FeasibilityRule::Roster` (engine-role-grade design G4): blue-win

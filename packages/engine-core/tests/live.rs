@@ -1168,7 +1168,11 @@ fn measure_depth_two_on_every_sample_root() {
 /// form, so the fidelity reading can compare at 1e-9), its continuation and the two forced counts at
 /// its leaf. `B_PROPER_ROOTS` (comma-separated labels, default all seven) restricts the roots — the
 /// exact `roster` reference at a larger budget runs only where its depth 2 can finish. Peak RSS comes from the
-/// driver (`/usr/bin/time -v`), one process per configuration.
+/// driver (`/usr/bin/time -v`), one process per configuration. `B_PROPER_Q` (default
+/// `DEFAULT_OFF_ROLE_COST`) is the graded off-role cost every `roster` search prices at
+/// (engine-role-grade § 6: the control re-runs list roots at `B_PROPER_Q=0`, the treatment the
+/// role-map roots at 0.05); the `GRID` and `GRID-ACTION` rows gain, after `form`, the top line's /
+/// the action's leaf grade units `blue_grade | red_grade`.
 /// `cargo test --release -p engine-core --test live -- --ignored --nocapture grid`
 #[test]
 #[ignore = "measurement, not a gate: cargo test --release --test live -- --ignored --nocapture grid"]
@@ -1214,6 +1218,10 @@ fn measure_b_proper_width_grid() {
         .ok()
         .map_or(DEFAULT_OFF_POOL_COST, |p| p.parse().expect("B_PROPER_P"));
     let off_pool_cost = (rule == FeasibilityRule::Roster).then_some(p);
+    let q: f64 = std::env::var("B_PROPER_Q")
+        .ok()
+        .map_or(DEFAULT_OFF_ROLE_COST, |q| q.parse().expect("B_PROPER_Q"));
+    let off_role_cost = (rule == FeasibilityRule::Roster).then_some(q);
     let snipe_key = match std::env::var("B_PROPER_SNIPE_KEY").as_deref() {
         Ok("on") => true,
         Ok("off") | Err(_) => false,
@@ -1307,8 +1315,8 @@ fn measure_b_proper_width_grid() {
         FeasibilityRule::PoolOrRoster => "pool_or_roster",
         _ => unreachable!(),
     };
-    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top | snipe_key | snipe_charged | top_blue_forced | top_red_forced | form");
-    println!("GRID-ACTION-HEADER | root | rule | widths | snipe_key | depth | partial | action | value | continuation | blue_forced | red_forced | form");
+    println!("GRID-HEADER | root | rule | widths | depth | partial | cumulative_ms | nodes | leaves | orderings | cutoffs | table_hits | table_entries | root_fan | searched | top | top_set | top_class | margin_vs_other_class | other_class_top | snipe_key | snipe_charged | top_blue_forced | top_red_forced | form | top_blue_grade | top_red_grade");
+    println!("GRID-ACTION-HEADER | root | rule | widths | snipe_key | depth | partial | action | value | continuation | blue_forced | red_forced | form | blue_grade | red_grade");
     for (label, root) in &roots {
         let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
         let started = std::time::Instant::now();
@@ -1396,8 +1404,11 @@ fn measure_b_proper_width_grid() {
                 }
                 _ => ("-".to_string(), "-".to_string(), "-".to_string()),
             };
+            let grades = |r: &engine_core::reference::search::RankedAction| {
+                format!("{} | {}", r.ends.blue_grade, r.ends.red_grade)
+            };
             println!(
-                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other} | {key_name} | {} | {} | {form}",
+                "GRID | {label} | {rule_name} | {widths} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {top_class} | {margin} | {other} | {key_name} | {} | {} | {form} | {}",
                 o.depth,
                 partial,
                 started.elapsed().as_millis(),
@@ -1412,16 +1423,18 @@ fn measure_b_proper_width_grid() {
                 top,
                 o.top_set.len(),
                 o.snipe_charged,
-                o.ranked.first().map_or("- | -".to_string(), forced)
+                o.ranked.first().map_or("- | -".to_string(), forced),
+                o.ranked.first().map_or("- | -".to_string(), grades)
             );
             for r in &o.ranked {
                 println!(
-                    "GRID-ACTION | {label} | {rule_name} | {widths} | {key_name} | {} | {partial} | {} | {} | {} | {} | {form}",
+                    "GRID-ACTION | {label} | {rule_name} | {widths} | {key_name} | {} | {partial} | {} | {} | {} | {} | {form} | {}",
                     o.depth,
                     name(&r.action),
                     r.value,
                     r.continuation.iter().map(name).collect::<Vec<_>>().join(" "),
-                    forced(r)
+                    forced(r),
+                    grades(r)
                 );
             }
         };
@@ -1435,8 +1448,7 @@ fn measure_b_proper_width_grid() {
                 mode: Mode::Horizon(max_depth),
                 epsilon: 1e-9,
                 off_pool_cost,
-                // Q = 0 on every live position run through here: the slice-7 record.
-                off_role_cost: off_pool_cost.map(|_| 0.0),
+                off_role_cost,
             },
             &SearchParams {
                 node_budget: Some(budget),
