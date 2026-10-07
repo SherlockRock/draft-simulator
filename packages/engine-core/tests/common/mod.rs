@@ -226,52 +226,20 @@ pub fn load_production_data_from(meta_path: &Path) -> (MetaData, HashMap<String,
 /// backend/services/navigatorEngine.js:31-43 DEFAULT_PHASE_WEIGHTS.blue
 pub fn phase_weights_blue() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights {
-            comp: 0.35,
-            info: 0.65,
-            coverage: 0.0,
-        },
-        pick1: PhaseWeights {
-            comp: 0.5,
-            info: 0.5,
-            coverage: 0.3,
-        },
-        ban2: PhaseWeights {
-            comp: 0.6,
-            info: 0.4,
-            coverage: 0.4,
-        },
-        pick2: PhaseWeights {
-            comp: 0.8,
-            info: 0.2,
-            coverage: 1.5,
-        },
+        ban1: PhaseWeights { comp: 0.35, info: 0.65, coverage: 0.0 },
+        pick1: PhaseWeights { comp: 0.5, info: 0.5, coverage: 0.3 },
+        ban2: PhaseWeights { comp: 0.6, info: 0.4, coverage: 0.4 },
+        pick2: PhaseWeights { comp: 0.8, info: 0.2, coverage: 1.5 },
     }
 }
 
 /// backend/services/navigatorEngine.js:31-43 DEFAULT_PHASE_WEIGHTS.red
 pub fn phase_weights_red() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights {
-            comp: 0.3,
-            info: 0.7,
-            coverage: 0.0,
-        },
-        pick1: PhaseWeights {
-            comp: 0.4,
-            info: 0.6,
-            coverage: 0.3,
-        },
-        ban2: PhaseWeights {
-            comp: 0.5,
-            info: 0.5,
-            coverage: 0.4,
-        },
-        pick2: PhaseWeights {
-            comp: 0.8,
-            info: 0.2,
-            coverage: 1.5,
-        },
+        ban1: PhaseWeights { comp: 0.3, info: 0.7, coverage: 0.0 },
+        pick1: PhaseWeights { comp: 0.4, info: 0.6, coverage: 0.3 },
+        ban2: PhaseWeights { comp: 0.5, info: 0.5, coverage: 0.4 },
+        pick2: PhaseWeights { comp: 0.8, info: 0.2, coverage: 1.5 },
     }
 }
 
@@ -317,10 +285,7 @@ pub fn eval_context(
         our_picks,
         opp_picks,
         // backend/services/navigatorEngine.js:167
-        penalties: Penalties {
-            out_of_role: 0.25,
-            out_of_pool: 0.75,
-        },
+        penalties: Penalties { out_of_role: 0.25, out_of_pool: 0.75 },
         champion_meta: champion_meta.clone(),
         meta: meta.clone(),
         phase_weights_blue: phase_weights_blue(),

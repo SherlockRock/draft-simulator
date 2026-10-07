@@ -2652,10 +2652,13 @@ fn a_role_verdict_round_trips_and_every_mistake_is_named() {
     let plain = TierBFixture::from_json(&supp_19, "plain", &live).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(plain.fixture.role_verdict, None);
 
-    let supp_17 = corpus("2026-10-04-supp-pinch-slot-17-dme");
+    // The pair case is spliced into the 2026-09-29 supp-17 file — the same slot-17 DME pair root
+    // without a shipped `role_verdict` (the 2026-10-04 file carries one since 2026-10-07; a second
+    // key would be a duplicate field).
+    let supp_17_artefact = corpus("2026-09-29-supp-pinch-slot-17-dme");
     let pair = TierBFixture::from_json(
         &splice(
-            &supp_17,
+            &supp_17_artefact,
             // Named in the NON-canonical order, so the re-pairing to the action's order is exercised.
             r#""role_verdict": {"action": ["Syndra", "Renata"], "roles": ["adc", "support"], "ok": true}"#,
         ),
@@ -2678,6 +2681,22 @@ fn a_role_verdict_round_trips_and_every_mistake_is_named() {
         vec![Role::Adc, Role::Support]
     };
     assert_eq!(expected.roles, in_action_order);
+
+    // The SHIPPED verdict on the 2026-10-04 supp-17 file (Renata support + Syndra adc, ok = false —
+    // the user's 2026-10-04 flag on Syndra-at-adc, added 2026-10-07) loads as written.
+    let shipped = TierBFixture::from_json(
+        &corpus("2026-10-04-supp-pinch-slot-17-dme"),
+        "shipped",
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let shipped = shipped
+        .fixture
+        .role_verdict
+        .expect("the shipped role verdict");
+    assert_eq!(shipped.action, Action::pair(renata, syndra));
+    assert!(!shipped.ok);
+    assert_eq!(shipped.roles, in_action_order);
 
     let refused = |field: &str| -> String {
         match TierBFixture::from_json(&splice(&supp_19, field), "edited", &live) {
