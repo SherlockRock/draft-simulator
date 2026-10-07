@@ -1,7 +1,7 @@
 {
   "id": "2026-09-29-supp-pinch-slot-19-kittens",
   "category": "off-pool",
-  "notes": "User's 'support pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. Kittens (Red) pick at slot 19. Picks after slot 15 are the engine's in-pool continuation, user-vetted.",
+  "notes": "User's 'support pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. Kittens (Red) pick at slot 19. Picks after slot 15 are the engine's in-pool continuation, user-vetted. 2026-10-07: role_verdict added (engine-role-grade § 6) — the Q question on this position's graded top under the 16.19 recency table at P = 0.105, Q ≤ 0.05 (Karthus at adc, grade 52, r 0.48): the user judged the placement playable, ok = true; the 2026-10-04 off_pool verdict is untouched.",
   "source": {
     "fm_version": "fm-2026-09-01-6880daa",
     "meta_version": "16.13.1",
@@ -233,6 +233,13 @@
   "our_side": "Red",
   "verdict": {
     "off_pool": true
+  },
+  "role_verdict": {
+    "action": "Karthus",
+    "roles": [
+      "adc"
+    ],
+    "ok": true
   },
   "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Viktor in the ADC slot, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool."
 }
