@@ -303,6 +303,7 @@ impl Fixture {
             mode,
             epsilon: self.epsilon,
             off_pool_cost: None,
+            off_role_cost: None,
         })
     }
 }

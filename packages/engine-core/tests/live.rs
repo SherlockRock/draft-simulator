@@ -11,7 +11,7 @@ use engine_core::fm::FmWeights;
 use engine_core::pools::{Role, RolePoolMap};
 use engine_core::reference::feasibility::{
     action_charge, critical_pool, off_pool, off_pool_count, ActionCharge, FeasibilityMemo,
-    FeasibilityRule,
+    FeasibilityRule, Price,
 };
 use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::live::{
@@ -26,10 +26,10 @@ use engine_core::reference::search::{
 };
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::TierBFixture;
-use engine_core::reference::universe::DEFAULT_OFF_POOL_COST;
 use engine_core::reference::universe::{
     Champion, ChampionIdx, ChampionSet, Universe, UniverseError, MAX_CHAMPIONS,
 };
+use engine_core::reference::universe::{DEFAULT_OFF_POOL_COST, DEFAULT_OFF_ROLE_COST};
 use proptest::prelude::*;
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -641,6 +641,8 @@ fn run_with(
             mode,
             epsilon: 1e-9,
             off_pool_cost,
+            // Q = 0 on every live position run through here: the slice-7 record.
+            off_role_cost: off_pool_cost.map(|_| 0.0),
         },
         params,
         &CancelHandle::new(),
@@ -755,6 +757,7 @@ fn the_sample_state_converts_at_every_root_shape() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: None,
+            off_role_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -933,6 +936,7 @@ fn a_pool_without_a_role_is_refused_at_the_root_not_ranked() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: None,
+            off_role_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -1312,7 +1316,7 @@ fn measure_b_proper_width_grid() {
         // The mover's action charge (`feasibility::ActionCharge`): the class of an action is what the
         // search's own root split uses — in-pool = it adds no off-pool pick.
         let charge = action_charge(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             rule,
             mover,
             &position,
@@ -1329,7 +1333,7 @@ fn measure_b_proper_width_grid() {
                 .fold(position.apply(r.action), |p, a| p.apply(*a));
             let of = |side: Side, off: usize| {
                 let made = off_pool(
-                    &mut FeasibilityMemo::default(),
+                    &mut FeasibilityMemo::new(Price::ZERO),
                     rule,
                     side,
                     &leaf,
@@ -1431,6 +1435,8 @@ fn measure_b_proper_width_grid() {
                 mode: Mode::Horizon(max_depth),
                 epsilon: 1e-9,
                 off_pool_cost,
+                // Q = 0 on every live position run through here: the slice-7 record.
+                off_role_cost: off_pool_cost.map(|_| 0.0),
             },
             &SearchParams {
                 node_budget: Some(budget),
@@ -1468,7 +1474,7 @@ fn an_exhausted_pool_draws_from_the_roster_under_pool_or_roster() {
     let root = LiveRoot::from_draft_state(&state_at(&s, 11), &s.pools.blue, &tiny_red, &[], u)
         .unwrap_or_else(|e| panic!("{e}"));
     let position = root.position(u).unwrap_or_else(|e| panic!("{e}"));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
 
     // The gate: two legal picks, and the side cannot finish — the search refuses at the root.
     assert_eq!(position.legal_actions(u, &root.pools).len(), 2);
@@ -1486,6 +1492,7 @@ fn an_exhausted_pool_draws_from_the_roster_under_pool_or_roster() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: None,
+            off_role_cost: None,
         },
         &params(None),
         &CancelHandle::new(),
@@ -1734,6 +1741,7 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -2057,6 +2065,7 @@ fn the_shortlist_is_a_pure_function_of_the_position() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: Some(0.1),
+        off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
     };
     let run_at = |sl: Shortlist, transposition: bool| -> SearchOutcome {
         let p = SearchParams {
@@ -2143,7 +2152,7 @@ fn truncation_keeps_feasible_children_first_and_fills_from_failures() {
         (position.mover(), position.slot_index()),
         (Some(Side::Red), 7)
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 45);
     let ordered = static_order(&u, &position, Side::Red, actions, None, None);
@@ -2260,7 +2269,7 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
         .map(|id| Entry::Ban(idx(id)))
         .collect();
     let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 6, "BA X K7 K8 K9 K10");
     let first_two = |off_pool: Option<(ChampionSet, f64)>| -> Vec<Action> {
@@ -2379,6 +2388,7 @@ fn under_pool_or_roster_a_shortlist_orders_by_the_off_pool_term_too() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -2525,6 +2535,7 @@ fn the_snipe_aware_key_finds_the_width_one_snipe_line() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
         .unwrap_or_else(|e| panic!("{e}"));
@@ -2577,6 +2588,7 @@ fn under_roster_the_snipe_aware_key_finds_the_p_sized_snipe() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: Some(p),
+        off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let exact = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -2640,6 +2652,7 @@ fn without_a_shortlist_the_snipe_key_is_inert_under_pool_or_roster() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let run_with = |snipe_key: bool| {
         let p = SearchParams {
@@ -2681,7 +2694,7 @@ fn without_a_shortlist_the_snipe_key_is_inert_under_pool_or_roster() {
         ..Pools::default()
     };
     let gated = Position::new(&format, &entries, &overlap, &u).unwrap_or_else(|e| panic!("{e}"));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert_eq!(
         critical_pool(&mut memo, Side::Blue, &gated, &overlap, &u),
         [idx("BS"), idx("A1")].into_iter().collect(),
@@ -2716,6 +2729,7 @@ fn without_a_shortlist_the_snipe_key_is_inert_under_pool_or_roster() {
         objective: &u1,
         feasibility: FeasibilityRule::Roster,
         off_pool_cost: Some(0.15),
+        off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
         ..input
     };
     let roster_with = |snipe_key: bool| {
@@ -2769,7 +2783,7 @@ fn a_pair_of_two_critical_champions_takes_the_snipe_term_twice() {
         (position.mover(), position.slot_index()),
         (Some(Side::Red), 7)
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let critical = critical_pool(&mut memo, Side::Blue, &position, &pools, &u);
     assert_eq!(critical, set(&["BJ", "BM", "BA", "BS"]));
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
@@ -2825,6 +2839,7 @@ fn the_snipe_aware_key_is_a_pure_function_of_the_position() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let run_at = |snipe_key: bool, transposition: bool| {
         let p = SearchParams {
@@ -2953,7 +2968,7 @@ fn the_snipe_aware_key_brings_smoke_1_sylas_into_the_root_set_at_width_a() {
     let one = smoke(&live, "2026-09-27-smoke-1-blue-first-pick");
     let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
     let position = one.root.position(u).unwrap_or_else(|e| panic!("{e}"));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert_eq!(
         critical_pool(&mut memo, Side::Red, &position, &one.root.pools, u),
         [idx("MonkeyKing"), idx("Sylas")].into_iter().collect(),
@@ -3144,7 +3159,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
     };
     let first = entries(&bans);
     let position = Position::new(&format, &first, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert_eq!(
         critical_pool(&mut memo, Side::Blue, &position, &pools, &u),
         set(&["BJ", "FA", "FB", "FC"]),
@@ -3281,7 +3296,7 @@ fn an_off_pool_support_beats_every_in_pool_suicide_fifth_pick() {
         (position.mover(), position.slot_index()),
         (Some(Side::Red), 19)
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     // The gate refuses (two in-pool non-supports cannot finish); the live rule widens to X1, X2, S.
     let widened = legal_actions_under(
         &position,
@@ -3300,6 +3315,7 @@ fn an_off_pool_support_beats_every_in_pool_suicide_fifth_pick() {
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -3411,6 +3427,7 @@ fn two_forced_off_pool_picks_beat_a_suicide_pair() {
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -3528,7 +3545,7 @@ fn a_pool_short_by_two_roles_is_charged_two_forced_picks() {
         (position.mover(), position.slot_index()),
         (Some(Side::Blue), 13)
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert_eq!(
         off_pool_count(
             &mut memo,
@@ -3561,6 +3578,7 @@ fn a_pool_short_by_two_roles_is_charged_two_forced_picks() {
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -3885,6 +3903,7 @@ fn self_break_does_not_pay_when_a_roster_champion_is_worth_having() {
         mode: Mode::Horizon(3),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     };
     let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
     let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -4011,6 +4030,7 @@ fn on_the_round5_probe_under_roster_the_self_ban_does_not_pay_and_denying_the_ro
             mode: Mode::Horizon(3),
             epsilon: 1e-9,
             off_pool_cost: Some(p),
+            off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
         };
         let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
         let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -4153,6 +4173,8 @@ fn under_roster_a_snipe_of_a_sole_role_champion_is_p_neutral_and_a_self_ban_can_
             mode: Mode::Horizon(3),
             epsilon: 1e-9,
             off_pool_cost: p,
+            // P reaches L in one run: no room for Q (P + Q ≤ L).
+            off_role_cost: p.map(|_| 0.0),
         };
         let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
         let engine = search(&input, &params(None), &CancelHandle::new(), |_| {})
@@ -4341,6 +4363,7 @@ fn a_board_whose_locked_picks_cannot_fill_five_roles_is_ranked_not_refused() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: None,
+            off_role_cost: None,
         },
         &params(None),
         &CancelHandle::new(),

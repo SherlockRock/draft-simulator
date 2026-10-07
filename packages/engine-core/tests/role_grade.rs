@@ -6,9 +6,16 @@
 mod common;
 
 use common::{aligned_shares, load_production_data, repo_root};
+use engine_core::cancellation::CancelHandle;
+use engine_core::engine::EngineError;
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
+use engine_core::reference::feasibility::{FeasibilityMemo, FeasibilityRule, Price};
+use engine_core::reference::format::Format;
 use engine_core::reference::live::LiveUniverse;
+use engine_core::reference::oracle::{evaluate, Mode, OracleError, OracleInput};
+use engine_core::reference::search::{search, SearchParams};
+use engine_core::reference::state::{Pools, Position};
 use engine_core::reference::universe::{Champion, Universe, UniverseError, UniverseSpec};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -187,4 +194,135 @@ fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() 
     );
     println!("Zyra grades jungle / support / adc / top: {g:?}");
     assert_eq!(g, (0, 15, 71, 100));
+}
+
+/// Two single-role champions per role, no tables: ten champions, so the oracle's bound holds.
+fn band() -> Universe {
+    let ids = ["T1", "T2", "J1", "J2", "M1", "M2", "A1", "A2", "S1", "S2"];
+    let roles = [
+        "Top", "Top", "Jungle", "Jungle", "Middle", "Middle", "Adc", "Adc", "Support", "Support",
+    ];
+    let list: Vec<String> = ids
+        .iter()
+        .zip(roles)
+        .map(|(id, role)| format!(r#"{{"id": "{id}", "positions": ["{role}"], "linear": 0}}"#))
+        .collect();
+    let spec: UniverseSpec =
+        serde_json::from_str(&format!(r#"{{"champions": [{}]}}"#, list.join(",")))
+            .unwrap_or_else(|e| panic!("{e}"));
+    Universe::new(spec).unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+/// Design § 4 and § 7 test 6 (the validation half): under `roster` Q is required, finite,
+/// non-negative and capped so that P + Q ≤ L — P + Q = L is accepted, P + Q > L refused with a message
+/// naming both; under every other rule a value is refused. The oracle and the search say the same.
+#[test]
+fn off_role_cost_is_required_under_roster_capped_with_p_at_l_and_refused_elsewhere() {
+    let u = band();
+    let format = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    let position = Position::new(&format, &[], &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    let l = u.loss();
+    let input = |rule: FeasibilityRule, p: Option<f64>, q: Option<f64>| OracleInput {
+        position: &position,
+        universe: &u,
+        pools: &pools,
+        objective: &u,
+        feasibility: rule,
+        mode: Mode::Horizon(1),
+        epsilon: 1e-9,
+        off_pool_cost: p,
+        off_role_cost: q,
+    };
+    let both = |rule: FeasibilityRule,
+                p: Option<f64>,
+                q: Option<f64>|
+     -> (Option<String>, Option<String>) {
+        let oracle = evaluate(&input(rule, p, q)).err().map(|e| e.to_string());
+        let searched = search(
+            &input(rule, p, q),
+            &SearchParams::default(),
+            &CancelHandle::new(),
+            |_| {},
+        )
+        .err()
+        .map(|e| match e {
+            EngineError::InvalidInput { path } => path.join("/"),
+            other => panic!("{other:?}"),
+        });
+        (oracle, searched)
+    };
+    let refused = |rule: FeasibilityRule, p: Option<f64>, q: Option<f64>, word: &str| {
+        let (oracle, searched) = both(rule, p, q);
+        println!("{rule:?} P {p:?} Q {q:?}: oracle {oracle:?} search {searched:?}");
+        for text in [oracle, searched] {
+            let text = text.unwrap_or_else(|| panic!("{rule:?} P {p:?} Q {q:?} must be refused"));
+            assert!(
+                text.starts_with("off_role_cost: ") && text.contains(word),
+                "{rule:?} P {p:?} Q {q:?}: {text}"
+            );
+        }
+    };
+    use FeasibilityRule::{Off, On, PoolOrRoster, Roster};
+    refused(Roster, Some(0.1), None, "required");
+    refused(Roster, Some(0.1), Some(f64::NAN), "not finite");
+    refused(Roster, Some(0.1), Some(f64::INFINITY), "not finite");
+    refused(Roster, Some(0.1), Some(-0.01), "negative");
+    refused(Roster, Some(0.1), Some(l), "exceeds L");
+    let (oracle, _) = both(Roster, Some(0.1), Some(l));
+    let text = oracle.expect("refused");
+    assert!(
+        text.contains("P + Q = 0.1 + ") && text.contains(&format!("exceeds L = {l}")),
+        "{text}"
+    );
+    for rule in [PoolOrRoster, On, Off] {
+        refused(
+            rule,
+            None,
+            Some(0.05),
+            &format!("not read under {}", rule.wire_name()),
+        );
+    }
+    // Accepted: P + Q = L exactly, from either end.
+    assert_eq!(
+        both(Roster, Some(0.0), Some(l)),
+        (None, None),
+        "P = 0, Q = L"
+    );
+    assert_eq!(
+        both(Roster, Some(l), Some(0.0)),
+        (None, None),
+        "P = L, Q = 0"
+    );
+    assert_eq!(both(Roster, Some(0.1), Some(0.05)), (None, None));
+    // The typed error is `OffRoleCost`, beside `OffPoolCost`.
+    assert!(matches!(
+        evaluate(&input(Roster, Some(0.1), None)),
+        Err(OracleError::OffRoleCost { .. })
+    ));
+}
+
+/// Design § 2: the memo carries the price it was built at (`Price::of` turns Q into a per-grade-unit
+/// price); `Default` is gone, so no reader can build an unpriced memo by accident.
+#[test]
+fn the_memo_carries_its_price() {
+    let memo = FeasibilityMemo::new(Price::of(0.1, 0.05));
+    assert_eq!(
+        memo.price(),
+        Price {
+            p: 0.1,
+            q_unit: 0.0005
+        }
+    );
+    assert_eq!(
+        FeasibilityMemo::new(Price::ZERO).price(),
+        Price {
+            p: 0.0,
+            q_unit: 0.0
+        }
+    );
 }

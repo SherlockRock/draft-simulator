@@ -12,12 +12,14 @@
 
 use super::feasibility::{
     action_charge, critical_pool, locked_matchable, side_feasible, tags_for, ActionCharge,
-    FeasibilityMemo, FeasibilityRule,
+    FeasibilityMemo, FeasibilityRule, Price,
 };
 use super::format::Slot;
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, LeafKind, NodeKind};
 use super::objective::{Leaf, Objective};
-use super::oracle::{check_role_tags, resolve_off_pool_cost, Mode, OracleError, OracleInput};
+use super::oracle::{
+    check_role_tags, resolve_off_pool_cost, resolve_off_role_cost, Mode, OracleError, OracleInput,
+};
 use super::state::{Action, Pools, Position};
 use super::transposition::{Entry, Key, TranspositionTable};
 use super::universe::{ChampionSet, Universe};
@@ -716,9 +718,11 @@ pub fn search(
         }
     }
     let off_pool_cost = resolve_off_pool_cost(input).map_err(invalid)?;
+    let off_role_cost = resolve_off_role_cost(input, off_pool_cost).map_err(invalid)?;
     check_role_tags(input).map_err(invalid)?;
+    // The search's ONLY memo: priced, so every leaf and key below reads this search's (P, Q).
     let mut shared = Shared {
-        memo: FeasibilityMemo::default(),
+        memo: FeasibilityMemo::new(Price::of(off_pool_cost, off_role_cost)),
         table: TranspositionTable::default(),
         nodes_total: 0,
         off_pool_cost,

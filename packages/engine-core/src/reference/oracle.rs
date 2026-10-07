@@ -6,7 +6,7 @@
 //! (slice-4 R1). The reference search (`super::search`) is compared against
 //! `evaluate(.., Horizon(h))` at every h.
 
-use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use super::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule, Price};
 use super::node::{classify, legal_actions_under, ClassifyError, LeafEnd, NodeKind};
 use super::objective::{Leaf, Objective};
 use super::state::{Action, Pools, Position};
@@ -74,6 +74,9 @@ pub enum OracleError {
     /// `OracleInput::off_pool_cost` does not fit the rule (B-proper design § 1).
     #[error("off_pool_cost: {reason}")]
     OffPoolCost { reason: String },
+    /// `OracleInput::off_role_cost` does not fit the rule, or P + Q exceeds L (engine-role-grade G4).
+    #[error("off_role_cost: {reason}")]
+    OffRoleCost { reason: String },
     /// A role-tagged pool where role tags are not read (role-aware pools design § 1).
     #[error("role tags: {reason}")]
     RoleTags { reason: String },
@@ -101,6 +104,14 @@ pub struct OracleInput<'a> {
     /// = L by construction and the gate rules have no off-pool picks. A silently ignored value would
     /// be the trap review round 5 removed from `Objective::value_under`.
     pub off_pool_cost: Option<f64>,
+    /// Q, the graded off-role cost per 100 grade units (engine-role-grade design G4), in the
+    /// objective's unit: a champion placed outside its pool entries in a secondary meta role pays
+    /// `grade · Q / 100` beside P. Read under `FeasibilityRule::Roster` ONLY, where it is required
+    /// (`DEFAULT_OFF_ROLE_COST` is the assumption); every other rule refuses a value
+    /// (`OracleError::OffRoleCost`): `PoolOrRoster` charges Q = 0 by design (G3) and the gate rules
+    /// price nothing. Validated with P: finite, ≥ 0, and P + Q ≤ L, which keeps the live band L'
+    /// separating (feasible live leaves span `board ± 5 · (P + Q)`).
+    pub off_role_cost: Option<f64>,
 }
 
 /// The P this search prices off-pool picks at, from the rule and `OracleInput::off_pool_cost`
@@ -130,6 +141,38 @@ pub fn resolve_off_pool_cost(input: &OracleInput<'_>) -> Result<f64, OracleError
         (FeasibilityRule::On | FeasibilityRule::Off, None) => Ok(0.0),
         (rule, Some(_)) => Err(refuse(format!(
             "not read under {rule:?}: pool_or_roster prices at P = L itself and the gate rules have no off-pool picks"
+        ))),
+    }
+}
+
+/// The Q this search grades off-role placements at, from the rule, `OracleInput::off_role_cost` and
+/// the resolved P (engine-role-grade design G4): `Roster` → the input's value, required, finite, ≥ 0
+/// and with `p + q ≤ L` (the message names both); `PoolOrRoster` / `On` / `Off` → 0 (Q is not read
+/// there; the gate rules price nothing); a value under any of these three is refused.
+pub fn resolve_off_role_cost(input: &OracleInput<'_>, p: f64) -> Result<f64, OracleError> {
+    let refuse = |reason: String| OracleError::OffRoleCost { reason };
+    match (input.feasibility, input.off_role_cost) {
+        (FeasibilityRule::Roster, Some(q)) => {
+            let l = input.universe.loss();
+            if !q.is_finite() {
+                Err(refuse(format!("{q} is not finite")))
+            } else if q < 0.0 {
+                Err(refuse(format!("{q} is negative")))
+            } else if p + q > l {
+                Err(refuse(format!(
+                    "P + Q = {p} + {q} exceeds L = {l}: the live band L' = L + 10·L separates feasible leaves only while P + Q ≤ L"
+                )))
+            } else {
+                Ok(q)
+            }
+        }
+        (FeasibilityRule::Roster, None) => Err(refuse(
+            "required under roster (DEFAULT_OFF_ROLE_COST is the assumption)".to_string(),
+        )),
+        (FeasibilityRule::PoolOrRoster | FeasibilityRule::On | FeasibilityRule::Off, None) => Ok(0.0),
+        (rule, Some(_)) => Err(refuse(format!(
+            "not read under {}: pool_or_roster charges Q = 0 by design and the gate rules price nothing",
+            rule.wire_name()
         ))),
     }
 }
@@ -266,12 +309,14 @@ pub fn evaluate(input: &OracleInput<'_>) -> Result<Evaluation, OracleError> {
         return Err(OracleError::HorizonZero);
     }
     let off_pool_cost = resolve_off_pool_cost(input)?;
+    let off_role_cost = resolve_off_role_cost(input, off_pool_cost)?;
     check_role_tags(input)?;
 
     let started = Instant::now();
+    // The oracle's ONLY memo: priced, so every leaf and key below reads this search's (P, Q).
     let mut search = Search {
         input,
-        memo: FeasibilityMemo::default(),
+        memo: FeasibilityMemo::new(Price::of(off_pool_cost, off_role_cost)),
         off_pool_cost,
         leaves: 0,
         nodes: 0,

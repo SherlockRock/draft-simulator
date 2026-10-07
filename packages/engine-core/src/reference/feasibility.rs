@@ -56,6 +56,35 @@ impl FeasibilityRule {
     }
 }
 
+/// The prices one search reads (engine-role-grade design § 2): `p` per off-pool unit and `q_unit` =
+/// Q / 100 per grade unit, in the objective's unit. Fixed on the memo at construction — the oracle and
+/// the search build it after resolving both knobs — because the weighted tables the memo will hold are
+/// chosen in the cost order AT this price: a memo must never be shared across a different (P, Q), as it
+/// is never shared across different pools.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Price {
+    pub p: f64,
+    pub q_unit: f64,
+}
+
+impl Price {
+    /// Unpriced: what a legality-only reader builds (`tier_b`'s one-shot check, the tests that read
+    /// counts and classes). Every unweighted quantity is the same at any price, and at Q = 0 so is every
+    /// weighted one (the exchange theorem, design fact 8).
+    pub const ZERO: Self = Self {
+        p: 0.0,
+        q_unit: 0.0,
+    };
+
+    /// From the two resolved knobs: P and Q in blue-win logits, Q per 100 grade units.
+    pub fn of(off_pool_cost: f64, off_role_cost: f64) -> Self {
+        Self {
+            p: off_pool_cost,
+            q_unit: off_role_cost / 100.0,
+        }
+    }
+}
+
 /// Memo keyed on `(side, locked set, candidate set)` — the candidates are the pool net of the board,
 /// or everything available under `PoolOrRoster`'s roster query. Both sets are monotone along any
 /// line of play, so the key identifies the predicate's inputs exactly — but only for a fixed
@@ -70,9 +99,10 @@ impl FeasibilityRule {
 /// pool net)` (the snipe-aware key, design `engine-snipe-key-design.md` § 2). No key carries the pools:
 /// a role-tagged side (`tags_for`) answers `locked` and `memo` on its own playable masks, so a memo
 /// must never be shared across different pools either — one per search, as the search and the oracle
-/// build it.
-#[derive(Debug, Default)]
+/// build it. Nor across a different (P, Q): the price is fixed at construction (`Price`).
+#[derive(Debug)]
 pub struct FeasibilityMemo {
+    price: Price,
     memo: HashMap<(Side, ChampionSet, ChampionSet), bool>,
     ranks: HashMap<(Side, ChampionSet, ChampionSet), usize>,
     locked: HashMap<(Side, ChampionSet), bool>,
@@ -85,6 +115,29 @@ pub struct FeasibilityMemo {
     weights: HashMap<(Side, ChampionSet, ChampionSet), Option<usize>>,
     pub calls: u64,
     pub misses: u64,
+}
+
+impl FeasibilityMemo {
+    /// An empty memo for one search at `price`. The oracle and the search build theirs after
+    /// resolving (P, Q) (`oracle::resolve_off_pool_cost`, `resolve_off_role_cost`); a reader of
+    /// legality, counts or classes alone builds one at `Price::ZERO`.
+    pub fn new(price: Price) -> Self {
+        Self {
+            price,
+            memo: HashMap::new(),
+            ranks: HashMap::new(),
+            locked: HashMap::new(),
+            critical: HashMap::new(),
+            profiles: HashMap::new(),
+            weights: HashMap::new(),
+            calls: 0,
+            misses: 0,
+        }
+    }
+
+    pub fn price(&self) -> Price {
+        self.price
+    }
 }
 
 /// `side`'s role tags where they are read (role-aware pools design § 1): the pool carries them, the

@@ -11,7 +11,7 @@ use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
 use engine_core::reference::feasibility::{
     action_charge, critical_pool, off_pool, pool_can_complete, side_feasible, FeasibilityMemo,
-    FeasibilityRule,
+    FeasibilityRule, Price,
 };
 use engine_core::reference::live::LiveUniverse;
 use engine_core::reference::node::legal_actions_under;
@@ -648,7 +648,7 @@ fn render_report(
         // The mover's action charge (role-aware pools design § 2): the marker and the break-even's class
         // read what the search's root split reads. The same under either live rule.
         let charge = action_charge(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             FeasibilityRule::Roster,
             root.side,
             &position,
@@ -700,6 +700,8 @@ fn render_report(
                     mode,
                     epsilon: 1e-9,
                     off_pool_cost,
+                    // Q = 0 on every live position here: the slice-7 record.
+                    off_role_cost: off_pool_cost.map(|_| 0.0),
                 },
                 &SearchParams {
                     node_budget: Some(limits.node_budget),
@@ -1381,7 +1383,7 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                 for rule in [FeasibilityRule::PoolOrRoster, FeasibilityRule::Roster] {
                     for side in [Side::Blue, Side::Red] {
                         let ask = |pools: &Pools| {
-                            let mut memo = FeasibilityMemo::default();
+                            let mut memo = FeasibilityMemo::new(Price::ZERO);
                             (
                                 off_pool(&mut memo, rule, side, &position, pools, u),
                                 pool_can_complete(&mut memo, rule, side, &position, pools, u),
@@ -1397,7 +1399,7 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                             u,
                             pools,
                             rule,
-                            &mut FeasibilityMemo::default(),
+                            &mut FeasibilityMemo::new(Price::ZERO),
                         )
                     };
                     assert_eq!(fan(&maps), fan(&list), "{} at {n} {rule:?}", fx.id);
@@ -1407,7 +1409,7 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                     if slot.action != ActionType::Pick {
                         continue;
                     }
-                    let mut memo = FeasibilityMemo::default();
+                    let mut memo = FeasibilityMemo::new(Price::ZERO);
                     let by_list = action_charge(&mut memo, rule, slot.side, &position, &list, u);
                     let by_map = action_charge(&mut memo, rule, slot.side, &position, &maps, u);
                     for action in position.pick_actions_from(position.available(u)) {
@@ -1660,7 +1662,7 @@ fn a_role_map_keeps_a_listed_board_picks_roles_and_adds_an_omitted_one_under_the
     for rule in [FeasibilityRule::PoolOrRoster, FeasibilityRule::Roster] {
         for side in [Side::Blue, Side::Red] {
             let count = off_pool(
-                &mut FeasibilityMemo::default(),
+                &mut FeasibilityMemo::new(Price::ZERO),
                 rule,
                 side,
                 &position,
@@ -1878,6 +1880,8 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
                 mode: Mode::Horizon(2),
                 epsilon: 1e-9,
                 off_pool_cost: Some(MEASURED_AT),
+                // Q = 0: the ranks are the slice-7 record, read before the grade existed.
+                off_role_cost: Some(0.0),
             },
             &SearchParams {
                 node_budget: Some(20_000_000),
@@ -1895,7 +1899,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
         .unwrap_or_else(|e| panic!("{id}: {e}"));
         assert!(!outcome.partial, "{id}");
         let charge = action_charge(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             FeasibilityRule::Roster,
             mover,
             &position,
@@ -2003,7 +2007,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
         .fixture;
         let position = fx.root.position(u).unwrap_or_else(|e| panic!("{e}"));
         action_charge(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             FeasibilityRule::Roster,
             position.mover().expect("a root"),
             &position,
@@ -2071,5 +2075,154 @@ fn the_report_classes_an_in_set_off_role_pair_off_pool() {
     assert!(
         text.contains("  break-even: top off-pool at every P"),
         "{text}"
+    );
+}
+
+/// Engine-role-grade design § 7 tests 2 and 3 — the instrument: every Tier B fixture under both arms,
+/// `pool_or_roster` and `roster` at P = 0.10 with Q = 0, at the report's smaller widths (15, 25, 50),
+/// horizon 2 — horizon 1 at a root whose next turn is a pair (the two slot-7 pair roots and the four
+/// slot-16 singles: ordering a child's 12 000 pairs costs 0.9–7.8 M board evaluations per root, 80 % of
+/// a 112 s debug run; the full-width horizon-2 identity is the release report's at `TIER_B_Q=0`) —
+/// rendered line for line and compared with `tests/data/tier-b/q0-record.txt`, which a copy
+/// of this test (`docs/plans/2026-10-06-engine-role-grade-data/q0-record-base-test.rs`) wrote at
+/// `2be5e71`, before any grade existed. Values are printed as their bits, so "identical" means bit for
+/// bit: values, ranks, every counter, the root fan and the searched count, each line's continuation and
+/// ending, each action's in-pool class and off count, and the root's legal-action count. Set
+/// `TIER_B_Q0_RECORD=write` to rewrite the record — only ever at the base.
+#[test]
+fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
+    use std::fmt::Write as _;
+    let live = live();
+    let u = &live.universe;
+    let corpus = dir("fixtures/tier-b");
+    let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
+    assert!(loaded.len() >= 21, "{} fixtures", loaded.len());
+    let mut out = String::new();
+    for l in loaded {
+        let fx = l.unwrap_or_else(|e| panic!("{e}")).fixture;
+        let position = fx
+            .root
+            .position(u)
+            .unwrap_or_else(|e| panic!("{}: {e}", fx.id));
+        let root = position.next_slot().expect("a root");
+        let next_is_pair = position
+            .apply(position.legal_actions(u, &fx.root.pools)[0])
+            .next_slot()
+            .is_some_and(|s| s.pair_start);
+        let horizon = if next_is_pair { 1 } else { 2 };
+        let names = |a: &Action| {
+            a.champions()
+                .map(|c| u.id(c).to_string())
+                .collect::<Vec<_>>()
+                .join("+")
+        };
+        for (arm, feasibility, p, q) in [
+            ("pool_or_roster", FeasibilityRule::PoolOrRoster, None, None),
+            (
+                "roster P=0.10 Q=0",
+                FeasibilityRule::Roster,
+                Some(0.10),
+                Some(0.0),
+            ),
+        ] {
+            let legal = legal_actions_under(
+                &position,
+                u,
+                &fx.root.pools,
+                feasibility,
+                &mut FeasibilityMemo::new(Price::ZERO),
+            )
+            .len();
+            let charge = action_charge(
+                &mut FeasibilityMemo::new(Price::ZERO),
+                feasibility,
+                root.side,
+                &position,
+                &fx.root.pools,
+                u,
+            );
+            let o = search(
+                &OracleInput {
+                    position: &position,
+                    universe: u,
+                    pools: &fx.root.pools,
+                    objective: u,
+                    feasibility,
+                    mode: Mode::Horizon(horizon),
+                    epsilon: 1e-9,
+                    off_pool_cost: p,
+                    off_role_cost: q,
+                },
+                &SearchParams {
+                    node_budget: Some(ReportLimits::DEFAULT.node_budget),
+                    wall_budget: Duration::from_secs(300),
+                    shortlist: Some(Shortlist {
+                        singles: 15,
+                        pairs: 25,
+                        root_off_pool: 50,
+                    }),
+                    ..SearchParams::default()
+                },
+                &CancelHandle::new(),
+                |_| {},
+            )
+            .unwrap_or_else(|e| panic!("{} {arm}: {e}", fx.id));
+            let _ = writeln!(
+                out,
+                "== {} | {arm} | horizon {horizon} depth {} partial {} root_fan {} searched {} nodes {} leaves {} orderings {} cutoffs {} table_hits {} table_entries {} top_set {} legal {legal}",
+                fx.id, o.depth, o.partial, o.root_fan, o.ranked.len(), o.nodes, o.leaves, o.orderings,
+                o.cutoffs, o.table_hits, o.table_entries, o.top_set.len()
+            );
+            for (rank, r) in o.ranked.iter().enumerate() {
+                let class = if root.action == ActionType::Pick {
+                    match charge.of(r.action) {
+                        0 => "in-pool".to_string(),
+                        n => format!("off-pool {n}"),
+                    }
+                } else {
+                    "-".to_string()
+                };
+                let _ =
+                    writeln!(
+                    out,
+                    "  {:>3} {:<24} {:016x} {:?} {class} ends {:?} bf {} rf {} off {} {} line {}",
+                    rank + 1,
+                    names(&r.action),
+                    r.value.to_bits(),
+                    r.value,
+                    r.ends.kind,
+                    r.ends.blue_feasible,
+                    r.ends.red_feasible,
+                    r.ends.blue_off_pool,
+                    r.ends.red_off_pool,
+                    r.continuation.iter().map(names).collect::<Vec<_>>().join(" > ")
+                );
+            }
+        }
+    }
+    let path = dir("tests/data/tier-b/q0-record.txt");
+    if std::env::var("TIER_B_Q0_RECORD").as_deref() == Ok("write") {
+        std::fs::write(&path, &out).unwrap_or_else(|e| panic!("{e}"));
+        println!("wrote {} ({} lines)", path.display(), out.lines().count());
+        return;
+    }
+    let record =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mut head = String::new();
+    for (n, (mine, theirs)) in out.lines().zip(record.lines()).enumerate() {
+        if mine.starts_with("== ") {
+            head = mine.to_string();
+        }
+        assert_eq!(
+            mine,
+            theirs,
+            "line {} of the record differs under {head}",
+            n + 1
+        );
+    }
+    assert_eq!(
+        out.lines().count(),
+        record.lines().count(),
+        "the record's length"
     );
 }

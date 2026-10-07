@@ -8,7 +8,7 @@ use engine_core::engine::EngineError;
 use engine_core::pools::Role;
 use engine_core::reference::feasibility::{
     action_charge, critical_pool, locked_matchable, off_pool, off_pool_count, pool_can_complete,
-    side_feasible, tags_for, FeasibilityMemo, FeasibilityRule, OffPool,
+    side_feasible, tags_for, FeasibilityMemo, FeasibilityRule, OffPool, Price,
 };
 use engine_core::reference::fixture::{Fixture, FixtureError};
 use engine_core::reference::format::{Format, Kind, Turn};
@@ -19,7 +19,9 @@ use engine_core::reference::search::{
     Shortlist,
 };
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
-use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
+use engine_core::reference::universe::{
+    ChampionIdx, ChampionSet, Universe, UniverseSpec, DEFAULT_OFF_ROLE_COST,
+};
 
 /// `(id, positions)` per champion, linear term 0, no tables: roles are all most of these tests read.
 fn universe(champions: &[(&str, &[&str])]) -> Universe {
@@ -211,7 +213,7 @@ fn a_pool_entry_makes_its_role_playable_for_that_side_only() {
 
     let feasible = |pools: &Pools, rule, side| {
         side_feasible(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             rule,
             side,
             &position,
@@ -234,7 +236,7 @@ fn a_pool_entry_makes_its_role_playable_for_that_side_only() {
     // The lazy filter's question, asked the same way.
     let matchable = |pools: &Pools, side| {
         locked_matchable(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             side,
             position.picks(side),
             tags_for(rule, side, &position, pools),
@@ -303,7 +305,7 @@ fn the_lazy_filter_matches_a_tagged_side_on_its_playable_roles() {
             1,
             &mut Filter {
                 rule: FeasibilityRule::Roster,
-                memo: &mut FeasibilityMemo::default(),
+                memo: &mut FeasibilityMemo::new(Price::ZERO),
                 universe: &u,
                 pools,
             },
@@ -357,6 +359,7 @@ fn a_role_tagged_pool_is_refused_where_tags_are_not_read() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: (rule == FeasibilityRule::Roster).then_some(0.1),
+            off_role_cost: (rule == FeasibilityRule::Roster).then_some(DEFAULT_OFF_ROLE_COST),
         };
         let oracle = evaluate(&input).err();
         let searched = search(&input, &search_params(), &CancelHandle::new(), |_| {}).err();
@@ -455,6 +458,7 @@ fn a_tagged_side_whose_set_is_not_its_union_is_refused() {
                 mode: Mode::Horizon(1),
                 epsilon: 1e-9,
                 off_pool_cost: (rule == FeasibilityRule::Roster).then_some(0.1),
+                off_role_cost: (rule == FeasibilityRule::Roster).then_some(DEFAULT_OFF_ROLE_COST),
             };
             (
                 evaluate(&input).err(),
@@ -504,7 +508,7 @@ fn count(
     u: &Universe,
 ) -> OffPool {
     off_pool(
-        &mut FeasibilityMemo::default(),
+        &mut FeasibilityMemo::new(Price::ZERO),
         rule,
         side,
         position,
@@ -602,11 +606,11 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
             OffPool::default()
         );
         // The action's own charge says the same, without building the leaf.
-        let mut memo = FeasibilityMemo::default();
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
         assert_eq!(charge.of(Action::Pick(v)), 1);
         assert_eq!(charge.of(Action::Pick(a1)), 1);
-        let mut memo = FeasibilityMemo::default();
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &listed_adc, &u);
         assert_eq!(charge.of(Action::Pick(v)), 0);
         // Red's list pool is untouched by Blue's tags.
@@ -688,7 +692,7 @@ fn an_off_meta_entry_is_in_role_where_the_pool_lists_it() {
             "{rule:?}"
         );
         let charge = action_charge(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             rule,
             Side::Blue,
             &root,
@@ -732,14 +736,14 @@ fn the_tagged_count_asks_the_roster_only_when_a_pick_is_short() {
     );
     for rule in LIVE {
         // The pool finishes in-role: nothing short, the roster is never asked.
-        let mut memo = FeasibilityMemo::default();
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
         assert_eq!(
             off_pool(&mut memo, rule, Side::Blue, &root, &finishes, &u),
             OffPool::default()
         );
         assert_eq!(memo.calls, 0, "{rule:?}");
         // One pick short: the roster is asked, once.
-        let mut memo = FeasibilityMemo::default();
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
         assert_eq!(
             off_pool(&mut memo, rule, Side::Blue, &root, &pools, &u),
             OffPool { made: 0, forced: 1 }
@@ -776,7 +780,7 @@ fn an_action_that_breaks_the_comp_is_charged_nothing_more() {
     let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     let rule = FeasibilityRule::Roster;
     assert_eq!(count(rule, Side::Blue, &root, &pools, &u).made, 1);
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
     let a1 = Action::Pick(idx(&u, "A1"));
     assert_eq!(charge.of(a1), 0);
@@ -822,7 +826,7 @@ fn an_outside_champion_that_breaks_the_comp_is_still_charged_for_itself() {
     let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     let rule = FeasibilityRule::Roster;
     assert_eq!(count(rule, Side::Blue, &root, &pools, &u).made, 1);
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
     let a2 = Action::Pick(idx(&u, "A2"));
     assert!(!pools.blue.contains(idx(&u, "A2")));
@@ -846,7 +850,7 @@ fn an_outside_champion_that_breaks_the_comp_is_still_charged_for_itself() {
     let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(root.slot_index(), 17);
     assert_eq!(count(rule, Side::Blue, &root, &pools, &u).made, 1);
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
     let pair = Action::pair(idx(&u, "A2"), idx(&u, "S1"));
     assert!(!side_feasible(
@@ -1012,7 +1016,7 @@ fn a_pool_that_finishes_only_off_role_widens_and_returns_after_the_hole_is_fille
     let rule = FeasibilityRule::PoolOrRoster;
     let can = |position: &Position<'_>, pools: &Pools| {
         pool_can_complete(
-            &mut FeasibilityMemo::default(),
+            &mut FeasibilityMemo::new(Price::ZERO),
             rule,
             Side::Blue,
             position,
@@ -1021,7 +1025,13 @@ fn a_pool_that_finishes_only_off_role_widens_and_returns_after_the_hole_is_fille
         )
     };
     let legal = |position: &Position<'_>, pools: &Pools| {
-        legal_actions_under(position, &u, pools, rule, &mut FeasibilityMemo::default())
+        legal_actions_under(
+            position,
+            &u,
+            pools,
+            rule,
+            &mut FeasibilityMemo::new(Price::ZERO),
+        )
     };
 
     // Tagged: no in-role ADC, the pool cannot finish, every available champion is legal.
@@ -1087,7 +1097,7 @@ fn the_tagged_pool_test_never_poisons_the_roster_predicate() {
     let entries = board(&format, &u, &["T1"], &[]);
     let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     let rule = FeasibilityRule::PoolOrRoster;
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert_eq!(
         pools.blue.intersect(position.available(&u)),
         position.available(&u),
@@ -1224,7 +1234,7 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
         for rule in LIVE {
             for side in [Side::Blue, Side::Red] {
                 let ask = |pools: &Pools| {
-                    let mut memo = FeasibilityMemo::default();
+                    let mut memo = FeasibilityMemo::new(Price::ZERO);
                     (
                         off_pool(&mut memo, rule, side, &position, pools, &u),
                         pool_can_complete(&mut memo, rule, side, &position, pools, &u),
@@ -1242,7 +1252,7 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
                 forced_cases += usize::from(expected.0.forced > 0);
                 critical_cases += usize::from(!expected.3.is_empty());
                 broken_cases += usize::from(!locked_matchable(
-                    &mut FeasibilityMemo::default(),
+                    &mut FeasibilityMemo::new(Price::ZERO),
                     side,
                     position.picks(side),
                     None,
@@ -1250,7 +1260,13 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
                 ));
             }
             let fan = |pools: &Pools| {
-                legal_actions_under(&position, &u, pools, rule, &mut FeasibilityMemo::default())
+                legal_actions_under(
+                    &position,
+                    &u,
+                    pools,
+                    rule,
+                    &mut FeasibilityMemo::new(Price::ZERO),
+                )
             };
             let actions = fan(&list);
             assert_eq!(fan(&maps), actions, "case {case} {rule:?}");
@@ -1263,7 +1279,7 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
                     widened_cases += usize::from(actions.len() > pool_only.len());
                     let charge = |pools: &Pools, action: Action| {
                         action_charge(
-                            &mut FeasibilityMemo::default(),
+                            &mut FeasibilityMemo::new(Price::ZERO),
                             rule,
                             slot.side,
                             &position,
@@ -1292,7 +1308,7 @@ fn a_map_of_every_meta_role_is_the_list_on_random_boards() {
         // `off_pool_count` is the sum of the parts.
         assert_eq!(
             off_pool_count(
-                &mut FeasibilityMemo::default(),
+                &mut FeasibilityMemo::new(Price::ZERO),
                 FeasibilityRule::Roster,
                 Side::Blue,
                 &position,
@@ -1342,6 +1358,7 @@ fn roster_search(
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: Some(p),
+            off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
         },
         params,
         &CancelHandle::new(),
@@ -1402,6 +1419,7 @@ fn the_search_stops_preferring_the_off_role_fill_once_it_is_priced() {
             mode: Mode::Horizon(1),
             epsilon: 1e-9,
             off_pool_cost: Some(p),
+            off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
         };
         let oracle = evaluate(&input).unwrap_or_else(|e| panic!("{e}"));
         let searched = roster_search(&root, pools, &u, &exact(), p);
@@ -1433,7 +1451,7 @@ fn the_search_stops_preferring_the_off_role_fill_once_it_is_priced() {
     );
 
     // The key itself: V sorts below A1 under tags and above it as a list (Blue: best first).
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let actions = vec![Action::Pick(idx(&u, "A1")), Action::Pick(idx(&u, "V"))];
     let order = |pools: &Pools, memo: &mut FeasibilityMemo| {
         let charge = action_charge(memo, FeasibilityRule::Roster, Side::Blue, &root, pools, &u);
@@ -1448,7 +1466,7 @@ fn the_search_stops_preferring_the_off_role_fill_once_it_is_priced() {
     };
     assert_eq!(order(&pools, &mut memo), actions);
     assert_eq!(
-        order(&as_list(&pools), &mut FeasibilityMemo::default()),
+        order(&as_list(&pools), &mut FeasibilityMemo::new(Price::ZERO)),
         vec![actions[1], actions[0]]
     );
 }
@@ -1485,7 +1503,7 @@ fn a_pair_is_charged_whole_and_a_mid_pair_root_counts_its_first_half() {
     assert!(root
         .next_slot()
         .is_some_and(|s| s.pair_start && s.side == Side::Blue));
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
     assert_eq!(charge.of(Action::Pick(t1)), 0);
     assert_eq!(charge.of(Action::Pick(m1)), 0);
@@ -1581,6 +1599,7 @@ fn a_displacing_pair_is_ordered_below_in_role_pairs_at_an_interior_node() {
                 mode: Mode::Horizon(2),
                 epsilon: 1e-9,
                 off_pool_cost: None,
+                off_role_cost: None,
             },
             &SearchParams {
                 shortlist: Some(Shortlist {
@@ -1642,8 +1661,15 @@ fn the_critical_set_is_read_in_role_under_tags() {
     let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!((root.slot_index(), root.mover()), (6, Some(Side::Blue)));
 
-    let critical =
-        |pools: &Pools| critical_pool(&mut FeasibilityMemo::default(), Side::Red, &root, pools, &u);
+    let critical = |pools: &Pools| {
+        critical_pool(
+            &mut FeasibilityMemo::new(Price::ZERO),
+            Side::Red,
+            &root,
+            pools,
+            &u,
+        )
+    };
     assert_eq!(critical(&pools), set(&u, &["T2", "J2", "A2", "S2"]));
     assert_eq!(critical(&as_list(&pools)), set(&u, &["T2", "J2", "S2"]));
 
@@ -1757,6 +1783,7 @@ fn a_map_of_every_meta_role_searches_as_the_list_on_random_boards() {
                             mode: Mode::Horizon(3),
                             epsilon: 1e-9,
                             off_pool_cost: p,
+                            off_role_cost: p.map(|_| DEFAULT_OFF_ROLE_COST),
                         },
                         &params,
                         &CancelHandle::new(),
@@ -1897,6 +1924,7 @@ fn a_tagged_side_and_a_list_side_are_read_independently() {
                 mode: Mode::Horizon(2),
                 epsilon: 1e-9,
                 off_pool_cost: Some(0.125),
+                off_role_cost: Some(DEFAULT_OFF_ROLE_COST),
             },
             &exact(),
             &CancelHandle::new(),

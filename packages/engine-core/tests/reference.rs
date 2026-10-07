@@ -483,7 +483,7 @@ fn position_validation_names_the_slot() {
     assert_eq!(full.mover(), Some(Side::Blue));
 }
 
-use engine_core::reference::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use engine_core::reference::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule, Price};
 
 // ------------------------------------------------------------------ feasibility
 
@@ -539,7 +539,7 @@ fn two_locked_top_only_champions_are_infeasible_even_with_a_full_pool() {
         u.index("T2").unwrap(),
         u.index("J").unwrap(),
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
 
     let two_tops =
         Position::new(&f, &[Entry::Pick(t1), Entry::Pick(t2)], &pools, &u).expect("position");
@@ -600,7 +600,7 @@ fn feasibility_memo_hits_on_repeated_keys() {
         ..Pools::default()
     };
     let pos = Position::new(&f, &[], &pools, &u).expect("empty");
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert!(side_feasible(
         &mut memo,
         FeasibilityRule::On,
@@ -1192,6 +1192,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
             mode,
             epsilon: 1e-9,
             off_pool_cost: None,
+            off_role_cost: None,
         })
     };
     let root = Position::new(&f, &[], &pools, &u).expect("empty");
@@ -1232,6 +1233,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
@@ -1264,6 +1266,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::DraftComplete));
@@ -1294,6 +1297,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::NoLegalAction { slot: 1 }));
@@ -1324,6 +1328,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
@@ -1354,6 +1359,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
@@ -1387,6 +1393,7 @@ fn swapping_both_completed_pairs_at_once_changes_nothing() {
         mode: fx.mode,
         epsilon: fx.epsilon,
         off_pool_cost: None,
+        off_role_cost: None,
     })
     .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
@@ -1437,7 +1444,7 @@ fn classify_orders_complete_before_horizon_before_dry_pool_before_interior() {
         red: u.all(),
         ..Pools::default()
     };
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
 
     // interior: the empty position, horizon not reached
@@ -1526,7 +1533,7 @@ fn classify_dry_pool_is_a_leaf_with_feasibility_on_and_an_error_with_it_off() {
         Entry::Pick(t1),
     ];
     let pos = Position::new(&f, &entries, &pools, &u).expect("position");
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     match classify(&pos, 1, None, &u, &pools, FeasibilityRule::On, &mut memo).unwrap() {
         NodeKind::Leaf(end) => {
             assert_eq!(end.kind, LeafKind::DryPool);
@@ -1578,7 +1585,7 @@ fn classify_reads_feasibility_only_at_leaves() {
         Entry::Pick(m2),
     ];
     let pos = Position::new(&f, &entries, &pools, &u).expect("position");
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     let calls_before = memo.calls;
     let kind = classify(&pos, 3, Some(6), &u, &pools, FeasibilityRule::On, &mut memo).unwrap();
     assert!(

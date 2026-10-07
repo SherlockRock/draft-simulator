@@ -83,6 +83,7 @@ fn candidate(fx: &Fixture, mode: Mode, p: &SearchParams) -> SearchOutcome {
             mode,
             epsilon: fx.epsilon,
             off_pool_cost: None,
+            off_role_cost: None,
         },
         p,
         &CancelHandle::new(),
@@ -163,6 +164,7 @@ fn run(name: &str) {
             mode: fx.mode,
             epsilon: fx.epsilon,
             off_pool_cost: None,
+            off_role_cost: None,
         })
         .unwrap_or_else(|e| panic!("{name}: swapped pair at slot {slot}: {e}"));
         assert_eq!(
@@ -190,6 +192,7 @@ fn run(name: &str) {
         mode: fx.mode,
         epsilon: fx.epsilon,
         off_pool_cost: None,
+        off_role_cost: None,
     });
     let cand = candidate(&fx, fx.mode, &params(true, true, None));
 

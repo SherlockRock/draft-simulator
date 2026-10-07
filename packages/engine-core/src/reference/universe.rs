@@ -29,6 +29,16 @@ use std::collections::{HashMap, HashSet};
 /// re-reading P after it is cheap (the report, the same files).
 pub const DEFAULT_OFF_POOL_COST: f64 = 0.10;
 
+/// The graded off-role cost Q under `FeasibilityRule::Roster` (engine-role-grade design G4): blue-win
+/// logits per 100 grade units — a champion placed outside its pool entries in a secondary meta role
+/// pays, beside P, `Q · (1 − share(role) / share(primary))` (`Universe::grade`). An ASSUMPTION, not a
+/// calibration: 0.05 is half of P, chosen so that the roster fan's secondary-role options are priced
+/// without being priced out (at 0.05 the supp-19 Zyra-at-adc line stays ahead of Ashe; it flips at
+/// Q > 0.077 — design fact 6). To be calibrated on Tier B by the verdict-interval procedure at
+/// P = 0.105 (`TIER_B_Q`, `fixtures/tier-b/README.md` "Calibrating Q"), after the positions refresh
+/// re-exports with its recency rule. `pool_or_roster` charges Q = 0; list-form sides are never graded.
+pub const DEFAULT_OFF_ROLE_COST: f64 = 0.05;
+
 pub const MAX_CHAMPIONS: usize = 256;
 const WORDS: usize = 4;
 

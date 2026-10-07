@@ -40,6 +40,7 @@ fn input<'a>(fx: &'a Fixture, position: &'a Position<'a>, mode: Mode) -> OracleI
         mode,
         epsilon: fx.epsilon,
         off_pool_cost: None,
+        off_role_cost: None,
     }
 }
 
@@ -294,6 +295,7 @@ fn an_off_pool_cost_under_a_rule_that_does_not_read_it_is_refused() {
             mode: fx.mode,
             epsilon: fx.epsilon,
             off_pool_cost: Some(0.15),
+            off_role_cost: None,
         };
         let err = search(
             &input,
@@ -329,6 +331,8 @@ fn off_pool_cost_under_roster_is_required_finite_and_at_most_l() {
         mode: fx.mode,
         epsilon: fx.epsilon,
         off_pool_cost: p,
+        // P reaches L in the accepted case: no room for Q (P + Q ≤ L).
+        off_role_cost: Some(0.0),
     };
     for (p, word) in [
         (None, "required"),
@@ -528,6 +532,8 @@ fn a_mid_pair_root_under_a_shortlist_keeps_every_in_pool_action() {
         mode: fx.mode,
         epsilon: fx.epsilon,
         off_pool_cost: Some(fx.universe.loss()),
+        // P = L leaves no room for Q (P + Q ≤ L).
+        off_role_cost: Some(0.0),
     };
     let narrow = SearchParams {
         shortlist: Some(Shortlist {

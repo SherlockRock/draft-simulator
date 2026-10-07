@@ -8,7 +8,7 @@ use super::entries::{
     pool_form, pool_set, role_key, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec,
     EntrySpec, PoolForm, PoolsSpec,
 };
-use super::feasibility::{FeasibilityMemo, FeasibilityRule};
+use super::feasibility::{FeasibilityMemo, FeasibilityRule, Price};
 use super::format::Format;
 use super::live::{LiveError, LiveRoot, LiveUniverse};
 use super::node::legal_actions_under;
@@ -285,12 +285,13 @@ impl TierBFixture {
             // Legality under `roster` (B-proper), the widest rule the report searches with: every
             // available champion is a pick, so only a champion on the board or excluded fails here
             // (an off-pool `actual_next` is legal, and the report says whether it was in the pool).
+            // Legality reads the unweighted profile only: an unpriced memo is right here.
             let legal = legal_actions_under(
                 &position,
                 universe,
                 &pools,
                 FeasibilityRule::Roster,
-                &mut FeasibilityMemo::default(),
+                &mut FeasibilityMemo::new(Price::ZERO),
             );
             if !legal.contains(&action) {
                 let names: Vec<&str> = action.champions().map(|c| universe.id(c)).collect();
