@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{load_production_data, repo_root};
+use common::{load_production_data_from, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
@@ -26,7 +26,27 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// The LIVE universe — `data/compiled/champion-meta.json` as shipped. The report runner and every
+/// test that reads no measured value use it, so the calibration reads the current table.
 fn live() -> LiveUniverse {
+    live_from(&repo_root().join("data/compiled/champion-meta.json"))
+}
+
+/// The FROZEN universe: `tests/data/champion-meta-2026-09-05-positions.json` (beside, not inside,
+/// `tests/data/tier-b/`, which `load_dir` walks as a sample corpus) is `becf58d`'s
+/// `data/compiled/champion-meta.json` — positions from the 2026-09-05 refresh (16.15 + 16.16 pooled)
+/// and `positionShares` from the same corpus — the table the pinned values below were measured on.
+/// Used ONLY by the tests that pin a measured value or a data-dependent reading (the Q = 0 record,
+/// the supp-19 acceptance probe, the parked-positions counts at `MEASURED_AT`, the smoke-4 role-map
+/// notes, the supp-17 / supp-19 report readings, the fixed-P Q sweep's role verdict). Do not pin a
+/// new test against it unless the value it pins is a measurement on that table; a value that must
+/// track the shipped data belongs on `live()`. The 2026-10-07 recency merge moved 33 champions'
+/// positions (Zyra lost BOTTOM, Pantheon gained MIDDLE) and broke ten such pins — frozen since.
+fn frozen() -> LiveUniverse {
+    live_from(&dir("tests/data/champion-meta-2026-09-05-positions.json"))
+}
+
+fn live_from(meta_path: &std::path::Path) -> LiveUniverse {
     let root = repo_root();
     let fm = FmWeights::from_json_str(
         &std::fs::read_to_string(root.join("data/compiled/fm-weights.json"))
@@ -38,11 +58,11 @@ fn live() -> LiveUniverse {
         version: String,
     }
     let version: MetaVersion = serde_json::from_str(
-        &std::fs::read_to_string(root.join("data/compiled/champion-meta.json"))
-            .expect("champion-meta.json"),
+        &std::fs::read_to_string(meta_path)
+            .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display())),
     )
     .expect("champion-meta version");
-    let (_, meta) = load_production_data();
+    let (_, meta) = load_production_data_from(meta_path);
     LiveUniverse::build(&fm, &version.version, &meta).unwrap_or_else(|e| panic!("{e}"))
 }
 
@@ -1830,9 +1850,10 @@ fn smoke_4_with(pools: serde_json::Value, capture: Option<serde_json::Value>) ->
 /// Role-aware pools design § 4 / § 6 test 16: a side's pool is a list or the app's role map. A map
 /// loads with its tags — a champion under two roles under both — and the same set as the list file;
 /// the two sides are independent; nothing is warned or noted for a map the meta agrees with.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn a_role_map_loads_with_its_tags_and_a_list_side_stays_a_list() {
-    let live = live();
+    let live = frozen();
     let u = &live.universe;
     let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
     let list = TierBFixture::from_json(
@@ -1958,9 +1979,10 @@ fn the_loader_names_every_mistake_in_a_role_map() {
 
 /// Design RA4 / test 16: an entry under a role the meta does not list loads — it is honoured, not
 /// refused — and the loader says so in a note, per entry, naming the side it is playable for.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn an_off_meta_entry_loads_and_is_noted() {
-    let live = live();
+    let live = frozen();
     let mut red = team_liquid_map();
     // Vi is a jungler in the meta; this pool also lists her top.
     red["top"] = json!(["Aatrox", "KSante", "Renekton", "Vi"]);
@@ -1990,9 +2012,10 @@ fn an_off_meta_entry_loads_and_is_noted() {
 /// role map: a board pick the map OMITS is added under every role the meta lists for it (a sunk fact:
 /// it cannot be off-role, so it is never charged), and a board pick the map LISTS keeps its listed
 /// roles and gains none.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn a_role_map_keeps_a_listed_board_picks_roles_and_adds_an_omitted_one_under_the_metas() {
-    let live = live();
+    let live = frozen();
     let u = &live.universe;
     let idx = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
     let mut red = team_liquid_map();
@@ -2184,10 +2207,11 @@ fn the_report_marks_an_off_role_fill_off_pool() {
 ///
 /// Pinned to P = 0.10 explicitly — the P the slice was measured at — so the ranks stay the record of
 /// the slice when `DEFAULT_OFF_POOL_COST` moves (the recalibration, 2026-10-04).
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
     const MEASURED_AT: f64 = 0.10;
-    let live = live();
+    let live = frozen();
     let u = &live.universe;
     let action = |ids: &[&str]| -> Action {
         let c = |id: &str| u.index(id).unwrap_or_else(|| panic!("{id}"));
@@ -2408,9 +2432,10 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
 /// from the same charge. supp-17's top pair under role maps is Syndra + Ziggs — both in DME's pool as
 /// a set, but taking them pushes Galio to support — so the top is OFF-pool, and the break-even says so.
 /// At P = 0.10, the P the slice was measured at (the value line is P-dependent).
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn the_report_classes_an_in_set_off_role_pair_off_pool() {
-    let live = live();
+    let live = frozen();
     let loaded = vec![TierBFixture::load_file(
         &dir("fixtures/tier-b/2026-09-29-supp-pinch-slot-17-dme.json"),
         &live,
@@ -2452,10 +2477,11 @@ fn the_report_classes_an_in_set_off_role_pair_off_pool() {
 /// bit: values, ranks, every counter, the root fan and the searched count, each line's continuation and
 /// ending, each action's in-pool class and off count, and the root's legal-action count. Set
 /// `TIER_B_Q0_RECORD=write` to rewrite the record — only ever at the base.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
     use std::fmt::Write as _;
-    let live = live();
+    let live = frozen();
     let u = &live.universe;
     let corpus = dir("fixtures/tier-b");
     let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
@@ -2731,9 +2757,10 @@ fn corpus_edited(
 /// every sampled Q; the top at the largest Q is off-pool base"), and a Q summary; with several P and
 /// several Q it reads per Q column. The sweep's own values are printed first (fact 6 re-derived by
 /// the engine): Zyra is the top at Q = 0 and 0.05, Ashe at 0.1.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn the_report_sweeps_q_at_fixed_p_and_reads_the_role_verdict() {
-    let live = live();
+    let live = frozen();
     let supp_19 = "2026-10-04-supp-pinch-slot-19-kittens";
     let mid_19 = "2026-09-29-mid-pinch-slot-19-kittens";
     let loaded = vec![
@@ -2912,9 +2939,10 @@ fn the_role_verdict_reads_the_q_samples_through_the_same_shapes() {
 /// and Ashe for Q ∈ {0.08, 0.1}; fact 6 derived the flip at Q > 0.0770 from the engine's own output,
 /// and the engine's reading here is printed before it is asserted. The default Q = 0.05 does NOT flip
 /// it; the sweep does.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
 #[test]
 fn on_supp_19_ashe_overtakes_zyra_at_adc_between_q_0_05_and_0_08() {
-    let live = live();
+    let live = frozen();
     let u = &live.universe;
     let fx = TierBFixture::load_file(
         &dir("fixtures/tier-b").join("2026-10-04-supp-pinch-slot-19-kittens.json"),

@@ -4634,20 +4634,29 @@ fn the_converter_reads_role_maps() {
     maps.position(u).unwrap_or_else(|e| panic!("{e}"));
 
     // A champion the map lists under ONE of its meta roles carries that role only. Pantheon is on
-    // Blue's board (slot 6); the meta gives him three roles.
-    assert_eq!(
-        u.champion_meta()["Pantheon"].positions,
-        vec![Role::Support, Role::Top, Role::Jungle]
+    // Blue's board (slot 6); the meta lists him in several roles, SUPPORT among them (which ones,
+    // and in what order, follow the positions refresh — not pinned here).
+    let pantheon = &u.champion_meta()["Pantheon"].positions;
+    assert!(
+        pantheon.contains(&Role::Support) && pantheon.len() >= 2,
+        "Pantheon's meta roles: {pantheon:?}"
     );
     let mut one_role = blue.clone();
-    one_role.top.retain(|id| id != "Pantheon");
-    one_role.jungle.retain(|id| id != "Pantheon");
+    for row in [
+        &mut one_role.top,
+        &mut one_role.jungle,
+        &mut one_role.middle,
+        &mut one_role.adc,
+    ] {
+        row.retain(|id| id != "Pantheon");
+    }
     let root = LiveRoot::from_draft_state_roles(&state, &one_role, &red, &[], u)
         .unwrap_or_else(|e| panic!("{e}"));
     let tags = root.pools.roles(Side::Blue).copied().unwrap_or_default();
     assert!(tags.for_role(Role::Support).contains(idx("Pantheon")));
-    assert!(!tags.for_role(Role::Top).contains(idx("Pantheon")));
-    assert!(!tags.for_role(Role::Jungle).contains(idx("Pantheon")));
+    for role in [Role::Top, Role::Jungle, Role::Middle, Role::Adc] {
+        assert!(!tags.for_role(role).contains(idx("Pantheon")), "{role:?}");
+    }
     assert_eq!(root.pools.blue, list.pools.blue, "the set is unchanged");
 
     // Unknown ids: collected with their side, in role order, then the exclusions'.

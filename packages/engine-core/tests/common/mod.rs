@@ -18,7 +18,7 @@ use engine_core::role_solver::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
 // Production data. engine-node owns `data_loader::load_engine_data` but that
@@ -144,12 +144,20 @@ pub fn aligned_shares(
 }
 
 pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
+    load_production_data_from(&repo_root().join("data/compiled/champion-meta.json"))
+}
+
+/// The same loader on the champion-meta file at `meta_path` — a FROZEN table under `tests/data/`
+/// for a test that pins values measured on one table, so a positions refresh moves no pin
+/// (memory: tests that encode a data table must pin a frozen copy). The matchup data is always
+/// the live file.
+pub fn load_production_data_from(meta_path: &Path) -> (MetaData, HashMap<String, ChampionMeta>) {
     let root = repo_root();
     let champion_file: ChampionMetaFile = serde_json::from_str(
-        &std::fs::read_to_string(root.join("data/compiled/champion-meta.json"))
-            .expect("data/compiled/champion-meta.json"),
+        &std::fs::read_to_string(meta_path)
+            .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display())),
     )
-    .expect("champion-meta.json parses");
+    .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display()));
     let matchup_file: MatchupDataFile = serde_json::from_str(
         &std::fs::read_to_string(root.join("data/compiled/matchup-data.json"))
             .expect("data/compiled/matchup-data.json"),
@@ -218,20 +226,52 @@ pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
 /// backend/services/navigatorEngine.js:31-43 DEFAULT_PHASE_WEIGHTS.blue
 pub fn phase_weights_blue() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { comp: 0.35, info: 0.65, coverage: 0.0 },
-        pick1: PhaseWeights { comp: 0.5, info: 0.5, coverage: 0.3 },
-        ban2: PhaseWeights { comp: 0.6, info: 0.4, coverage: 0.4 },
-        pick2: PhaseWeights { comp: 0.8, info: 0.2, coverage: 1.5 },
+        ban1: PhaseWeights {
+            comp: 0.35,
+            info: 0.65,
+            coverage: 0.0,
+        },
+        pick1: PhaseWeights {
+            comp: 0.5,
+            info: 0.5,
+            coverage: 0.3,
+        },
+        ban2: PhaseWeights {
+            comp: 0.6,
+            info: 0.4,
+            coverage: 0.4,
+        },
+        pick2: PhaseWeights {
+            comp: 0.8,
+            info: 0.2,
+            coverage: 1.5,
+        },
     }
 }
 
 /// backend/services/navigatorEngine.js:31-43 DEFAULT_PHASE_WEIGHTS.red
 pub fn phase_weights_red() -> PhaseWeightTable {
     PhaseWeightTable {
-        ban1: PhaseWeights { comp: 0.3, info: 0.7, coverage: 0.0 },
-        pick1: PhaseWeights { comp: 0.4, info: 0.6, coverage: 0.3 },
-        ban2: PhaseWeights { comp: 0.5, info: 0.5, coverage: 0.4 },
-        pick2: PhaseWeights { comp: 0.8, info: 0.2, coverage: 1.5 },
+        ban1: PhaseWeights {
+            comp: 0.3,
+            info: 0.7,
+            coverage: 0.0,
+        },
+        pick1: PhaseWeights {
+            comp: 0.4,
+            info: 0.6,
+            coverage: 0.3,
+        },
+        ban2: PhaseWeights {
+            comp: 0.5,
+            info: 0.5,
+            coverage: 0.4,
+        },
+        pick2: PhaseWeights {
+            comp: 0.8,
+            info: 0.2,
+            coverage: 1.5,
+        },
     }
 }
 
@@ -277,7 +317,10 @@ pub fn eval_context(
         our_picks,
         opp_picks,
         // backend/services/navigatorEngine.js:167
-        penalties: Penalties { out_of_role: 0.25, out_of_pool: 0.75 },
+        penalties: Penalties {
+            out_of_role: 0.25,
+            out_of_pool: 0.75,
+        },
         champion_meta: champion_meta.clone(),
         meta: meta.clone(),
         phase_weights_blue: phase_weights_blue(),

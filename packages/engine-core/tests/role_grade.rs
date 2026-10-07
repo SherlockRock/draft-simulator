@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{aligned_shares, load_production_data, repo_root};
+use common::{aligned_shares, load_production_data, load_production_data_from, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::engine::EngineError;
 use engine_core::fm::FmWeights;
@@ -20,6 +20,7 @@ use engine_core::reference::state::{Pools, Position};
 use engine_core::reference::universe::{Champion, Universe, UniverseError, UniverseSpec};
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 const ROLE_ORDER: [Role; 5] = [
     Role::Top,
@@ -30,6 +31,12 @@ const ROLE_ORDER: [Role; 5] = [
 ];
 
 fn live() -> LiveUniverse {
+    live_from(&repo_root().join("data/compiled/champion-meta.json"))
+}
+
+/// The live universe's loader on the champion-meta file at `meta_path` (a frozen table under
+/// `tests/data/` for a pinned value — not under `tests/data/tier-b/`, which `load_dir` walks as a corpus).
+fn live_from(meta_path: &Path) -> LiveUniverse {
     let root = repo_root();
     let fm = FmWeights::from_json_str(
         &std::fs::read_to_string(root.join("data/compiled/fm-weights.json"))
@@ -41,11 +48,11 @@ fn live() -> LiveUniverse {
         version: String,
     }
     let version: MetaVersion = serde_json::from_str(
-        &std::fs::read_to_string(root.join("data/compiled/champion-meta.json"))
-            .expect("champion-meta.json"),
+        &std::fs::read_to_string(meta_path)
+            .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display())),
     )
     .expect("champion-meta version");
-    let (_, meta) = load_production_data();
+    let (_, meta) = load_production_data_from(meta_path);
     LiveUniverse::build(&fm, &version.version, &meta).unwrap_or_else(|e| panic!("{e}"))
 }
 
@@ -129,11 +136,18 @@ fn malformed_shares_are_refused_by_name() {
 }
 
 /// Design § 7 test 10: the shipped `positionShares` load into a vector aligned with `positions` in
-/// both loaders' order of keys, absent is empty, a mismatched key set is named, and the live universe
-/// carries fact 6's Zyra: shares 0.448 / 0.380 / 0.130 → grades 0 / 15 / 71.
+/// both loaders' order of keys, absent is empty, a mismatched key set is named, and the shares reach
+/// the universe's grade. The exact chain is pinned on the FROZEN table
+/// (`tests/data/champion-meta-2026-09-05-positions.json`, `becf58d`'s meta): fact 6's Zyra,
+/// shares 0.448 / 0.380 / 0.130 → grades 0 / 15 / 71. The LIVE table gets a shape check — every
+/// champion's shares aligned with its positions, the primary graded 0, grades non-decreasing along
+/// the positions' order (shares descend), every unlisted role 100, at least one graded pair — so a
+/// positions refresh moves no pin here (the 2026-10-07 recency merge dropped Zyra's BOTTOM).
 #[test]
 fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() {
-    let (_, meta) = load_production_data();
+    let frozen_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data/champion-meta-2026-09-05-positions.json");
+    let (_, meta) = load_production_data_from(&frozen_path);
     for m in meta.values() {
         assert_eq!(m.position_shares.len(), m.positions.len(), "{}", m.id);
     }
@@ -184,8 +198,8 @@ fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() 
         Err("Zyra: positionShares lacks the listed role SUPPORT".into())
     );
 
-    let live = live();
-    let u = &live.universe;
+    let frozen = live_from(&frozen_path);
+    let u = &frozen.universe;
     let z = u.index("Zyra").expect("Zyra");
     let g = (
         u.grade(z, Role::Jungle),
@@ -193,8 +207,48 @@ fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() 
         u.grade(z, Role::Adc),
         u.grade(z, Role::Top),
     );
-    println!("Zyra grades jungle / support / adc / top: {g:?}");
+    println!("Zyra grades jungle / support / adc / top (frozen table): {g:?}");
     assert_eq!(g, (0, 15, 71, 100));
+
+    // The LIVE table: shape only, no pinned value.
+    let (_, live_meta) = load_production_data();
+    let live = live();
+    let u = &live.universe;
+    let every_role = [
+        Role::Top,
+        Role::Jungle,
+        Role::Middle,
+        Role::Adc,
+        Role::Support,
+    ];
+    let mut graded = 0usize;
+    for m in live_meta.values() {
+        assert_eq!(m.position_shares.len(), m.positions.len(), "{}", m.id);
+        let c = u
+            .index(&m.id)
+            .unwrap_or_else(|| panic!("{} is not in the live universe", m.id));
+        let grades: Vec<u8> = m.positions.iter().map(|r| u.grade(c, *r)).collect();
+        assert_eq!(
+            grades.first().copied(),
+            Some(0),
+            "{}: the primary is graded 0",
+            m.id
+        );
+        assert!(
+            grades.windows(2).all(|w| w[0] <= w[1]),
+            "{}: grades follow the positions' order {grades:?}",
+            m.id
+        );
+        for role in every_role.iter().filter(|r| !m.positions.contains(r)) {
+            assert_eq!(u.grade(c, *role), 100, "{}: unlisted {role:?}", m.id);
+        }
+        graded += grades.iter().filter(|g| **g > 0).count();
+    }
+    println!("live table: {graded} graded (champion, secondary role) pairs");
+    assert!(
+        graded > 0,
+        "the shipped shares reach the live universe's grade"
+    );
 }
 
 /// Two single-role champions per role, no tables: ten champions, so the oracle's bound holds.
