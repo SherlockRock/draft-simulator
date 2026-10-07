@@ -571,7 +571,11 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
         // The root: nothing made, one forced — the ADC has to come from off-role or off-pool.
         assert_eq!(
             count(rule, Side::Blue, &root, &pools, &u),
-            OffPool { made: 0, forced: 1 },
+            OffPool {
+                made: 0,
+                grade: 0,
+                forced: 1,
+            },
             "{rule:?}"
         );
         // The same pool as a set: V covers ADC by the meta, nothing is forced.
@@ -585,7 +589,11 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
             let leaf = root.apply(Action::Pick(pick));
             assert_eq!(
                 count(rule, Side::Blue, &leaf, &pools, &u),
-                OffPool { made: 1, forced: 0 },
+                OffPool {
+                    made: 1,
+                    grade: 0,
+                    forced: 0,
+                },
                 "{rule:?} {}",
                 u.id(pick)
             );
@@ -608,11 +616,11 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
         // The action's own charge says the same, without building the leaf.
         let mut memo = FeasibilityMemo::new(Price::ZERO);
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
-        assert_eq!(charge.of(Action::Pick(v)), 1);
-        assert_eq!(charge.of(Action::Pick(a1)), 1);
+        assert_eq!(charge.of(Action::Pick(v)).d_off, 1);
+        assert_eq!(charge.of(Action::Pick(a1)).d_off, 1);
         let mut memo = FeasibilityMemo::new(Price::ZERO);
         let charge = action_charge(&mut memo, rule, Side::Blue, &root, &listed_adc, &u);
-        assert_eq!(charge.of(Action::Pick(v)), 0);
+        assert_eq!(charge.of(Action::Pick(v)).d_off, 0);
         // Red's list pool is untouched by Blue's tags.
         assert_eq!(
             count(rule, Side::Red, &root, &pools, &u),
@@ -641,7 +649,11 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
         );
         assert_eq!(
             count(rule, Side::Blue, &shut, &with_a1, &u),
-            OffPool { made: 0, forced: 1 },
+            OffPool {
+                made: 0,
+                grade: 0,
+                forced: 1,
+            },
             "{rule:?}"
         );
     }
@@ -699,7 +711,7 @@ fn an_off_meta_entry_is_in_role_where_the_pool_lists_it() {
             &listed_top,
             &u,
         );
-        assert_eq!(charge.of(x), 0, "{rule:?}");
+        assert_eq!(charge.of(x).d_off, 0, "{rule:?}");
         assert_eq!(
             count(rule, Side::Blue, &root.apply(x), &listed_top, &u),
             OffPool::default(),
@@ -711,7 +723,11 @@ fn an_off_meta_entry_is_in_role_where_the_pool_lists_it() {
             Position::new(&format, &entries, &listed_mid, &u).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
             count(rule, Side::Blue, &root, &listed_mid, &u),
-            OffPool { made: 0, forced: 1 },
+            OffPool {
+                made: 0,
+                grade: 0,
+                forced: 1,
+            },
             "{rule:?}"
         );
     }
@@ -746,7 +762,11 @@ fn the_tagged_count_asks_the_roster_only_when_a_pick_is_short() {
         let mut memo = FeasibilityMemo::new(Price::ZERO);
         assert_eq!(
             off_pool(&mut memo, rule, Side::Blue, &root, &pools, &u),
-            OffPool { made: 0, forced: 1 }
+            OffPool {
+                made: 0,
+                grade: 0,
+                forced: 1,
+            }
         );
         assert_eq!(memo.calls, 1, "{rule:?}");
     }
@@ -783,7 +803,7 @@ fn an_action_that_breaks_the_comp_is_charged_nothing_more() {
     let mut memo = FeasibilityMemo::new(Price::ZERO);
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
     let a1 = Action::Pick(idx(&u, "A1"));
-    assert_eq!(charge.of(a1), 0);
+    assert_eq!(charge.of(a1).d_off, 0);
     let broken = root.apply(a1);
     assert!(!side_feasible(
         &mut memo,
@@ -794,8 +814,8 @@ fn an_action_that_breaks_the_comp_is_charged_nothing_more() {
         &u
     ));
     // A pick that keeps the comp arrangeable is charged as usual: T1 is in-role, J2 is off the pool.
-    assert_eq!(charge.of(Action::Pick(idx(&u, "T1"))), 0);
-    assert_eq!(charge.of(Action::Pick(idx(&u, "J2"))), 1);
+    assert_eq!(charge.of(Action::Pick(idx(&u, "T1"))).d_off, 0);
+    assert_eq!(charge.of(Action::Pick(idx(&u, "J2"))).d_off, 1);
 }
 
 /// Review minor F2 (role-aware pools execution): the clamp above floors the DIFFERENCE at 0, but an
@@ -838,12 +858,16 @@ fn an_outside_champion_that_breaks_the_comp_is_still_charged_for_itself() {
         &pools,
         &u
     ));
-    assert_eq!(charge.of(a2), 1, "its own outside champion still counts");
+    assert_eq!(
+        charge.of(a2).d_off,
+        1,
+        "its own outside champion still counts"
+    );
     // List form agrees, and the in-pool break (A1) is still charged nothing more.
     let list = as_list(&pools);
     let list_charge = action_charge(&mut memo, rule, Side::Blue, &root, &list, &u);
-    assert_eq!(list_charge.of(a2), 1);
-    assert_eq!(charge.of(Action::Pick(idx(&u, "A1"))), 0);
+    assert_eq!(list_charge.of(a2).d_off, 1);
+    assert_eq!(charge.of(Action::Pick(idx(&u, "A1"))).d_off, 0);
     // A pair naming one outside champion that breaks the comp is charged that one: with T1 locked
     // too (Blue's pair at slot 17), A2 + S1 fills Adc and Support and leaves V nowhere to go.
     let entries = board(&format, &u, &["M1", "V", "T1"], &["T2", "J2", "M2", "S2"]);
@@ -861,7 +885,7 @@ fn an_outside_champion_that_breaks_the_comp_is_still_charged_for_itself() {
         &pools,
         &u
     ));
-    assert_eq!(charge.of(pair), 1);
+    assert_eq!(charge.of(pair).d_off, 1);
 }
 
 /// Design § 6 test 4 (RA1): a champion listed under two roles is in-role in either.
@@ -977,7 +1001,11 @@ fn a_pool_listed_only_for_filled_roles_forces_every_remaining_pick() {
     for rule in LIVE {
         assert_eq!(
             count(rule, Side::Blue, &position, &pools, &u),
-            OffPool { made: 0, forced: 3 },
+            OffPool {
+                made: 0,
+                grade: 0,
+                forced: 3,
+            },
             "{rule:?}"
         );
         assert_eq!(
@@ -1056,7 +1084,11 @@ fn a_pool_that_finishes_only_off_role_widens_and_returns_after_the_hole_is_fille
     let filled = root.apply(Action::Pick(idx(&u, "A1")));
     assert_eq!(
         count(rule, Side::Blue, &filled, &pools, &u),
-        OffPool { made: 1, forced: 0 }
+        OffPool {
+            made: 1,
+            grade: 0,
+            forced: 0,
+        }
     );
     assert!(can(&filled, &pools));
     // V instead, with two picks still to come: V can still sit at Middle in-role, so nothing is made
@@ -1065,7 +1097,11 @@ fn a_pool_that_finishes_only_off_role_widens_and_returns_after_the_hole_is_fille
     let took_v = root.apply(Action::Pick(idx(&u, "V")));
     assert_eq!(
         count(rule, Side::Blue, &took_v, &pools, &u),
-        OffPool { made: 0, forced: 1 }
+        OffPool {
+            made: 0,
+            grade: 0,
+            forced: 1,
+        }
     );
     assert!(!can(&took_v, &pools));
 }
@@ -1121,7 +1157,11 @@ fn the_tagged_pool_test_never_poisons_the_roster_predicate() {
     ));
     assert_eq!(
         off_pool(&mut memo, rule, Side::Blue, &position, &pools, &u),
-        OffPool { made: 0, forced: 1 }
+        OffPool {
+            made: 0,
+            grade: 0,
+            forced: 1,
+        }
     );
     // Asked again, in the other order, on the same memo: the same answers.
     assert!(side_feasible(
@@ -1450,23 +1490,20 @@ fn the_search_stops_preferring_the_off_role_fill_once_it_is_priced() {
         vec![Action::Pick(idx(&u, "V")), Action::Pick(idx(&u, "A1"))]
     );
 
-    // The key itself: V sorts below A1 under tags and above it as a list (Blue: best first).
-    let mut memo = FeasibilityMemo::new(Price::ZERO);
+    // The key itself: V sorts below A1 under tags and above it as a list (Blue: best first). The key
+    // reads P from the charge, which reads it from the memo (role-grade: one price source).
+    let mut memo = FeasibilityMemo::new(Price::of(p, 0.0));
     let actions = vec![Action::Pick(idx(&u, "A1")), Action::Pick(idx(&u, "V"))];
     let order = |pools: &Pools, memo: &mut FeasibilityMemo| {
         let charge = action_charge(memo, FeasibilityRule::Roster, Side::Blue, &root, pools, &u);
-        static_order(
-            &u,
-            &root,
-            Side::Blue,
-            actions.clone(),
-            Some((charge, p)),
-            None,
-        )
+        static_order(&u, &root, Side::Blue, actions.clone(), Some(charge), None)
     };
     assert_eq!(order(&pools, &mut memo), actions);
     assert_eq!(
-        order(&as_list(&pools), &mut FeasibilityMemo::new(Price::ZERO)),
+        order(
+            &as_list(&pools),
+            &mut FeasibilityMemo::new(Price::of(p, 0.0))
+        ),
         vec![actions[1], actions[0]]
     );
 }
@@ -1503,28 +1540,22 @@ fn a_pair_is_charged_whole_and_a_mid_pair_root_counts_its_first_half() {
     assert!(root
         .next_slot()
         .is_some_and(|s| s.pair_start && s.side == Side::Blue));
-    let mut memo = FeasibilityMemo::new(Price::ZERO);
+    // Priced at P = 0.1, Q = 0: the key below reads it from the charge.
+    let mut memo = FeasibilityMemo::new(Price::of(0.1, 0.0));
     let charge = action_charge(&mut memo, rule, Side::Blue, &root, &pools, &u);
-    assert_eq!(charge.of(Action::Pick(t1)), 0);
-    assert_eq!(charge.of(Action::Pick(m1)), 0);
-    assert_eq!(charge.of(Action::pair(t1, m1)), 1);
-    assert_eq!(charge.of(Action::pair(t1, j1)), 0);
+    assert_eq!(charge.of(Action::Pick(t1)).d_off, 0);
+    assert_eq!(charge.of(Action::Pick(m1)).d_off, 0);
+    assert_eq!(charge.of(Action::pair(t1, m1)).d_off, 1);
+    assert_eq!(charge.of(Action::pair(t1, j1)).d_off, 0);
     // As a list the same pair is two pool champions: free.
     let list = as_list(&pools);
     let by_list = action_charge(&mut memo, rule, Side::Blue, &root, &list, &u);
-    assert_eq!(by_list.of(Action::pair(t1, m1)), 0);
+    assert_eq!(by_list.of(Action::pair(t1, m1)).d_off, 0);
 
     // The key orders by it (every board value here is 0, so the key IS −P × the charge)...
     let actions = legal_actions_under(&root, &u, &pools, rule, &mut memo);
-    let ordered = static_order(
-        &u,
-        &root,
-        Side::Blue,
-        actions.clone(),
-        Some((charge, 0.1)),
-        None,
-    );
-    let charges: Vec<usize> = ordered.iter().map(|a| charge.of(*a)).collect();
+    let ordered = static_order(&u, &root, Side::Blue, actions.clone(), Some(charge), None);
+    let charges: Vec<usize> = ordered.iter().map(|a| charge.of(*a).d_off).collect();
     assert!(charges.windows(2).all(|w| w[0] <= w[1]), "{charges:?}");
     let in_pool = charges.iter().filter(|c| **c == 0).count();
     assert!(in_pool > 0 && in_pool < ordered.len());
@@ -1551,8 +1582,8 @@ fn a_pair_is_charged_whole_and_a_mid_pair_root_counts_its_first_half() {
     let mid_pair = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
     assert!(mid_pair.is_mid_pair());
     let charge = action_charge(&mut memo, rule, Side::Blue, &mid_pair, &pools, &u);
-    assert_eq!(charge.of(Action::Pick(m1)), 1);
-    assert_eq!(charge.of(Action::Pick(j1)), 0);
+    assert_eq!(charge.of(Action::Pick(m1)).d_off, 1);
+    assert_eq!(charge.of(Action::Pick(j1)).d_off, 0);
 }
 
 /// Design § 6 test 12, at an INTERIOR node: the search's own ordering charges a pair whole. Blue holds

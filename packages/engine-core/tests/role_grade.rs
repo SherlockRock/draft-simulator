@@ -326,3 +326,378 @@ fn the_memo_carries_its_price() {
         }
     );
 }
+
+// ---------------------------------------------------------------- the solver, the charge, the key
+
+use engine_core::draft_state::{ActionType, Side};
+use engine_core::reference::feasibility::{
+    action_charge, critical_pool, off_pool, Charge, OffPool,
+};
+use engine_core::reference::search::static_order;
+use engine_core::reference::state::{Action, Entry, RoleSets};
+use engine_core::reference::universe::ChampionIdx;
+
+/// A universe from `(id, positions, shares, linear)` rows, no tables; shares empty = ungraded.
+fn graded(rows: &[(&str, &[&str], &[f64], f64)]) -> Universe {
+    let list: Vec<String> = rows
+        .iter()
+        .map(|(id, positions, shares, linear)| {
+            let positions: Vec<String> = positions.iter().map(|p| format!("\"{p}\"")).collect();
+            let shares: Vec<String> = shares.iter().map(|s| s.to_string()).collect();
+            format!(
+                r#"{{"id": "{id}", "positions": [{}], "linear": {linear}, "shares": [{}]}}"#,
+                positions.join(","),
+                shares.join(",")
+            )
+        })
+        .collect();
+    let spec: UniverseSpec =
+        serde_json::from_str(&format!(r#"{{"champions": [{}]}}"#, list.join(",")))
+            .unwrap_or_else(|e| panic!("{e}"));
+    Universe::new(spec).unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+fn idx(u: &Universe, id: &str) -> ChampionIdx {
+    u.index(id).unwrap_or_else(|| panic!("no champion {id}"))
+}
+
+/// Tags from `(role, ids)` rows.
+fn tags(u: &Universe, rows: &[(Role, &[&str])]) -> RoleSets {
+    rows.iter().fold(RoleSets::default(), |tags, (role, ids)| {
+        ids.iter()
+            .fold(tags, |tags, id| tags.with(*role, idx(u, id)))
+    })
+}
+
+/// The standard format's board with every ban a skip and each side's picks in the order given,
+/// stopping at the first pick slot whose side has none left.
+fn board(format: &Format, u: &Universe, blue: &[&str], red: &[&str]) -> Vec<Entry> {
+    let (mut blue, mut red) = (blue.iter(), red.iter());
+    let mut entries = Vec::new();
+    for slot in format.slots() {
+        match slot.action {
+            ActionType::Ban => entries.push(Entry::Skip),
+            ActionType::Pick => {
+                let next = match slot.side {
+                    Side::Blue => blue.next(),
+                    Side::Red => red.next(),
+                };
+                match next {
+                    Some(id) => entries.push(Entry::Pick(idx(u, id))),
+                    None => break,
+                }
+            }
+        }
+    }
+    entries
+}
+
+/// A position over `entries` validated against the whole roster on both sides: the board may hold
+/// picks outside the tagged pool the readers are then given, exactly the state the search reaches once
+/// a roster pick is on the board (a board pick the MAP omits at a root is a sunk fact; here the pick is
+/// below the root). `Position` holds no pools of its own.
+fn at<'f>(format: &'f Format, entries: &[Entry], u: &Universe) -> Position<'f> {
+    let any = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    Position::new(format, entries, &any, u).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// Two single-role champions per role for Red's list pool and the roster.
+const FILL: [(&str, &[&str], &[f64], f64); 10] = [
+    ("T1", &["Top"], &[], 0.0),
+    ("T2", &["Top"], &[], 0.0),
+    ("J1", &["Jungle"], &[], 0.0),
+    ("J2", &["Jungle"], &[], 0.0),
+    ("M1", &["Middle"], &[], 0.0),
+    ("M2", &["Middle"], &[], 0.0),
+    ("A1", &["Adc"], &[], 0.0),
+    ("A2", &["Adc"], &[], 0.0),
+    ("S1", &["Support"], &[], 0.0),
+    ("S2", &["Support"], &[], 0.0),
+];
+
+fn with_fill(extra: &[(&str, &[&str], &[f64], f64)]) -> Universe {
+    let mut rows: Vec<(&str, &[&str], &[f64], f64)> = FILL.to_vec();
+    rows.extend_from_slice(extra);
+    graded(&rows)
+}
+
+/// Design fact 10, the v1.1 counter-example, now the split's definition: locked `a` (plays Top /
+/// Jungle, listed Top, primary Jungle) and `b` (picked from the roster below the root — outside the
+/// pool; plays Top / Middle, primary Top, grade 50 at Middle), the pool net Jungle / Adc / Support
+/// specialists. At P = 1, Q = 3 the picks alone are cheapest as a-Jungle, b-Top = (2, 0) (price 2
+/// against (1, 50)'s 2.5), but the total prefers a-Top, b-Middle = (1, 50) with every free role filled
+/// in-pool (2.5 against 3). The split is the total's own argmin — `made 1, grade 50, forced 0`, never
+/// `total.off − cheapest.off = −1`.
+#[test]
+fn the_split_is_the_least_totals_own_argmin() {
+    let u = with_fill(&[
+        ("a", &["Jungle", "Top"], &[0.6, 0.3], 0.0),
+        ("b", &["Top", "Middle"], &[0.6, 0.3], 0.0),
+    ]);
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["a"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["a", "b"], &["T2", "J2"]);
+    let position = at(&format, &entries, &u);
+    assert_eq!(
+        (position.slot_index(), position.mover()),
+        (10, Some(Side::Blue))
+    );
+    let read = |price: Price| {
+        off_pool(
+            &mut FeasibilityMemo::new(price),
+            FeasibilityRule::Roster,
+            Side::Blue,
+            &position,
+            &pools,
+            &u,
+        )
+    };
+    let weighted = read(Price::of(1.0, 3.0));
+    let unweighted = read(Price::of(1.0, 0.0));
+    println!("fact 10 board: at (1, 3) {weighted:?}; at (1, 0) {unweighted:?}");
+    assert_eq!(
+        weighted,
+        OffPool {
+            made: 1,
+            grade: 50,
+            forced: 0
+        }
+    );
+    // At Q = 0 the same arrangement is the cheapest alone too (fact 8: made = today's made).
+    assert_eq!(unweighted, weighted);
+}
+
+/// Design § 7 test 7 (b) and (c): a child whose RAW weighted deltas are (−1, +80) — locked `A`
+/// (listed Jungle, primary Top) and `B` (picked from the roster; Jungle, then Middle at grade 80) are
+/// cheapest as A-Top, B-Jungle = (2, 0) at P = 0.1, Q = 0.2; the in-pool pick `Y` (listed Top) takes
+/// Top, so the child is A-Jungle, B-Middle = (1, 80). The key charges the raw price rise
+/// 0.16 − 0.1 = 0.06, never negative; the class is today's (`d_off` 0: in-pool, a pick that pushes a
+/// locked pick to a graded role). At Q = 0 the node is already (1, 80) and the key charges nothing.
+#[test]
+fn a_raw_off_delta_can_be_negative_and_the_key_charges_the_price_rise() {
+    let u = with_fill(&[
+        ("A", &["Top", "Jungle"], &[0.6, 0.3], 0.0),
+        ("B", &["Jungle", "Middle"], &[0.6, 0.12], 0.0),
+        ("Y", &["Top"], &[1.0], 0.0),
+    ]);
+    let blue = tags(&u, &[(Role::Top, &["Y"]), (Role::Jungle, &["A"])]);
+    let pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["A", "B"], &["T2", "J2"]);
+    let position = at(&format, &entries, &u);
+    let charge_at = |price: Price| -> Charge {
+        action_charge(
+            &mut FeasibilityMemo::new(price),
+            FeasibilityRule::Roster,
+            Side::Blue,
+            &position,
+            &pools,
+            &u,
+        )
+        .of(Action::Pick(idx(&u, "Y")))
+    };
+    let weighted = charge_at(Price::of(0.1, 0.2));
+    let unweighted = charge_at(Price::of(0.1, 0.0));
+    println!(
+        "Y at (0.1, 0.2): {weighted:?} key {}; at (0.1, 0): {unweighted:?} key {}",
+        weighted.key_charge(),
+        unweighted.key_charge()
+    );
+    assert_eq!(
+        (weighted.d_off, weighted.d_off_key, weighted.d_grade),
+        (0, -1, 80)
+    );
+    assert!(weighted.is_in_pool());
+    assert_eq!(weighted.key_charge(), 80.0 * (0.2 / 100.0) - 0.1);
+    assert_eq!(
+        (unweighted.d_off, unweighted.d_off_key, unweighted.d_grade),
+        (0, 0, 0)
+    );
+    assert_eq!(unweighted.key_charge(), 0.0);
+}
+
+/// Design § 7 test 7 (e), review round 3's witness: node (2, 0), child (2, 99), one outside champion.
+/// Locked `L` (listed Support; Jungle primary, Top at 80), `X1` (listed Middle) and `X2` (from the
+/// roster; Support, Top at 99) are cheapest at P = 0.09, Q = 0.1 as L-Jungle, X1-Middle, X2-Support =
+/// (2, 0); the outside pick `Y` (Jungle only) sends L to its in-pool Support and X2 to Top: (2, 99). The
+/// off delta is 0 and the key charges the grade alone, 0.099 — not the floored 0.09 + 0.099 — while
+/// the class stays off-pool 1. And (d): a child that breaks the comp (two Jungle-only champions) is
+/// charged P, today's fallback.
+#[test]
+fn a_matchable_child_is_charged_its_raw_rise_and_a_broken_one_the_floor() {
+    let u = with_fill(&[
+        ("L", &["Jungle", "Support", "Top"], &[0.6, 0.3, 0.12], 0.0),
+        ("X1", &["Middle"], &[1.0], 0.0),
+        ("X2", &["Support", "Top"], &[0.99, 0.01], 0.0),
+        ("Y", &["Jungle"], &[1.0], 0.0),
+    ]);
+    let blue = tags(
+        &u,
+        &[
+            (Role::Support, &["L"]),
+            (Role::Middle, &["X1"]),
+            (Role::Adc, &["A1"]),
+        ],
+    );
+    let pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["L", "X1", "X2"], &["T2", "J2"]);
+    let position = at(&format, &entries, &u);
+    let price = Price::of(0.09, 0.1);
+    let charge = action_charge(
+        &mut FeasibilityMemo::new(price),
+        FeasibilityRule::Roster,
+        Side::Blue,
+        &position,
+        &pools,
+        &u,
+    );
+    let y = charge.of(Action::Pick(idx(&u, "Y")));
+    println!("Y: {y:?} key {}", y.key_charge());
+    assert_eq!((y.d_off, y.d_off_key, y.d_grade), (1, 0, 99));
+    assert!(!y.is_in_pool());
+    assert_eq!(y.key_charge(), 99.0 * (0.1 / 100.0));
+
+    // (d) the broken child: Blue holds `T1` and the roster's `Y` (Jungle only); picking `Y2` (Jungle
+    // only) too leaves no arrangement — the fallback charges the champions outside the pool, one P.
+    let u2 = with_fill(&[
+        ("Y", &["Jungle"], &[1.0], 0.0),
+        ("Y2", &["Jungle"], &[1.0], 0.0),
+    ]);
+    let blue = tags(&u2, &[(Role::Top, &["T1"])]);
+    let pools = Pools {
+        red: u2.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let entries = board(&format, &u2, &["T1", "Y"], &["T2", "J2"]);
+    let position = at(&format, &entries, &u2);
+    let charge = action_charge(
+        &mut FeasibilityMemo::new(Price::of(0.1, 0.05)),
+        FeasibilityRule::Roster,
+        Side::Blue,
+        &position,
+        &pools,
+        &u2,
+    );
+    let broken = charge.of(Action::Pick(idx(&u2, "Y2")));
+    println!("broken child: {broken:?} key {}", broken.key_charge());
+    assert_eq!((broken.d_off, broken.d_off_key, broken.d_grade), (1, 1, 0));
+    assert_eq!(broken.key_charge(), 0.1);
+}
+
+/// Design § 7 test 7 (a): Red's single pick at slot 11 with Middle and Adc locked; the roster's `X`
+/// (Middle primary, Top at 99) lowers Blue's value by 0.02 and must take Top, `Z` (Top) is worth 0.
+/// Both off-pool 1. At Q = 0 the key orders X first (−0.02 + 0.1 against 0.1); at Q = 0.05 the grade,
+/// 0.0495, outweighs the board gap and Z comes first.
+#[test]
+fn the_key_orders_a_primary_placement_above_a_graded_one_once_q_exceeds_the_gap() {
+    let u = with_fill(&[
+        ("X", &["Middle", "Top"], &[0.99, 0.01], 0.02),
+        ("Z", &["Top"], &[1.0], 0.0),
+    ]);
+    let red = tags(&u, &[(Role::Middle, &["M2"]), (Role::Adc, &["A2"])]);
+    let pools = Pools {
+        blue: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Red, red);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["T1", "J1", "S1"], &["M2", "A2"]);
+    let position = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        (position.slot_index(), position.mover()),
+        (11, Some(Side::Red))
+    );
+    let (x, z) = (Action::Pick(idx(&u, "X")), Action::Pick(idx(&u, "Z")));
+    let order = |q: f64| -> Vec<Action> {
+        let mut memo = FeasibilityMemo::new(Price::of(0.1, q));
+        let charge = action_charge(
+            &mut memo,
+            FeasibilityRule::Roster,
+            Side::Red,
+            &position,
+            &pools,
+            &u,
+        );
+        let (cx, cz) = (charge.of(x), charge.of(z));
+        println!(
+            "Q {q}: X {cx:?} key {}; Z {cz:?} key {}",
+            cx.key_charge(),
+            cz.key_charge()
+        );
+        assert_eq!((cx.d_off, cz.d_off), (1, 1));
+        static_order(&u, &position, Side::Red, vec![x, z], Some(charge), None)
+    };
+    assert_eq!(order(0.0), vec![x, z]);
+    assert_eq!(order(0.05), vec![z, x]);
+}
+
+/// Design § 7 test 12 (G9): under weights a pool champion is critical when its removal makes the least
+/// total dearer. Blue's one pick is the roster's `X` (Middle primary, Top at 89), at Middle with the
+/// pool net filling the rest, total (1, 0); without `T1` the total moves X to Top so the net fills the
+/// rest — (1, 89), the same off units, a higher price. `T1` is critical at P = 0.105, Q = 0.1 and not at
+/// `Price::ZERO`, where the set is today's (W-based: removing `T1` leaves W at 4 either way).
+#[test]
+fn a_champion_whose_removal_raises_the_price_is_critical_under_weights() {
+    let u = with_fill(&[("X", &["Middle", "Top"], &[0.9, 0.1], 0.0)]);
+    let blue = tags(
+        &u,
+        &[
+            (Role::Top, &["T1"]),
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let pools = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["X"], &[]);
+    let position = at(&format, &entries, &u);
+    let critical = |price: Price| {
+        let set = critical_pool(
+            &mut FeasibilityMemo::new(price),
+            Side::Blue,
+            &position,
+            &pools,
+            &u,
+        );
+        let mut names: Vec<&str> = set.iter().map(|c| u.id(c)).collect();
+        names.sort_unstable();
+        names
+    };
+    let (zero, weighted) = (critical(Price::ZERO), critical(Price::of(0.105, 0.1)));
+    println!("critical at ZERO {zero:?}; at (0.105, 0.1) {weighted:?}");
+    assert_eq!(zero, vec!["A1", "J1", "S1"]);
+    assert_eq!(weighted, vec!["A1", "J1", "S1", "T1"]);
+}

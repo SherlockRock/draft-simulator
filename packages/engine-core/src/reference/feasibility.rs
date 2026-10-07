@@ -85,6 +85,69 @@ impl Price {
     }
 }
 
+/// A placement's cost, and an arrangement's (engine-role-grade design, Definitions): off-pool units — a
+/// placement outside the side's pool entries — and grade units — the champion's grade in that role,
+/// 0..=100 each (`Universe::grade`), so at most 500 over five picks. Integers: a price is computed from
+/// them once (`price`), and the cost order is exact.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Cost {
+    pub off: u8,
+    pub grade: u16,
+}
+
+impl Cost {
+    fn plus(self, other: Cost) -> Cost {
+        Cost {
+            off: self.off + other.off,
+            grade: self.grade + other.grade,
+        }
+    }
+
+    /// `off · P + grade · Q/100`, each term skipped when its count or its unit is zero — so Q = 0 adds
+    /// no `+0.0` (G5, G7: a `−0.0` board must stay `−0.0`).
+    pub fn price(self, price: Price) -> f64 {
+        let mut v = 0.0;
+        if self.off != 0 && price.p != 0.0 {
+            v += f64::from(self.off) * price.p;
+        }
+        if self.grade != 0 && price.q_unit != 0.0 {
+            v += f64::from(self.grade) * price.q_unit;
+        }
+        v
+    }
+
+    /// The cost order (Definitions): by price; equal price → fewer off units; then fewer grade units.
+    /// At Q = 0 it is "fewer off units" alone — today's "most in-role".
+    fn better(self, other: Cost, price: Price) -> bool {
+        let (a, b) = (self.price(price), other.price(price));
+        a < b || (a == b && (self.off, self.grade) < (other.off, other.grade))
+    }
+}
+
+/// The least total of a side at a position (Definitions): the cost of the locked picks' arrangement
+/// `a*` and the placements still to come that `a*` leaves for the roster (`fills`, each (1, 0)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Total {
+    pub cost: Cost,
+    pub fills: u8,
+}
+
+impl Total {
+    fn off(self) -> u8 {
+        self.cost.off + self.fills
+    }
+
+    /// `cost.price + fills · P` (the forced term is never graded — a lower bound, design G2 / fact 9).
+    fn price(self, price: Price) -> f64 {
+        self.cost
+            .plus(Cost {
+                off: self.fills,
+                grade: 0,
+            })
+            .price(price)
+    }
+}
+
 /// Memo keyed on `(side, locked set, candidate set)` — the candidates are the pool net of the board,
 /// or everything available under `PoolOrRoster`'s roster query. Both sets are monotone along any
 /// line of play, so the key identifies the predicate's inputs exactly — but only for a fixed
@@ -113,6 +176,10 @@ pub struct FeasibilityMemo {
     /// the tagged pool test is read off it and must never meet the roster predicate in `memo`, whose
     /// key is the same triple whenever the pool net is everything available.
     weights: HashMap<(Side, ChampionSet, ChampionSet), Option<usize>>,
+    /// A role-tagged side's least total at this memo's price, on `(side, locked set, pool net)` — the
+    /// weighted sibling of `weights` (engine-role-grade design § 2); the leaf charges it, the pool test
+    /// never reads it.
+    totals: HashMap<(Side, ChampionSet, ChampionSet), Option<Total>>,
     pub calls: u64,
     pub misses: u64,
 }
@@ -130,6 +197,7 @@ impl FeasibilityMemo {
             critical: HashMap::new(),
             profiles: HashMap::new(),
             weights: HashMap::new(),
+            totals: HashMap::new(),
             calls: 0,
             misses: 0,
         }
@@ -180,13 +248,17 @@ fn roles_in(subset: usize) -> usize {
         .count()
 }
 
-/// A role-tagged side's locked picks, summarised for pricing (role-aware pools design § 2): for each
-/// role subset, the most IN-ROLE placements (a champion in a role its pool entry lists) any
-/// arrangement of the picks onto exactly those roles holds — `None` where no arrangement exists. An
+/// A role-tagged side's locked picks, summarised for pricing (role-aware pools design § 2;
+/// engine-role-grade design § 2): for each role subset, TWO tables over the arrangements of the picks
+/// onto exactly those roles — `in_role`, the most IN-ROLE placements (a champion in a role its pool
+/// entry lists), today's, unweighted, reading no price: it decides legality (`W`, the pool test) and
+/// the in-pool class; and `cost`, the cheapest arrangement in the cost order at the memo's price
+/// (`Cost`): the leaf and the ordering key read it. `None` where no arrangement exists, in both. An
 /// arrangement puts each pick in a distinct role it can play for this side (`playable`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 struct Profile {
     in_role: [Option<u8>; SUBSETS],
+    cost: [Option<Cost>; SUBSETS],
 }
 
 impl Profile {
@@ -194,33 +266,104 @@ impl Profile {
     fn start() -> Self {
         let mut in_role = [None; SUBSETS];
         in_role[0] = Some(0);
-        Self { in_role }
+        let mut cost = [None; SUBSETS];
+        cost[0] = Some(Cost::default());
+        Self { in_role, cost }
     }
 
-    /// One more pick, playable in `playable` and listed by the pool for `listed`.
-    fn with(&self, playable: RoleMask, listed: RoleMask) -> Self {
+    /// One more pick, playable in `playable` and listed by the pool for `listed`, graded `grades` per
+    /// role (bit `i` = `ROLES[i]`): in a listed role it costs nothing; elsewhere one off-pool unit and
+    /// its grade there. The unweighted table keeps the most in-role placements; the weighted one the
+    /// better cost at `price`.
+    fn with(&self, playable: RoleMask, listed: RoleMask, grades: [u8; 5], price: Price) -> Self {
         let (playable, listed) = (usize::from(playable), usize::from(listed));
         let mut next = [None; SUBSETS];
+        let mut next_cost = [None; SUBSETS];
         for (subset, held) in self.in_role.iter().enumerate() {
             let Some(held) = held else { continue };
-            for bit in 0..ROLES.len() {
+            let held_cost = self.cost[subset].expect("the two tables are defined alike");
+            for (bit, grade) in grades.iter().enumerate() {
                 let role = 1 << bit;
                 if playable & role == 0 || subset & role != 0 {
                     continue;
                 }
-                let score = held + u8::from(listed & role != 0);
+                let in_role = listed & role != 0;
+                let score = held + u8::from(in_role);
                 let slot = &mut next[subset | role];
                 if slot.is_none_or(|best| best < score) {
                     *slot = Some(score);
                 }
+                let placement = if in_role {
+                    Cost::default()
+                } else {
+                    Cost {
+                        off: 1,
+                        grade: u16::from(*grade),
+                    }
+                };
+                let cost = held_cost.plus(placement);
+                let slot = &mut next_cost[subset | role];
+                if slot.is_none_or(|best: Cost| cost.better(best, price)) {
+                    *slot = Some(cost);
+                }
             }
         }
-        Self { in_role: next }
+        Self {
+            in_role: next,
+            cost: next_cost,
+        }
     }
 
     /// The most in-role placements over every arrangement; `None` = the picks cannot be arranged.
     fn most_in_role(&self) -> Option<usize> {
         self.in_role.iter().flatten().max().map(|w| usize::from(*w))
+    }
+
+    /// `cheapest_s(S)`: the cheapest arrangement of the picks alone, in the cost order at `price`;
+    /// `None` = unarrangeable. At Q = 0 its off units are today's `made` (fewest off = most in-role).
+    fn cheapest(&self, price: Price) -> Option<Cost> {
+        self.cost
+            .iter()
+            .flatten()
+            .fold(None, |best: Option<Cost>, c| match best {
+                Some(b) if !c.better(b, price) => Some(b),
+                _ => Some(*c),
+            })
+    }
+
+    /// `total_s(S, K)` (Definitions): over every arrangement `a` of the picks, the least `cost(a) +
+    /// fills(a) · (1, 0)` under ONE comparator — price, total off units, the locked picks' own off
+    /// units, grade units, canonical subset order — where `fills(a)` is the roles `a` leaves free less
+    /// the most of them `cover` (the pool net through its listed roles, `coverable`) can fill. Returns
+    /// the argmin's own cost and fills, so the report's split is non-negative by construction (review
+    /// round 2: `total.off − cheapest.off` can be negative under weights). `None` = unarrangeable. At
+    /// Q = 0 the exchange theorem (fact 8) makes its off units `5 − W` and its locked off units today's
+    /// `made`.
+    fn least_total(&self, cover: u32, price: Price) -> Option<Total> {
+        let mut best: Option<(Total, (f64, u8, u8, u16))> = None;
+        for (subset, cost) in self.cost.iter().enumerate() {
+            let Some(cost) = cost else { continue };
+            let free = (0..SUBSETS)
+                .filter(|rest| cover >> rest & 1 == 1 && rest & subset == 0)
+                .map(roles_in)
+                .fold(0, usize::max);
+            let open = ROLES.len() - roles_in(subset);
+            debug_assert!(free <= open, "a cover fills free roles only");
+            let fills = u8::try_from(open - free).unwrap_or(u8::MAX);
+            let total = Total { cost: *cost, fills };
+            let key = (total.price(price), total.off(), cost.off, cost.grade);
+            // Strictly better replaces; a full tie keeps the earlier (smaller) subset.
+            let better = match &best {
+                None => true,
+                Some((_, b)) => {
+                    key.0 < b.0 || (key.0 == b.0 && (key.1, key.2, key.3) < (b.1, b.2, b.3))
+                }
+            };
+            if better {
+                best = Some((total, key));
+            }
+        }
+        best.map(|(total, _)| total)
     }
 
     /// `W`: the most in-role placements a full comp can hold — over every arrangement of the locked
@@ -271,11 +414,49 @@ fn locked_profile(
     if let Some(&known) = memo.profiles.get(&(side, locked_set)) {
         return known;
     }
+    let price = memo.price;
     let profile = locked.iter().fold(Profile::start(), |profile, c| {
-        profile.with(playable(tags, universe, *c), tags.mask(*c))
+        profile.with(
+            playable(tags, universe, *c),
+            tags.mask(*c),
+            universe.grades(*c),
+            price,
+        )
     });
     memo.profiles.insert((side, locked_set), profile);
     profile
+}
+
+/// The least total (`Profile::least_total`) for a role-tagged side at `position` over `pool_net`, at the
+/// memo's price, memoised on `(side, locked set, pool net)` beside `in_role_weight`.
+fn least_total_at(
+    memo: &mut FeasibilityMemo,
+    side: Side,
+    position: &Position<'_>,
+    pool_net: ChampionSet,
+    tags: &RoleSets,
+    universe: &Universe,
+) -> Option<Total> {
+    let locked = position.picks(side);
+    let locked_set: ChampionSet = locked.iter().copied().collect();
+    let key = (side, locked_set, pool_net);
+    if let Some(&known) = memo.totals.get(&key) {
+        return known;
+    }
+    let price = memo.price;
+    let total = locked_profile(memo, side, locked, tags, universe)
+        .least_total(coverable(tags, pool_net), price);
+    memo.totals.insert(key, total);
+    total
+}
+
+/// `cheapest_s(S)` (Definitions): the cheapest arrangement's cost, or — picks that cannot be arranged
+/// (a broken board: L' prices it) — today's fallback, the champions outside the pool entirely at grade 0.
+fn cheapest_cost(profile: &Profile, outside_pool: usize, price: Price) -> Cost {
+    profile.cheapest(price).unwrap_or(Cost {
+        off: u8::try_from(outside_pool).unwrap_or(u8::MAX),
+        grade: 0,
+    })
 }
 
 /// `W` for a role-tagged side at `position` over `pool_net`, memoised on `(side, locked set, pool net)`.
@@ -309,12 +490,17 @@ fn off_role(profile: &Profile, picks: usize, outside_pool: usize) -> usize {
     })
 }
 
-/// A side's off-pool count in its two parts (role-aware pools design § 2): `made`, the picks on the
-/// board that are off-pool, and `forced`, the picks still to come that cannot be in-pool. The leaf
-/// charges their sum (`off_pool_count`); the grid's forced column and a reader of either part use this.
+/// A side's off-pool count in its parts (role-aware pools design § 2; engine-role-grade design § 2):
+/// `made`, the picks on the board that are off-pool (under role tags, off-role in the charged
+/// arrangement `a*`), `grade`, the grade units those placements carry (0 on a list-form side), and
+/// `forced`, the picks still to come that cannot be in-pool. The leaf charges `made + forced` at P and
+/// `grade` at Q/100 (`off_pool_count` is the P count alone); the grid's forced column and a reader of
+/// either part use this. `made` can exceed today's `made_u` at Q > 0 — the cheapest completion places
+/// more locked picks off-role to avoid grade — the honest reading, not an error.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OffPool {
     pub made: usize,
+    pub grade: usize,
     pub forced: usize,
 }
 
@@ -324,12 +510,14 @@ impl OffPool {
     }
 }
 
-/// What an action adds to the mover's `OffPool::made` (role-aware pools design § 2) — the one count
-/// behind the ordering key's term, the root's in-pool / off-pool split and the report's and the
-/// grid's class. Built once per node by `action_charge`; a list-form side asks the set, as before.
+/// What an action adds to the mover's charge (role-aware pools design § 2; engine-role-grade design
+/// G7) — the one reading behind the ordering key's term, the root's in-pool / off-pool split and the
+/// report's and the grid's class. Built once per node by `action_charge` at the memo's price; a
+/// list-form side asks the set, as before.
 #[derive(Clone, Copy, Debug)]
 pub struct ActionCharge<'a> {
     pool: ChampionSet,
+    price: Price,
     tagged: Option<TaggedCharge<'a>>,
 }
 
@@ -340,46 +528,128 @@ struct TaggedCharge<'a> {
     profile: Profile,
     picks: usize,
     outside_pool: usize,
+    /// Today's `made` of the locked picks (the unweighted table) — the class's baseline.
     made: usize,
+    /// The locked picks' cheapest cost (the weighted table) — the key's baseline.
+    cheapest: Cost,
+}
+
+/// One action's charge (engine-role-grade design G7). `d_off` is today's count — the rise in the
+/// mover's UNWEIGHTED off-role count, the action taken whole, floored at the champions it names outside
+/// the pool — and decides the class (`is_in_pool`) at every Q. `d_off_key` / `d_grade` are the RAW
+/// signed deltas of the weighted cheapest arrangement (child minus node) for a child that can be
+/// arranged — today's floored delta and 0 for a broken child, where the fallback `(outside, 0)` applies
+/// — and price the key (`key_charge`). `d_grade < 0` beside `d_off_key > 0` is legitimate: one more
+/// off unit for less grade.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Charge {
+    pub d_off: usize,
+    pub d_off_key: i8,
+    pub d_grade: i16,
+    price: Price,
+}
+
+impl Charge {
+    /// Today's class at every Q (fact 11): the action adds no off-pool pick.
+    pub fn is_in_pool(self) -> bool {
+        self.d_off == 0
+    }
+
+    /// What the ordering key charges: `d_off_key · P + d_grade · Q/100` from the two integers, each
+    /// term skipped when its delta or its unit is zero (a `(1, 0) → (1, 50)` transition at Q = 0 must
+    /// add nothing, or a `−0.0 + 0.0` turns a `−0.0` key into `+0.0`), the sum clamped at 0 — it is
+    /// ≥ 0 algebraically for an arrangeable child (its arrangement restricted to the locked picks
+    /// prices at least the node's cheapest) but float cancellation can leave `−1.4e−17`. At Q = 0 this
+    /// is today's `made · P` bit for bit.
+    pub fn key_charge(self) -> f64 {
+        let mut v = 0.0;
+        if self.d_off_key != 0 && self.price.p != 0.0 {
+            v += f64::from(self.d_off_key) * self.price.p;
+        }
+        if self.d_grade != 0 && self.price.q_unit != 0.0 {
+            v += f64::from(self.d_grade) * self.price.q_unit;
+        }
+        if v < 0.0 {
+            0.0
+        } else {
+            v
+        }
+    }
+
+    /// The price the memo this charge came from was built at — the ONE source the key reads P from.
+    pub fn price(self) -> Price {
+        self.price
+    }
 }
 
 impl ActionCharge<'_> {
-    /// A list-form side: an action costs one per champion it names outside the pool.
-    pub fn set(pool: ChampionSet) -> Self {
-        Self { pool, tagged: None }
+    /// A list-form side: an action costs one per champion it names outside the pool, at `price`.
+    pub fn set(pool: ChampionSet, price: Price) -> Self {
+        Self {
+            pool,
+            price,
+            tagged: None,
+        }
     }
 
-    /// The off-pool picks `action` adds for the mover. A list side: its champions outside the pool. A
-    /// tagged side: the rise in the off-role count of the mover's picks — the action taken whole, since
-    /// two in-role singles can displace a locked pick together. Never negative: where the action breaks
-    /// the comp the count falls back to the set test, which can undercount, and the difference is
-    /// clamped at 0 (that child is in the L' band) — but never below the champions the action itself
+    /// `action`'s charge for the mover. A list side: its champions outside the pool, ungraded. A tagged
+    /// side: `d_off` is the rise in the off-role count of the mover's picks — the action taken whole,
+    /// since two in-role singles can displace a locked pick together. Never negative: where the action
+    /// breaks the comp the count falls back to the set test, which can undercount, and the difference
+    /// is clamped at 0 (that child is in the L' band) — but never below the champions the action itself
     /// names outside the pool, so such an action still reads off-pool (the ordering key, the root split
-    /// and the report's marker), as it does in list form. 0 = an in-pool action.
-    pub fn of(&self, action: Action) -> usize {
+    /// and the report's marker), as it does in list form. The weighted deltas are raw where the child
+    /// can be arranged (the floor over-charges a child that pays grade instead of an off unit: node
+    /// `(3, 0)`, child `(3, 170)`, outside 1 — review round 3) and today's floored delta where it cannot.
+    pub fn of(&self, action: Action) -> Charge {
         let outside = action
             .champions()
             .filter(|c| !self.pool.contains(*c))
             .count();
+        // A handful at most (≤ 2 on a list pool, ≤ 5 on a tagged one), so the conversions are exact.
+        let unit = |n: usize| i8::try_from(n).unwrap_or(i8::MAX);
+        let list = Charge {
+            d_off: outside,
+            d_off_key: unit(outside),
+            d_grade: 0,
+            price: self.price,
+        };
         let Some(tagged) = self.tagged else {
-            return outside;
+            return list;
         };
         if matches!(action, Action::Ban(_)) {
-            return outside;
+            return list;
         }
         let profile = action.champions().fold(tagged.profile, |profile, c| {
             profile.with(
                 playable(tagged.tags, tagged.universe, c),
                 tagged.tags.mask(c),
+                tagged.universe.grades(c),
+                self.price,
             )
         });
-        off_role(
+        let d_off = off_role(
             &profile,
             tagged.picks + action.champions().count(),
             tagged.outside_pool + outside,
         )
         .saturating_sub(tagged.made)
-        .max(outside)
+        .max(outside);
+        let (d_off_key, d_grade) = match profile.cheapest(self.price) {
+            Some(child) => (
+                unit(usize::from(child.off)) - unit(usize::from(tagged.cheapest.off)),
+                // Grades sum to at most 500 a side, so the difference fits.
+                i16::try_from(i32::from(child.grade) - i32::from(tagged.cheapest.grade))
+                    .unwrap_or(i16::MAX),
+            ),
+            None => (unit(d_off), 0),
+        };
+        Charge {
+            d_off,
+            d_off_key,
+            d_grade,
+            price: self.price,
+        }
     }
 }
 
@@ -394,6 +664,7 @@ pub fn action_charge<'a>(
     universe: &'a Universe,
 ) -> ActionCharge<'a> {
     let pool = pools.for_side(side);
+    let price = memo.price;
     let tagged = tags_for(rule, side, position, pools).map(|tags| {
         let locked = position.picks(side);
         let profile = locked_profile(memo, side, locked, tags, universe);
@@ -405,9 +676,14 @@ pub fn action_charge<'a>(
             picks: locked.len(),
             outside_pool,
             made: off_role(&profile, locked.len(), outside_pool),
+            cheapest: cheapest_cost(&profile, outside_pool, price),
         }
     });
-    ActionCharge { pool, tagged }
+    ActionCharge {
+        pool,
+        price,
+        tagged,
+    }
 }
 
 /// Can `side` still complete five roles? locked = its picks; `On`: from its pool net of everything
@@ -557,45 +833,58 @@ pub fn off_pool(
             let rank = role_rank(memo, side, position, pool_net, universe);
             remaining.saturating_sub(rank.saturating_sub(position.picks(side).len()))
         };
-        return OffPool { made, forced };
+        return OffPool {
+            made,
+            grade: 0,
+            forced,
+        };
     };
+    // Role-tagged, weighted (engine-role-grade design § 2): under the two gates — no pick left, the
+    // roster cannot complete — the leaf charges the locked picks' cheapest arrangement alone, as today
+    // charges `made` alone (at "no pick left" every arrangement fills every role, so the total is the
+    // cheapest anyway; at "the roster cannot complete" the fills `a*` was chosen for will not happen);
+    // otherwise the least total: its argmin's own cost and fills.
     let pool_net = pool.intersect(position.available(universe));
     let locked = position.picks(side);
-    let made = off_role(
-        &locked_profile(memo, side, locked, tags, universe),
-        locked.len(),
-        outside_pool,
-    );
-    // Asked in the list path's order — the pool first (one memoised weight), the roster only when a
+    let price = memo.price;
+    let profile = locked_profile(memo, side, locked, tags, universe);
+    let cheapest = cheapest_cost(&profile, outside_pool, price);
+    let gated = |cost: Cost| OffPool {
+        made: usize::from(cost.off),
+        grade: usize::from(cost.grade),
+        forced: 0,
+    };
+    if remaining == 0 {
+        return gated(cheapest);
+    }
+    // Asked in the list path's order — the pool first (one memoised total), the roster only when a
     // pick is in fact short: the roster's candidate set is everything available, a different set at
     // every leaf, so asking it first costs a memo entry per leaf (measured on the grid: 4.6 times the
-    // list form's memory under `pool_or_roster`). Picks that cannot be arranged have no `W`: nothing
+    // list form's memory under `pool_or_roster`). Picks that cannot be arranged have no total: nothing
     // is forced, and the roster would say the same.
-    let short = if remaining == 0 {
-        0
-    } else {
-        in_role_weight(memo, side, position, pool_net, tags, universe).map_or(0, |weight| {
-            debug_assert!(
-                weight + made <= ROLES.len(),
-                "forced is never negative (design fact 2)"
-            );
-            ROLES.len().saturating_sub(weight).saturating_sub(made)
-        })
+    let Some(total) = least_total_at(memo, side, position, pool_net, tags, universe) else {
+        return gated(cheapest);
     };
-    let forced = if short == 0
-        || !can_complete_from(
-            memo,
-            side,
-            position,
-            position.available(universe),
-            Some(tags),
-            universe,
-        ) {
-        0
-    } else {
-        short
-    };
-    OffPool { made, forced }
+    // Nothing to fill: the argmin's own cost, which is NOT always the cheapest arrangement alone
+    // (fact 10: a dearer-alone arrangement can win the total by leaving the pool a fill).
+    if total.fills == 0 {
+        return gated(total.cost);
+    }
+    if !can_complete_from(
+        memo,
+        side,
+        position,
+        position.available(universe),
+        Some(tags),
+        universe,
+    ) {
+        return gated(cheapest);
+    }
+    OffPool {
+        made: usize::from(total.cost.off),
+        grade: usize::from(total.cost.grade),
+        forced: usize::from(total.fills),
+    }
 }
 
 /// The snipe-aware key's input (design `engine-snipe-key-design.md` § 1): the champions of `side`'s pool
@@ -632,14 +921,25 @@ pub fn critical_pool(
         return known;
     }
     if let Some(tags) = tags {
-        // Role-tagged (design § 5): the champions whose removal lowers `W`. The candidates cannot come
-        // from one maximum-cardinality matching here — a champion outside it can sit in every
-        // W-optimal solution — so each listed champion of the pool net is tried against `W` itself.
+        // Role-tagged (role-aware pools design § 5; engine-role-grade G9): the champions whose removal
+        // makes the least total WORSE in the comparator's first two keys — a higher price, or the same
+        // price and more off units (at P = Q = 0 the price never moves, so it is today's "lowers W").
+        // The candidates cannot come from one maximum-cardinality matching here — a champion outside it
+        // can sit in every optimal solution — so each champion of the pool net is tried against the
+        // total itself. Under weights the role-aware design's facts 3 and 5 (a removal moves the count
+        // by 0 or 1; two critical champions by exactly 2) do not hold, nor does the key's `sniped · P`
+        // gain: said here, acceptable while the key stays OFF.
+        let price = memo.price;
         let profile = locked_profile(memo, side, locked, tags, universe);
-        let weight = profile.weight(coverable(tags, pool_net));
+        let total = profile.least_total(coverable(tags, pool_net), price);
+        let worse = |after: Option<Total>| match (total, after) {
+            (Some(t), Some(a)) => (a.price(price), a.off()) > (t.price(price), t.off()),
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
         let critical = pool_net
             .iter()
-            .filter(|c| profile.weight(coverable(tags, pool_net.without(*c))) < weight)
+            .filter(|c| worse(profile.least_total(coverable(tags, pool_net.without(*c)), price)))
             .collect();
         memo.critical.insert(key, critical);
         return critical;
@@ -774,34 +1074,54 @@ fn can_complete_from(
 
 #[cfg(test)]
 mod tests {
-    use super::{coverable, off_role, roles_in, Profile, RoleMask, RoleSets, ROLES, SUBSETS};
+    use super::{
+        coverable, off_role, roles_in, Cost, Price, Profile, RoleMask, RoleSets, Total, ROLES,
+        SUBSETS,
+    };
     use crate::reference::universe::{ChampionIdx, ChampionSet};
 
-    /// One champion as the solver sees it: the roles it can play for the side, the roles the pool lists.
+    /// One champion as the solver sees it: the roles it can play for the side, the roles the pool lists,
+    /// its grade in each role (read only off the listed roles).
     #[derive(Clone, Copy, Debug)]
     struct Champ {
         playable: RoleMask,
         listed: RoleMask,
+        grades: [u8; 5],
     }
 
-    /// Every arrangement of `picks` (distinct roles, each playable), as `(roles used, in-role count)`.
-    fn arrangements(picks: &[Champ]) -> Vec<(usize, usize)> {
-        picks.iter().fold(vec![(0, 0)], |partial, c| {
-            partial
-                .iter()
-                .flat_map(|&(used, in_role)| {
-                    (0..ROLES.len())
-                        .map(|bit| 1usize << bit)
-                        .filter(move |role| usize::from(c.playable) & role != 0 && used & role == 0)
-                        .map(move |role| {
-                            (
-                                used | role,
-                                in_role + usize::from(usize::from(c.listed) & role != 0),
-                            )
-                        })
-                })
-                .collect()
-        })
+    fn placement(c: &Champ, bit: usize) -> Cost {
+        if usize::from(c.listed) >> bit & 1 == 1 {
+            Cost::default()
+        } else {
+            Cost {
+                off: 1,
+                grade: u16::from(c.grades[bit]),
+            }
+        }
+    }
+
+    /// Every arrangement of `picks` (distinct roles, each playable), as `(roles used, in-role count, cost)`.
+    fn arrangements(picks: &[Champ]) -> Vec<(usize, usize, Cost)> {
+        picks
+            .iter()
+            .fold(vec![(0, 0, Cost::default())], |partial, c| {
+                partial
+                    .iter()
+                    .flat_map(|&(used, in_role, cost)| {
+                        (0..ROLES.len())
+                            .filter(move |bit| {
+                                usize::from(c.playable) >> bit & 1 == 1 && used >> bit & 1 == 0
+                            })
+                            .map(move |bit| {
+                                (
+                                    used | 1 << bit,
+                                    in_role + usize::from(usize::from(c.listed) >> bit & 1 == 1),
+                                    cost.plus(placement(c, bit)),
+                                )
+                            })
+                    })
+                    .collect()
+            })
     }
 
     /// The largest number of `pool` champions that fit, each in a listed role, into roles outside `used`.
@@ -818,10 +1138,7 @@ mod tests {
             .unwrap_or(0)
     }
 
-    fn solver(locked: &[Champ], pool: &[Champ]) -> (Option<usize>, Option<usize>) {
-        let profile = locked
-            .iter()
-            .fold(Profile::start(), |p, c| p.with(c.playable, c.listed));
+    fn tags_of(pool: &[Champ]) -> (RoleSets, ChampionSet) {
         let tags = pool
             .iter()
             .enumerate()
@@ -836,43 +1153,107 @@ mod tests {
         let net: ChampionSet = (0..pool.len())
             .map(|i| ChampionIdx(u8::try_from(i).unwrap_or(u8::MAX)))
             .collect();
+        (tags, net)
+    }
+
+    fn profile_of(locked: &[Champ], price: Price) -> Profile {
+        locked.iter().fold(Profile::start(), |p, c| {
+            p.with(c.playable, c.listed, c.grades, price)
+        })
+    }
+
+    /// (most in-role, W, the cheapest cost, the least total) by the solver.
+    fn solver(
+        locked: &[Champ],
+        pool: &[Champ],
+        price: Price,
+    ) -> (Option<usize>, Option<usize>, Option<Cost>, Option<Total>) {
+        let profile = profile_of(locked, price);
+        let (tags, net) = tags_of(pool);
+        let cover = coverable(&tags, net);
         (
             profile.most_in_role(),
-            profile.weight(coverable(&tags, net)),
+            profile.weight(cover),
+            profile.cheapest(price),
+            profile.least_total(cover, price),
         )
     }
 
-    fn brute(locked: &[Champ], pool: &[Champ]) -> (Option<usize>, Option<usize>) {
+    /// The same four by brute force over every arrangement: the cheapest in the cost order (price,
+    /// fewer off, fewer grade) and the least total under the comparator (price, total off, locked off,
+    /// grade, roles used).
+    fn brute(
+        locked: &[Champ],
+        pool: &[Champ],
+        price: Price,
+    ) -> (Option<usize>, Option<usize>, Option<Cost>, Option<Total>) {
         let all = arrangements(locked);
+        let cheapest = all.iter().map(|&(_, _, cost)| cost).min_by(|a, b| {
+            (a.price(price), a.off, a.grade)
+                .partial_cmp(&(b.price(price), b.off, b.grade))
+                .expect("finite prices")
+        });
+        let total = all
+            .iter()
+            .map(|&(used, _, cost)| {
+                let open = ROLES.len() - roles_in(used);
+                let fills = u8::try_from(open - fill(pool, used)).unwrap_or(u8::MAX);
+                (Total { cost, fills }, used)
+            })
+            .min_by(|(a, ua), (b, ub)| {
+                (a.price(price), a.off(), a.cost.off, a.cost.grade, *ua)
+                    .partial_cmp(&(b.price(price), b.off(), b.cost.off, b.cost.grade, *ub))
+                    .expect("finite prices")
+            })
+            .map(|(t, _)| t);
         (
-            all.iter().map(|&(_, in_role)| in_role).max(),
+            all.iter().map(|&(_, in_role, _)| in_role).max(),
             all.iter()
-                .map(|&(used, in_role)| in_role + fill(pool, used))
+                .map(|&(used, in_role, _)| in_role + fill(pool, used))
                 .max(),
+            cheapest,
+            total,
         )
     }
 
     /// Every playable mask of one or two roles with every listed mask it can carry (`listed ⊆ playable`:
-    /// `playable` is the meta's roles OR the listed ones).
+    /// `playable` is the meta's roles OR the listed ones), and every grade pattern from {0, 100} on the
+    /// playable roles the pool does not list (a grade is read nowhere else; listed roles stay 0).
     fn champs() -> Vec<Champ> {
-        (1..SUBSETS)
-            .filter(|playable| roles_in(*playable) <= 2)
-            .flat_map(|playable| {
-                (0..SUBSETS)
-                    .filter(move |listed| listed & !playable == 0)
-                    .map(move |listed| Champ {
+        let mut out = Vec::new();
+        for playable in (1..SUBSETS).filter(|p| roles_in(*p) <= 2) {
+            for listed in (0..SUBSETS).filter(|l| l & !playable == 0) {
+                let open: Vec<usize> = (0..ROLES.len())
+                    .filter(|bit| playable >> bit & 1 == 1 && listed >> bit & 1 == 0)
+                    .collect();
+                for pattern in 0..1usize << open.len() {
+                    let mut grades = [0u8; 5];
+                    for (i, bit) in open.iter().enumerate() {
+                        if pattern >> i & 1 == 1 {
+                            grades[*bit] = 100;
+                        }
+                    }
+                    out.push(Champ {
                         playable: RoleMask::try_from(playable).unwrap_or(0),
                         listed: RoleMask::try_from(listed).unwrap_or(0),
-                    })
-            })
-            .collect()
+                        grades,
+                    });
+                }
+            }
+        }
+        out
     }
 
-    /// The fewest placements that are not in-role over every way to complete `locked` with
-    /// `to_come` of `candidates` (pool net and roster alike) and arrange the five; `None` when no
-    /// completion can be arranged. `chosen` ranges over every subset of the candidates, which can
-    /// outnumber the roles (review minor F1: `roles_in` counts the first five bits only).
-    fn true_minimum(locked: &[Champ], candidates: &[Champ], to_come: usize) -> Option<usize> {
+    /// The least price over every way to complete `locked` with `to_come` of `candidates` (pool net and
+    /// roster alike) and arrange the five; `None` when no completion can be arranged. `chosen` ranges
+    /// over every subset of the candidates, which can outnumber the roles (review minor F1: `roles_in`
+    /// counts the first five bits only).
+    fn true_min_price(
+        locked: &[Champ],
+        candidates: &[Champ],
+        to_come: usize,
+        price: Price,
+    ) -> Option<f64> {
         let chosen_count = |chosen: usize| {
             (0..candidates.len())
                 .filter(|i| chosen >> i & 1 == 1)
@@ -891,19 +1272,23 @@ mod tests {
                 );
                 arrangements(&team)
                     .iter()
-                    .map(|&(_, in_role)| team.len() - in_role)
-                    .min()
+                    .map(|&(_, _, cost)| cost.price(price))
+                    .min_by(|a, b| a.partial_cmp(b).expect("finite"))
             })
-            .min()
+            .min_by(|a, b| a.partial_cmp(b).expect("finite"))
     }
 
-    /// Role-aware pools design § 6 test 19: the subset-table solver against brute force. Exhaustive over
-    /// every locked set of up to two champions (one- and two-role masks, every listing) and every pool
-    /// net of up to two listed champions; then 20 000 larger draws (up to five locked, six in the pool
-    /// net, any masks). `most_in_role` is the off-role count's input and `weight` is W. On each draw the
-    /// off-role count itself is checked, and — with up to four roster champions the pool does not list —
-    /// the count the leaf charges, `5 − W`, against the true minimum over every completion: never above
-    /// it (design fact 4: a lower bound), and equal to it on a complete comp.
+    /// Role-aware pools design § 6 test 19 and engine-role-grade design § 7 test 1: the subset-table
+    /// solver against brute force, both tables. Exhaustive over every locked set of up to two champions
+    /// (one- and two-role masks, every listing, every {0, 100} grade pattern on the unlisted playable
+    /// roles) and every pool net of up to two listed champions, at a dyadic weighted price; then 20 000
+    /// larger draws (up to five locked, six in the pool net, any masks, grades 0..=100) at dyadic
+    /// (P, q_unit) with q_unit ∈ {0, P/128, P/64, P/32}, so prices add exactly. On each: `most_in_role`
+    /// and W (today's tables), the cheapest cost and the least total (price AND the comparator's split)
+    /// equal brute force; the off-role count and — with up to four roster champions the pool does not
+    /// list — the lower bound: the least total's price is never above the least price over every
+    /// completion (fact 9), and equal to it on a complete comp. At q_unit = 0 with non-zero grades the
+    /// exchange theorem's consequence (fact 8): `least_total.off = 5 − W` and `cost.off = made_u`.
     #[test]
     fn the_solver_equals_brute_force_on_small_mask_sets() {
         let all = champs();
@@ -915,25 +1300,29 @@ mod tests {
                 .flat_map(|a| all.iter().map(move |b| vec![*a, *b])),
         );
         // The pool net of two is taken over the single-role listings: 5 × 5 nets per locked set keeps
-        // the exhaustive part under a second in a debug build; the draws below cover the rest.
+        // the exhaustive part a few seconds in a debug build; the draws below cover the rest.
         let single: Vec<Champ> = listed
             .iter()
             .copied()
             .filter(|c| roles_in(usize::from(c.listed)) == 1 && c.playable == c.listed)
             .collect();
         let mut nets: Vec<Vec<Champ>> = vec![Vec::new()];
-        nets.extend(listed.iter().map(|a| vec![*a]));
+        nets.extend(single.iter().map(|a| vec![*a]));
         nets.extend(
             single
                 .iter()
                 .flat_map(|a| single.iter().map(move |b| vec![*a, *b])),
         );
+        let weighted = Price {
+            p: 1.0,
+            q_unit: 1.0 / 128.0,
+        };
         let mut cases = 0u64;
         for locked in &locked_sets {
             for net in &nets {
                 assert_eq!(
-                    solver(locked, net),
-                    brute(locked, net),
+                    solver(locked, net, weighted),
+                    brute(locked, net, weighted),
                     "{locked:?} {net:?}"
                 );
                 cases += 1;
@@ -951,36 +1340,67 @@ mod tests {
         let mask = |bits: u64| RoleMask::try_from(bits % 32).unwrap_or(0);
         let mut unmatchable = 0;
         let mut short = 0;
-        let (mut bounded, mut slack, mut complete) = (0u64, 0u64, 0u64);
+        let (mut bounded, mut slack, mut complete, mut exchanged, mut graded_moves) =
+            (0u64, 0u64, 0u64, 0u64, 0u64);
         for _ in 0..20_000 {
             let draw = |n: u64, next: &mut dyn FnMut(u64) -> u64| -> Vec<Champ> {
                 (0..n)
                     .map(|_| {
                         let listed = if next(3) == 0 { 0 } else { mask(next(32)) };
+                        let playable = mask(next(31) + 1) | listed;
+                        let mut grades = [0u8; 5];
+                        for (bit, g) in grades.iter_mut().enumerate() {
+                            if playable >> bit & 1 == 1 && listed >> bit & 1 == 0 {
+                                *g = u8::try_from(next(101)).unwrap_or(100);
+                            }
+                        }
                         Champ {
-                            playable: mask(next(31) + 1) | listed,
+                            playable,
                             listed,
+                            grades,
                         }
                     })
                     .collect()
             };
             let (locked_len, net_len) = (next(6), next(7));
             let (locked, net) = (draw(locked_len, &mut next), draw(net_len, &mut next));
-            let expected = brute(&locked, &net);
-            assert_eq!(solver(&locked, &net), expected, "{locked:?} {net:?}");
+            let p = [0.25, 0.5, 1.0, 2.0][usize::try_from(next(4)).unwrap_or(0)];
+            let q_unit =
+                [0.0, p / 128.0, p / 64.0, p / 32.0][usize::try_from(next(4)).unwrap_or(0)];
+            let price = Price { p, q_unit };
+            let expected = brute(&locked, &net, price);
+            assert_eq!(
+                solver(&locked, &net, price),
+                expected,
+                "{locked:?} {net:?} {price:?}"
+            );
             unmatchable += u64::from(expected.1.is_none());
             short += u64::from(expected.1.is_some_and(|w| w < ROLES.len()));
 
             // The off-role count: the picks less the most in-role, or the fallback when unarrangeable.
-            let profile = locked
-                .iter()
-                .fold(Profile::start(), |p, c| p.with(c.playable, c.listed));
+            let profile = profile_of(&locked, price);
             let outside = locked.iter().filter(|c| c.listed == 0).count();
+            let made_u = expected.0.map_or(outside, |in_role| locked.len() - in_role);
             assert_eq!(
                 off_role(&profile, locked.len(), outside),
-                expected.0.map_or(outside, |in_role| locked.len() - in_role),
+                made_u,
                 "{locked:?}"
             );
+
+            // Fact 8 at Q = 0: the least total's off units are 5 − W and its locked off units today's
+            // made, whatever the grades (the comparator's "total off, locked off" tie-breaks).
+            if let (true, Some(w), Some(c), Some(t)) =
+                (q_unit == 0.0, expected.1, expected.2, expected.3)
+            {
+                assert_eq!(usize::from(c.off), made_u, "{locked:?} {net:?}");
+                assert_eq!(usize::from(t.off()), ROLES.len() - w, "{locked:?} {net:?}");
+                assert_eq!(usize::from(t.cost.off), made_u, "{locked:?} {net:?}");
+                exchanged += 1;
+            }
+            // Under weights the honest split can place more locked picks off-role than today.
+            if let (true, Some(t)) = (q_unit > 0.0, expected.3) {
+                graded_moves += u64::from(usize::from(t.cost.off) > made_u);
+            }
 
             // The lower bound, on comps of five with a pool net and a roster small enough to enumerate.
             if net.len() > 4 {
@@ -988,33 +1408,49 @@ mod tests {
             }
             let roster_len = next(5);
             let roster: Vec<Champ> = (0..roster_len)
-                .map(|_| Champ {
-                    playable: mask(next(31) + 1),
-                    listed: 0,
+                .map(|_| {
+                    let playable = mask(next(31) + 1);
+                    let mut grades = [0u8; 5];
+                    for (bit, g) in grades.iter_mut().enumerate() {
+                        if playable >> bit & 1 == 1 {
+                            *g = u8::try_from(next(101)).unwrap_or(100);
+                        }
+                    }
+                    Champ {
+                        playable,
+                        listed: 0,
+                        grades,
+                    }
                 })
                 .collect();
             let to_come = ROLES.len() - locked.len();
             let candidates: Vec<Champ> = net.iter().chain(&roster).copied().collect();
-            let (Some(weight), Some(truth)) =
-                (expected.1, true_minimum(&locked, &candidates, to_come))
-            else {
+            let (Some(total), Some(truth)) = (
+                expected.3,
+                true_min_price(&locked, &candidates, to_come, price),
+            ) else {
                 continue;
             };
             bounded += 1;
             assert!(
-                ROLES.len() - weight <= truth,
-                "{locked:?} {net:?} {roster:?}"
+                total.price(price) <= truth,
+                "{locked:?} {net:?} {roster:?} {price:?}"
             );
-            slack += u64::from(ROLES.len() - weight < truth);
+            slack += u64::from(total.price(price) < truth);
             if to_come == 0 {
                 complete += 1;
-                assert_eq!(ROLES.len() - weight, truth, "{locked:?}");
+                assert_eq!(total.price(price), truth, "{locked:?} {price:?}");
             }
         }
-        // The bound was checked on thousands of completable comps, some with slack, some complete.
+        // The bound was checked on thousands of completable comps, some with slack, some complete; the
+        // Q = 0 consequence on thousands of draws; and the weighted split moved on some.
         assert!(
             bounded > 3_000 && slack > 50 && complete > 50,
             "{bounded} {slack} {complete}"
+        );
+        assert!(
+            exchanged > 2_000 && graded_moves > 20,
+            "{exchanged} {graded_moves}"
         );
         // The draws reach both kinds of case the pricing turns on.
         assert!(unmatchable > 100, "{unmatchable}");

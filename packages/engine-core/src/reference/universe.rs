@@ -521,6 +521,11 @@ impl Universe {
         self.grades[usize::from(c.0)][bit]
     }
 
+    /// `c`'s grades, bit `i` = `ROLES[i]` — the solver's form (`reference::feasibility::Profile`).
+    pub(crate) fn grades(&self, c: ChampionIdx) -> [u8; 5] {
+        self.grades[usize::from(c.0)]
+    }
+
     pub fn names(&self, champions: &[ChampionIdx]) -> Vec<String> {
         champions.iter().map(|c| self.id(*c).to_string()).collect()
     }

@@ -1360,7 +1360,7 @@ fn measure_b_proper_width_grid() {
                 .map_or("-".to_string(), |r| name(&r.action));
             // Review round 1: the margin between the top and the best action of the OTHER pool class
             // (in-pool vs off-pool), positive for the mover — "stable" means nothing without it.
-            let in_pool = |a: &Action| charge.of(*a) == 0;
+            let in_pool = |a: &Action| charge.of(*a).is_in_pool();
             let (top_class, margin, other) = match (pick_root, o.ranked.first()) {
                 (true, Some(t)) => {
                     let class = in_pool(&t.action);
@@ -2273,7 +2273,7 @@ fn the_ordering_key_charges_off_pool_champions_under_roster() {
     let actions = legal_actions_under(&position, &u, &pools, FeasibilityRule::Roster, &mut memo);
     assert_eq!(actions.len(), 6, "BA X K7 K8 K9 K10");
     let first_two = |off_pool: Option<(ChampionSet, f64)>| -> Vec<Action> {
-        let off_pool = off_pool.map(|(pool, p)| (ActionCharge::set(pool), p));
+        let off_pool = off_pool.map(|(pool, p)| ActionCharge::set(pool, Price::of(p, 0.0)));
         static_order(&u, &position, Side::Blue, actions.clone(), off_pool, None)[..2].to_vec()
     };
     assert_eq!(
@@ -2792,7 +2792,7 @@ fn a_pair_of_two_critical_champions_takes_the_snipe_term_twice() {
         &position,
         Side::Red,
         actions,
-        Some((ActionCharge::set(pools.red), 0.15)),
+        Some(ActionCharge::set(pools.red, Price::of(0.15, 0.0))),
         Some(critical),
     );
     let at = |a: &str, b: &str| {

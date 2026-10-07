@@ -161,13 +161,14 @@ fn invalid(err: impl std::fmt::Display) -> EngineError {
 }
 
 /// R4's static ordering as a free function (B-proper § 2): `actions` by the static utility of the
-/// child position, best first for `side`, equal values in canonical order. `off_pool` is `(the mover's
-/// action charge, P)` where the caller charges the off-pool term — under `Roster` always, under
-/// `PoolOrRoster` when a shortlist is set (`Iteration::order` decides) — and each off-pool pick an
-/// action adds then costs P in the KEY (Blue subtracts, Red adds), so an off-pool child is ordered net
-/// of its cost: on a list pool one per champion the action names outside the pool, on a role-tagged
-/// one the rise in the mover's off-role count (`feasibility::ActionCharge`; role-aware pools design
-/// § 2); `None` gives the board alone, as slice 4 built it. `snipe` is the opponent's critical
+/// child position, best first for `side`, equal values in canonical order. `off_pool` is the mover's
+/// action charge, built at the memo's price, where the caller charges the off-pool term — under
+/// `Roster` always, under `PoolOrRoster` when a shortlist is set (`Iteration::order` decides) — and
+/// each off-pool pick an action adds then costs P in the KEY (Blue subtracts, Red adds), and each grade
+/// unit Q/100 (engine-role-grade design § 5: `Charge::key_charge`), so an off-pool child is ordered net
+/// of its cost: on a list pool one P per champion the action names outside the pool, on a role-tagged
+/// one the rise in the mover's weighted cheapest arrangement (`feasibility::ActionCharge`; role-aware
+/// pools design § 2); `None` gives the board alone, as slice 4 built it. `snipe` is the opponent's critical
 /// pool (`feasibility::critical_pool`) where the snipe-aware key applies: each champion of the action
 /// in it adds the same P in the mover's favour (Blue adds, Red subtracts) — the opponent's forced-term
 /// delta, exact for any two critical champions (design fact 3); it rides only with `off_pool`, whose P
@@ -183,7 +184,7 @@ pub fn static_order(
     position: &Position<'_>,
     side: Side,
     actions: Vec<Action>,
-    off_pool: Option<(ActionCharge<'_>, f64)>,
+    off_pool: Option<ActionCharge<'_>>,
     snipe: Option<ChampionSet>,
 ) -> Vec<Action> {
     // (key, the snipe tie-break's off-pool count — 0 without `snipe`, so equal keys stay canonical —,
@@ -199,24 +200,26 @@ pub fn static_order(
                 blue_feasible: true,
                 red_feasible: true,
             });
-            if let Some((charge, p)) = off_pool {
-                let made = charge.of(a);
+            if let Some(charge) = off_pool {
+                let c = charge.of(a);
                 if snipe.is_some() {
-                    tie = made;
+                    tie = c.d_off;
                 }
-                if made > 0 {
-                    // A handful at most (≤ 2 on a list pool, ≤ 5 on a tagged one), so the conversion
-                    // is exact.
-                    let charge = f64::from(u8::try_from(made).unwrap_or(u8::MAX)) * p;
+                // The charge's own arithmetic (engine-role-grade G7): the off and grade deltas priced
+                // from integers at the memo's price, each term skipped on a zero delta or unit, clamped
+                // at 0; a zero charge adds nothing (today's `made > 0` guard, so a `−0.0` board stays).
+                let key = c.key_charge();
+                if key != 0.0 {
                     v = match side {
-                        Side::Blue => v - charge,
-                        Side::Red => v + charge,
+                        Side::Blue => v - key,
+                        Side::Red => v + key,
                     };
                 }
                 if let Some(critical) = snipe {
                     let sniped = a.champions().filter(|c| critical.contains(*c)).count();
                     if sniped > 0 {
-                        let gain = f64::from(u8::try_from(sniped).unwrap_or(u8::MAX)) * p;
+                        // `sniped · P` with P from the same price (not exact under weights, G9).
+                        let gain = f64::from(u8::try_from(sniped).unwrap_or(u8::MAX)) * c.price().p;
                         v = match side {
                             Side::Blue => v + gain,
                             Side::Red => v - gain,
@@ -317,7 +320,7 @@ pub fn root_shortlist(
     off_pool_width: usize,
     filter: &mut Filter<'_>,
 ) -> Vec<Action> {
-    let in_pool = |a: &Action| charge.of(*a) == 0;
+    let in_pool = |a: &Action| charge.of(*a).is_in_pool();
     let off: Vec<Action> = ordered.iter().copied().filter(|a| !in_pool(a)).collect();
     let kept: HashSet<Action> = truncate_children(position, side, off, off_pool_width, filter)
         .into_iter()
@@ -406,21 +409,17 @@ impl Iteration<'_, '_> {
             FeasibilityRule::PoolOrRoster => self.params.shortlist.is_some(),
             FeasibilityRule::On | FeasibilityRule::Off => false,
         };
-        let off_pool = if charged {
-            Some((
-                action_charge(
-                    &mut self.shared.memo,
-                    self.input.feasibility,
-                    slot.side,
-                    position,
-                    self.input.pools,
-                    self.input.universe,
-                ),
-                self.shared.off_pool_cost,
-            ))
-        } else {
-            None
-        };
+        // The charge carries the memo's price — the one source the key reads P and Q from.
+        let off_pool = charged.then(|| {
+            action_charge(
+                &mut self.shared.memo,
+                self.input.feasibility,
+                slot.side,
+                position,
+                self.input.pools,
+                self.input.universe,
+            )
+        });
         // The snipe-aware key (design `engine-snipe-key-design.md` § 1): once per node, the opponent's
         // critical pool; memoised on the opponent's state, so the table is never read.
         let snipe = (charged && self.params.snipe_key).then(|| {

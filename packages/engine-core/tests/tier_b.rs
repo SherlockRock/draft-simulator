@@ -665,7 +665,7 @@ fn render_report(
             if !pick_root {
                 return String::new();
             }
-            let off = charge.of(*a);
+            let off = charge.of(*a).d_off;
             if off == 0 {
                 " [in-pool]".to_string()
             } else {
@@ -767,7 +767,7 @@ fn render_report(
             }
             if let (Some(top), Arm::Roster(p)) = (out_come.ranked.first(), arm) {
                 if pick_root {
-                    let in_pool = |a: &Action| charge.of(*a) == 0;
+                    let in_pool = |a: &Action| charge.of(*a).is_in_pool();
                     let mixed = out_come.top_set.iter().any(in_pool)
                         && out_come.top_set.iter().any(|a| !in_pool(a));
                     if out_come.partial {
@@ -1413,9 +1413,12 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                     let by_list = action_charge(&mut memo, rule, slot.side, &position, &list, u);
                     let by_map = action_charge(&mut memo, rule, slot.side, &position, &maps, u);
                     for action in position.pick_actions_from(position.available(u)) {
+                        // The class and the off delta; not the grade delta — a map grades a
+                        // displaced outside champion, a list never grades anything.
+                        let (m, l) = (by_map.of(action), by_list.of(action));
                         assert_eq!(
-                            by_map.of(action),
-                            by_list.of(action),
+                            (m.d_off, m.d_off_key),
+                            (l.d_off, l.d_off_key),
                             "{} at {n} {rule:?} {action:?}",
                             fx.id
                         );
@@ -1916,13 +1919,13 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
         let best = outcome
             .ranked
             .iter()
-            .find(|r| charge.of(r.action) == 0)
+            .find(|r| charge.of(r.action).is_in_pool())
             .unwrap_or_else(|| panic!("{id}: no in-pool action ranked"));
         let filled = &outcome.ranked[rank(fill) - 1];
         Reading {
             best_in_pool: (rank(best.action), best.action),
             fill_rank: rank(fill),
-            fill_charge: charge.of(fill),
+            fill_charge: charge.of(fill).d_off,
             value: best.value,
             red_off_pool: best.ends.red_off_pool,
             fill_value: filled.value,
@@ -2015,6 +2018,7 @@ fn the_parked_positions_stop_calling_an_off_role_fill_in_pool() {
             u,
         )
         .of(a)
+        .d_off
     };
     assert_eq!(
         charge_at("top-pinch-slot-19-kittens", action(&["Locke"])),
@@ -2175,7 +2179,7 @@ fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
             );
             for (rank, r) in o.ranked.iter().enumerate() {
                 let class = if root.action == ActionType::Pick {
-                    match charge.of(r.action) {
+                    match charge.of(r.action).d_off {
                         0 => "in-pool".to_string(),
                         n => format!("off-pool {n}"),
                     }
