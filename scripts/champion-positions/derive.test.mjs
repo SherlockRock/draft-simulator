@@ -81,11 +81,37 @@ test("refreshPositions rewrites only positions, keeps order and other fields, an
   ]);
   const { rows: out, kept } = refreshPositions(rows, rates);
   assert.deepEqual(out.map((r) => r.id), ["Ahri", "Vayne", "Zaahen"]);
-  assert.deepEqual(out[0], { name: "Ahri", id: "Ahri", positions: ["MIDDLE"], extra: 1 });
+  // Re-pinned for engine-role-grade § 1: a refreshed row also carries the listed roles' shares.
+  assert.deepEqual(out[0], { name: "Ahri", id: "Ahri", positions: ["MIDDLE"], extra: 1, positionShares: { MIDDLE: 0.93 } });
   assert.deepEqual(out[1].positions, ["TOP", "BOTTOM"]);
   assert.deepEqual(out[2].positions, ["TOP", "JUNGLE"]);
   assert.deepEqual(kept, ["Zaahen"]);
   assert.deepEqual(rows[1].positions, ["BOTTOM", "TOP"], "input is not mutated");
+});
+
+test("refreshPositions writes positionShares for the LISTED roles only, 3 dp, primary first; a kept row keeps whatever it had", () => {
+  const rows = [
+    { name: "Vayne", id: "Vayne", positions: ["BOTTOM"] },
+    { name: "Zaahen", id: "Zaahen", positions: ["TOP"], positionShares: { TOP: 0.5 } },
+    { name: "Locke", id: "Locke", positions: ["MIDDLE"] },
+  ];
+  const rates = new Map([
+    ["Vayne", { TOP: 0.56774, BOTTOM: 0.38425, MIDDLE: 0.0344, JUNGLE: 0.0113, SUPPORT: 0.0024 }],
+  ]);
+  const { rows: out } = refreshPositions(rows, rates);
+  assert.deepEqual(out[0].positions, ["TOP", "BOTTOM"]);
+  assert.deepEqual(out[0].positionShares, { TOP: 0.568, BOTTOM: 0.384 });
+  assert.deepEqual(Object.keys(out[0].positionShares), ["TOP", "BOTTOM"], "keyed in the positions' order");
+  assert.deepEqual(out[1].positionShares, { TOP: 0.5 }, "a kept row keeps its shares");
+  assert.equal(out[2].positionShares, undefined, "a kept row without shares stays without");
+});
+
+test("refreshPositions rounds a share to 3 dp and keeps a below-threshold argmax's share", () => {
+  const rows = [{ name: "Spread", id: "Spread", positions: ["TOP"] }];
+  const rates = new Map([["Spread", { TOP: 0.0995, JUNGLE: 0.09, MIDDLE: 0.09, BOTTOM: 0.09, SUPPORT: 0.09 }]]);
+  const { rows: out } = refreshPositions(rows, rates, 0.5);
+  assert.deepEqual(out[0].positions, ["TOP"]);
+  assert.deepEqual(out[0].positionShares, { TOP: 0.1 });
 });
 
 test("diffPositions reports primary flips, lost and gained pairs, changed sets and means", () => {
@@ -200,6 +226,17 @@ test("evaluateGate reports but does not abort under --force", () => {
   assert.equal(g.abort, false);
   assert.equal(g.reasons.length, 3);   // flips, feasibility drop, the override note
   assert.match(g.reasons.join("\n"), /overridden by --force/);
+});
+
+test("formatDiff counts the champions with and without positionShares when given the rows", () => {
+  const diff = { primaryFlips: [], lost: [], gained: [], changedSets: 0, meanBefore: 1, meanAfter: 1 };
+  const rows = [
+    { id: "Ahri", positions: ["MIDDLE"], positionShares: { MIDDLE: 0.93 } },
+    { id: "Zaahen", positions: ["TOP"] },
+  ];
+  const text = formatDiff(diff, new Map(), ["Zaahen"], rows);
+  assert.match(text, /champions with positionShares: 1; without \(no source data, kept as they were\): 1 \(Zaahen\)/);
+  assert.doesNotMatch(formatDiff(diff, new Map(), ["Zaahen"]), /positionShares/, "without rows the line is not printed");
 });
 
 test("formatDiff names each flip with its rates, the lost and gained pairs, and the kept champions", () => {

@@ -6,8 +6,8 @@
  * docs/designs/champion-meta-positions-refresh-design.md):
  *
  *   - an id already in the file keeps every refresh-owned field (`positions`,
- *     `playable`, the root `positionsSource` block); DDragon owns `name`,
- *     `version` and `updatedAt`;
+ *     `positionShares`, `playable`, the root `positionsSource` block); DDragon
+ *     owns `name`, `version` and `updatedAt`;
  *   - a DDragon id not in the file is added with Meraki's positions (or [] —
  *     then hand-enter positions: the compile refuses an empty list);
  *   - an id DDragon no longer returns is kept and reported for the operator to

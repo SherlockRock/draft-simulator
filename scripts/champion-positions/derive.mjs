@@ -78,9 +78,19 @@ export function refreshPositions(rows, rates, threshold = POSITIONS_THRESHOLD) {
       kept.push(row.id);
       return { ...row, positions: [...row.positions] };
     }
-    return { ...row, positions: derivePositions(shares, threshold) };
+    const positions = derivePositions(shares, threshold);
+    return { ...row, positions, positionShares: listedShares(positions, shares) };
   });
   return { rows: out, kept };
+}
+
+/**
+ * `positionShares` (engine-role-grade design § 1, G10): the share of each LISTED role, 3 dp, keyed in
+ * the positions' order — the primary first, so `positionShares[positions[0]]` is the maximum by
+ * construction. Written only for a champion the source has; a kept row keeps whatever it had.
+ */
+function listedShares(positions, shares) {
+  return Object.fromEntries(positions.map((role) => [role, Number((shares[role] ?? 0).toFixed(3))]));
 }
 
 function meanLength(rows) {
@@ -182,7 +192,7 @@ function ratesText(shares) {
 }
 
 /** The operator report printed by the CLI (design § 5 "prints the diff"). */
-export function formatDiff(diff, rates, kept) {
+export function formatDiff(diff, rates, kept, rows) {
   const lines = [];
   lines.push(`primary flips (${diff.primaryFlips.length}):`);
   for (const flip of diff.primaryFlips) {
@@ -192,5 +202,9 @@ export function formatDiff(diff, rates, kept) {
   lines.push(`roles gained (${diff.gained.length}): ${diff.gained.map((p) => `${p.id} ${p.role}`).join(", ")}`);
   lines.push(`kept (no source data) (${kept.length}): ${kept.join(", ")}`);
   lines.push(`champions whose set changed: ${diff.changedSets}; mean positions per champion ${diff.meanBefore.toFixed(2)} -> ${diff.meanAfter.toFixed(2)}`);
+  if (rows) {
+    const without = rows.filter((row) => row.positionShares === undefined).map((row) => row.id);
+    lines.push(`champions with positionShares: ${rows.length - without.length}; without (no source data, kept as they were): ${without.length}${without.length ? ` (${without.join(", ")})` : ""}`);
+  }
   return lines.join("\n");
 }

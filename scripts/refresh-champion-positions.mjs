@@ -18,9 +18,11 @@
  *
  * Rule: positions = roles with share >= 0.10 ordered by share, argmax always
  * kept, no hysteresis; a champion the source lacks keeps its list. Only the
- * `positions` values and the root `positionsSource` block change; the array
- * order, the champion set and every other field are preserved. The script
- * never adds or removes champions — that is update-champions.mjs's job.
+ * `positions` values, the `positionShares` map beside them (the listed roles'
+ * shares, 3 dp — engine-role-grade design § 1) and the root `positionsSource`
+ * block change; the array order, the champion set and every other field are
+ * preserved. The script never adds or removes champions — that is
+ * update-champions.mjs's job.
  *
  * Prints the diff (primary flips with rates, roles lost/gained, kept champions)
  * and, when the corpus and scripts/model/.venv are present, the both-sides
@@ -123,7 +125,7 @@ function main() {
   const { rows, kept } = refreshPositions(doc.champions, rates);
   assertChampionRows(rows, { label: "refresh", expectedCount: doc.champions.length, requirePositions: false });
   const diff = diffPositions(doc.champions, rows);
-  console.log(formatDiff(diff, rates, kept));
+  console.log(formatDiff(diff, rates, kept, rows));
   const empty = rows.filter((row) => row.positions.length === 0).map((row) => row.id);
   if (empty.length > 0) {
     console.log(`WARNING: ${empty.length} champion(s) still have no positions (no source data): ${empty.join(", ")} — the compile will refuse them; hand-enter positions until the next retrain`);

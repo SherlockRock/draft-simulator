@@ -14,6 +14,10 @@
  *   pickRate/banRate/winRate — defaults to 0 (no source available yet)
  *   positions      — copied verbatim from champions.json (refreshed by
  *                    refresh-champion-positions.mjs; provenance carried into sources.positions)
+ *   positionShares — copied verbatim when champions.json carries it (the refresh writes the
+ *                    play share of each listed role; the reference engine grades off-role picks
+ *                    by it). An override that names `positions` for such a champion must also
+ *                    replace `positionShares` whole (champion-positions/overrides.mjs).
  *
  * Usage: node scripts/compile-champion-meta.mjs [--champions PATH] [--out PATH]
  */
@@ -25,6 +29,7 @@ import { dirname, join } from "path";
 import { writeJson, normalize } from "./lib/fetch-utils.mjs";
 import { assertChampionRows } from "./champion-positions/invariants.mjs";
 import { formatPositionsSource } from "./champion-positions/derive.mjs";
+import { applyOverrides } from "./champion-positions/overrides.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -218,24 +223,6 @@ function clamp(n, min = 0, max = 1) {
   return Math.min(max, Math.max(min, n));
 }
 
-/**
- * Deep merge override fields onto a champion entry.
- * Only specified fields are overridden. Skips keys starting with "_".
- */
-function applyOverrides(champion, overrides) {
-  if (!overrides) return champion;
-  const result = { ...champion };
-  for (const [key, value] of Object.entries(overrides)) {
-    if (key.startsWith("_")) continue;
-    if (typeof value === "object" && !Array.isArray(value) && value !== null) {
-      result[key] = { ...result[key], ...value };
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -314,6 +301,7 @@ async function main() {
       id: canonical.id,
       name: canonical.name,
       positions: canonical.positions,
+      ...(canonical.positionShares !== undefined ? { positionShares: canonical.positionShares } : {}),
       damageProfile: deriveDamageProfile(meraki),
       scalingProfile: deriveScalingProfile(meraki),
       ccProfile: deriveCcProfile(canonical.id, ccMapping, meraki),

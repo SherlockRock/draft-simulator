@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "fs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { META_POSITIONS } from "./champion-positions/invariants.mjs";
+import { META_POSITIONS, positionSharesProblems } from "./champion-positions/invariants.mjs";
 import { formatPositionsSource } from "./champion-positions/derive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -110,6 +110,10 @@ function main() {
       }
     }
 
+    // positionShares, when present: keys = the positions set, values in (0, 1], the maximum at
+    // positions[0] (engine-role-grade design § 1) — a reordered-primary override is caught here.
+    for (const problem of positionSharesProblems(champ, id)) fail(problem);
+
     // Damage profile sums to ~1.0
     const dp = champ.damageProfile;
     if (dp) {
@@ -187,6 +191,7 @@ function main() {
   //     (design § 5). Order matters: positions[0] is the primary.
   const canonicalById = new Map(canonical.champions.map((c) => [c.id, c]));
   let differ = 0;
+  let sharesDiffer = 0;
   for (const [id, champ] of Object.entries(meta.champions)) {
     const source = canonicalById.get(id);
     if (!source) continue;
@@ -194,8 +199,13 @@ function main() {
       differ += 1;
       warn(`positions differ from champions.json: ${id} compiled [${champ.positions.join(",")}] vs json [${source.positions.join(",")}] (override?)`);
     }
+    if (JSON.stringify(champ.positionShares ?? null) !== JSON.stringify(source.positionShares ?? null)) {
+      sharesDiffer += 1;
+      warn(`positionShares differ from champions.json: ${id} compiled ${JSON.stringify(champ.positionShares ?? null)} vs json ${JSON.stringify(source.positionShares ?? null)} (override?)`);
+    }
   }
   console.log(`  Positions identical to champions.json: ${metaIds.size - differ}/${metaIds.size}`);
+  console.log(`  Position shares identical to champions.json: ${metaIds.size - sharesDiffer}/${metaIds.size}`);
 
   // 4. Matchup data
   if (existsSync(MATCHUP_PATH)) {

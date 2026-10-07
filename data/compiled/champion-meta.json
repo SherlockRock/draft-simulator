@@ -1,7 +1,7 @@
 {
   "version": "16.13.1",
   "patch": "16.13.1",
-  "compiledAt": "2026-09-05T23:37:27.317Z",
+  "compiledAt": "2026-10-06T18:59:38.355Z",
   "sources": {
     "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
     "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
@@ -13,7 +13,7 @@
       ],
       "games": 300885,
       "threshold": 0.1,
-      "generatedAt": "2026-09-05T23:37:07.735Z",
+      "generatedAt": "2026-10-06T18:59:02.601Z",
       "feasibility": {
         "sets": 34159,
         "bothSides": 0.785
@@ -28,6 +28,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.717,
+        "JUNGLE": 0.238
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -71,6 +75,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.929
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -112,6 +119,10 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "MIDDLE": 0.7,
+        "TOP": 0.273
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -145,6 +156,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.823
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -179,6 +193,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.994
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -224,6 +241,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.717,
+        "JUNGLE": 0.195
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -261,6 +282,10 @@
         "SUPPORT",
         "JUNGLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.522,
+        "JUNGLE": 0.468
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -306,6 +331,11 @@
         "TOP",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.57,
+        "TOP": 0.272,
+        "SUPPORT": 0.108
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -346,6 +376,10 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.772,
+        "SUPPORT": 0.114
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -386,6 +420,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.982
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -419,6 +456,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.931
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -461,6 +501,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.473,
+        "BOTTOM": 0.414
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -496,6 +540,10 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "MIDDLE": 0.728,
+        "TOP": 0.227
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -532,6 +580,10 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "MIDDLE": 0.863,
+        "TOP": 0.104
+      },
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -567,6 +619,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -606,6 +661,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.979
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -640,6 +698,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -685,6 +746,11 @@
         "SUPPORT",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.356,
+        "SUPPORT": 0.344,
+        "MIDDLE": 0.164
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -722,6 +788,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -766,6 +835,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.886
+      },
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -802,6 +874,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.976
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -839,6 +914,10 @@
         "SUPPORT",
         "TOP"
       ],
+      "positionShares": {
+        "SUPPORT": 0.706,
+        "TOP": 0.277
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -883,6 +962,11 @@
         "TOP",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.599,
+        "TOP": 0.203,
+        "BOTTOM": 0.192
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -924,6 +1008,11 @@
         "MIDDLE",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.63,
+        "MIDDLE": 0.165,
+        "JUNGLE": 0.134
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -961,6 +1050,10 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.737,
+        "MIDDLE": 0.176
+      },
       "damageProfile": {
         "physical": 0.15,
         "magic": 0.8,
@@ -996,6 +1089,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.845,
+        "JUNGLE": 0.134
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1039,6 +1136,10 @@
         "MIDDLE",
         "JUNGLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.498,
+        "JUNGLE": 0.464
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1081,6 +1182,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.829,
+        "JUNGLE": 0.108
+      },
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -1119,6 +1224,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.923
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1157,6 +1265,10 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.467,
+        "MIDDLE": 0.452
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1192,6 +1304,10 @@
         "JUNGLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "JUNGLE": 0.53,
+        "SUPPORT": 0.421
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1229,6 +1345,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.973
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1266,6 +1385,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.963
+      },
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -1305,6 +1427,11 @@
         "SUPPORT",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.693,
+        "SUPPORT": 0.168,
+        "TOP": 0.105
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1341,6 +1468,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.892
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -1380,6 +1510,10 @@
         "MIDDLE",
         "JUNGLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.78,
+        "JUNGLE": 0.144
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1415,6 +1549,10 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.766,
+        "SUPPORT": 0.18
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1459,6 +1597,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.878,
+        "MIDDLE": 0.112
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -1494,6 +1636,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.868,
+        "MIDDLE": 0.121
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1533,6 +1679,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.987
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -1574,6 +1723,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.663,
+        "JUNGLE": 0.129,
+        "MIDDLE": 0.124
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1617,6 +1771,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.98
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -1653,6 +1810,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.603,
+        "JUNGLE": 0.214,
+        "MIDDLE": 0.163
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1689,6 +1851,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.998
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -1733,6 +1898,12 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "TOP": 0.529,
+        "BOTTOM": 0.189,
+        "MIDDLE": 0.165,
+        "SUPPORT": 0.101
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1770,6 +1941,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.595,
+        "BOTTOM": 0.337
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1805,6 +1980,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.943
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1842,6 +2020,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.644,
+        "MIDDLE": 0.318
+      },
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -1883,6 +2065,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.837
+      },
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -1918,6 +2103,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.993
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1953,6 +2141,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.923
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -1996,6 +2187,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.797,
+        "JUNGLE": 0.131
+      },
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -2039,6 +2234,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.61,
+        "JUNGLE": 0.228,
+        "MIDDLE": 0.126
+      },
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -2074,6 +2274,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.963
+      },
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -2116,6 +2319,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.997
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2155,6 +2361,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.93
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -2197,6 +2406,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.971
+      },
       "damageProfile": {
         "physical": 0.1,
         "magic": 0.8,
@@ -2231,6 +2443,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.874
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2264,6 +2479,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.933
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2306,6 +2524,10 @@
         "JUNGLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "JUNGLE": 0.472,
+        "BOTTOM": 0.401
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2341,6 +2563,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.93
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2376,6 +2601,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.826,
+        "BOTTOM": 0.14
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2411,6 +2640,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.68,
+        "MIDDLE": 0.269
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -2446,6 +2679,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.938
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -2482,6 +2718,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.793,
+        "MIDDLE": 0.153
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2522,6 +2762,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.991
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2555,6 +2798,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.967
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2588,6 +2834,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.906
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2624,6 +2873,10 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.722,
+        "MIDDLE": 0.168
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -2659,6 +2912,10 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.766,
+        "SUPPORT": 0.179
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2694,6 +2951,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.962
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2735,6 +2995,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -2778,6 +3041,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.993
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2814,6 +3080,10 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "MIDDLE": 0.803,
+        "TOP": 0.119
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2854,6 +3124,10 @@
         "MIDDLE",
         "JUNGLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.739,
+        "JUNGLE": 0.126
+      },
       "damageProfile": {
         "physical": 0.5,
         "magic": 0.4,
@@ -2885,6 +3159,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.954
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2919,6 +3196,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.982
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2963,6 +3243,11 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "SUPPORT": 0.39,
+        "MIDDLE": 0.341,
+        "BOTTOM": 0.259
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3002,6 +3287,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.819
+      },
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -3044,6 +3332,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.842
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3081,6 +3372,11 @@
         "JUNGLE",
         "TOP"
       ],
+      "positionShares": {
+        "SUPPORT": 0.595,
+        "JUNGLE": 0.22,
+        "TOP": 0.168
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3125,6 +3421,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.834
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3162,6 +3461,11 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "BOTTOM": 0.57,
+        "MIDDLE": 0.299,
+        "SUPPORT": 0.124
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3197,6 +3501,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3231,6 +3538,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.973
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -3265,6 +3575,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.867
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3303,6 +3616,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.742,
+        "JUNGLE": 0.106,
+        "MIDDLE": 0.102
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3343,6 +3661,10 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.741,
+        "MIDDLE": 0.181
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3377,6 +3699,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3421,6 +3746,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.583,
+        "JUNGLE": 0.204,
+        "MIDDLE": 0.194
+      },
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -3456,6 +3786,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.986
+      },
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -3503,6 +3836,10 @@
         "SUPPORT",
         "MIDDLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.706,
+        "MIDDLE": 0.152
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3542,6 +3879,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.914
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3577,6 +3917,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.984
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3612,6 +3955,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.944
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -3647,6 +3993,10 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.789,
+        "MIDDLE": 0.154
+      },
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -3683,6 +4033,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.816,
+        "JUNGLE": 0.115
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3719,6 +4073,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.943
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3761,6 +4118,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.923
+      },
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -3806,6 +4166,11 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.519,
+        "TOP": 0.264,
+        "JUNGLE": 0.121
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3843,6 +4208,11 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.695,
+        "TOP": 0.194,
+        "JUNGLE": 0.103
+      },
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -3883,6 +4253,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.991
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3919,6 +4292,10 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.588,
+        "MIDDLE": 0.325
+      },
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -3955,6 +4332,11 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.424,
+        "JUNGLE": 0.397,
+        "MIDDLE": 0.133
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3990,6 +4372,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.992
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4033,6 +4418,10 @@
         "JUNGLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "JUNGLE": 0.751,
+        "SUPPORT": 0.187
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -4069,6 +4458,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.903
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4104,6 +4496,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4148,6 +4543,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.973
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4186,6 +4584,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.937
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -4224,6 +4625,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.856
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -4260,6 +4664,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.622,
+        "MIDDLE": 0.271
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4299,6 +4707,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.803,
+        "MIDDLE": 0.112
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4335,6 +4747,10 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "MIDDLE": 0.785,
+        "TOP": 0.193
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4371,6 +4787,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.979
+      },
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -4406,6 +4825,10 @@
         "JUNGLE",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.674,
+        "TOP": 0.231
+      },
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -4451,6 +4874,10 @@
         "SUPPORT",
         "BOTTOM"
       ],
+      "positionShares": {
+        "SUPPORT": 0.748,
+        "BOTTOM": 0.24
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4489,6 +4916,10 @@
         "SUPPORT",
         "BOTTOM"
       ],
+      "positionShares": {
+        "SUPPORT": 0.593,
+        "BOTTOM": 0.374
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4524,6 +4955,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.884
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4569,6 +5003,10 @@
         "JUNGLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "JUNGLE": 0.714,
+        "SUPPORT": 0.265
+      },
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -4603,6 +5041,10 @@
         "SUPPORT",
         "TOP"
       ],
+      "positionShares": {
+        "SUPPORT": 0.474,
+        "TOP": 0.474
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -4643,6 +5085,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.93
+      },
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -4679,6 +5124,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.768,
+        "MIDDLE": 0.136
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4715,6 +5164,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.698,
+        "MIDDLE": 0.18
+      },
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -4751,6 +5204,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.98
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4786,6 +5242,11 @@
         "SUPPORT",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.641,
+        "SUPPORT": 0.252,
+        "TOP": 0.101
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -4824,6 +5285,10 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.765,
+        "MIDDLE": 0.172
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -4858,6 +5323,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.996
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4899,6 +5367,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.972
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4937,6 +5408,12 @@
         "MIDDLE",
         "TOP"
       ],
+      "positionShares": {
+        "BOTTOM": 0.373,
+        "SUPPORT": 0.287,
+        "MIDDLE": 0.203,
+        "TOP": 0.137
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4979,6 +5456,11 @@
         "JUNGLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.433,
+        "JUNGLE": 0.364,
+        "SUPPORT": 0.108
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5016,6 +5498,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.603,
+        "BOTTOM": 0.369
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5056,6 +5542,11 @@
         "TOP",
         "BOTTOM"
       ],
+      "positionShares": {
+        "SUPPORT": 0.538,
+        "TOP": 0.317,
+        "BOTTOM": 0.124
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5098,6 +5589,11 @@
         "JUNGLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.477,
+        "JUNGLE": 0.34,
+        "BOTTOM": 0.13
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5135,6 +5631,10 @@
         "JUNGLE",
         "MIDDLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.725,
+        "MIDDLE": 0.26
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5168,6 +5668,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.963
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5206,6 +5709,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.788,
+        "JUNGLE": 0.107
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5241,6 +5748,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.997
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5286,6 +5796,10 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.771,
+        "MIDDLE": 0.186
+      },
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -5328,6 +5842,11 @@
         "JUNGLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "TOP": 0.568,
+        "JUNGLE": 0.279,
+        "SUPPORT": 0.129
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -5365,6 +5884,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.808,
+        "MIDDLE": 0.158
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5400,6 +5923,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.864
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5435,6 +5961,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.861
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5470,6 +5999,10 @@
         "JUNGLE",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.711,
+        "TOP": 0.253
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5505,6 +6038,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.95
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5542,6 +6078,10 @@
         "BOTTOM",
         "TOP"
       ],
+      "positionShares": {
+        "BOTTOM": 0.594,
+        "TOP": 0.354
+      },
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -5580,6 +6120,10 @@
         "TOP",
         "BOTTOM"
       ],
+      "positionShares": {
+        "TOP": 0.568,
+        "BOTTOM": 0.384
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5615,6 +6159,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.509,
+        "BOTTOM": 0.404
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5653,6 +6201,11 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.395,
+        "BOTTOM": 0.34,
+        "MIDDLE": 0.218
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5688,6 +6241,9 @@
       "positions": [
         "MIDDLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.881
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5723,6 +6279,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.925
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5764,6 +6323,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.904
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -5800,6 +6362,10 @@
         "MIDDLE",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.562,
+        "BOTTOM": 0.41
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5837,6 +6403,11 @@
         "TOP",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.523,
+        "TOP": 0.261,
+        "BOTTOM": 0.215
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5874,6 +6445,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.706,
+        "JUNGLE": 0.267
+      },
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -5916,6 +6491,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.485,
+        "JUNGLE": 0.473
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5953,6 +6532,10 @@
         "JUNGLE",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.846,
+        "TOP": 0.128
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -5988,6 +6571,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.988
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6023,6 +6609,11 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "BOTTOM": 0.525,
+        "MIDDLE": 0.353,
+        "SUPPORT": 0.119
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6058,6 +6649,9 @@
       "positions": [
         "JUNGLE"
       ],
+      "positionShares": {
+        "JUNGLE": 0.885
+      },
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -6095,6 +6689,11 @@
         "TOP",
         "BOTTOM"
       ],
+      "positionShares": {
+        "MIDDLE": 0.535,
+        "TOP": 0.242,
+        "BOTTOM": 0.22
+      },
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -6137,6 +6736,10 @@
         "TOP",
         "MIDDLE"
       ],
+      "positionShares": {
+        "TOP": 0.491,
+        "MIDDLE": 0.46
+      },
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6178,6 +6781,9 @@
       "positions": [
         "TOP"
       ],
+      "positionShares": {
+        "TOP": 0.953
+      },
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -6213,6 +6819,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.992
+      },
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -6247,6 +6856,9 @@
       "positions": [
         "SUPPORT"
       ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6282,6 +6894,10 @@
         "TOP",
         "JUNGLE"
       ],
+      "positionShares": {
+        "TOP": 0.81,
+        "JUNGLE": 0.139
+      },
       "damageProfile": {
         "physical": 0.5,
         "magic": 0.4,
@@ -6314,6 +6930,10 @@
         "JUNGLE",
         "TOP"
       ],
+      "positionShares": {
+        "JUNGLE": 0.687,
+        "TOP": 0.158
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6358,6 +6978,10 @@
         "MIDDLE",
         "JUNGLE"
       ],
+      "positionShares": {
+        "MIDDLE": 0.715,
+        "JUNGLE": 0.154
+      },
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -6391,6 +7015,9 @@
       "positions": [
         "BOTTOM"
       ],
+      "positionShares": {
+        "BOTTOM": 0.947
+      },
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -6425,6 +7052,10 @@
         "BOTTOM",
         "MIDDLE"
       ],
+      "positionShares": {
+        "BOTTOM": 0.89,
+        "MIDDLE": 0.102
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6460,6 +7091,10 @@
         "SUPPORT",
         "MIDDLE"
       ],
+      "positionShares": {
+        "SUPPORT": 0.775,
+        "MIDDLE": 0.117
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6497,6 +7132,10 @@
         "MIDDLE",
         "SUPPORT"
       ],
+      "positionShares": {
+        "MIDDLE": 0.711,
+        "SUPPORT": 0.205
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6534,6 +7173,11 @@
         "SUPPORT",
         "BOTTOM"
       ],
+      "positionShares": {
+        "JUNGLE": 0.448,
+        "SUPPORT": 0.38,
+        "BOTTOM": 0.13
+      },
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
