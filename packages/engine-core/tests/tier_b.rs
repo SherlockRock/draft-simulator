@@ -18,7 +18,7 @@ use engine_core::reference::node::legal_actions_under;
 use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{search, SearchParams, Shortlist};
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
-use engine_core::reference::tier_b::{Category, TierBError, TierBFixture, Verdict};
+use engine_core::reference::tier_b::{Category, RoleVerdict, TierBError, TierBFixture, Verdict};
 use engine_core::reference::universe::{Universe, DEFAULT_OFF_POOL_COST};
 use serde::Deserialize;
 use serde_json::json;
@@ -2228,5 +2228,115 @@ fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
         out.lines().count(),
         record.lines().count(),
         "the record's length"
+    );
+}
+
+/// Engine-role-grade § 6 (adopted 2026-10-06), design § 7 test 8's loader half: `role_verdict` round-trips
+/// on a single root and on a pair root (one role key per champion, in the action's order); an unknown
+/// key inside it, an unknown role key, a role count that does not match the action, and an action of
+/// the wrong shape are each refused by name; absent by default; at a ban root it is warned.
+#[test]
+fn a_role_verdict_round_trips_and_every_mistake_is_named() {
+    let live = live();
+    let u = &live.universe;
+    let corpus = |name: &str| {
+        std::fs::read_to_string(dir("fixtures/tier-b").join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
+    let splice =
+        |raw: &str, field: &str| raw.replace("\"review\":", &format!("{field}, \"review\":"));
+    let supp_19 = corpus("2026-10-04-supp-pinch-slot-19-kittens");
+    let loaded = TierBFixture::from_json(
+        &splice(
+            &supp_19,
+            r#""role_verdict": {"action": "Zyra", "roles": ["adc"], "ok": false}"#,
+        ),
+        "edited",
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    assert_eq!(
+        loaded.fixture.role_verdict,
+        Some(RoleVerdict {
+            action: Action::Pick(u.index("Zyra").expect("Zyra")),
+            roles: vec![Role::Adc],
+            ok: false
+        })
+    );
+    let plain = TierBFixture::from_json(&supp_19, "plain", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(plain.fixture.role_verdict, None);
+
+    let supp_17 = corpus("2026-10-04-supp-pinch-slot-17-dme");
+    let pair = TierBFixture::from_json(
+        &splice(
+            &supp_17,
+            r#""role_verdict": {"action": ["Renata", "Syndra"], "roles": ["support", "adc"], "ok": true}"#,
+        ),
+        "edited",
+        &live,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let (renata, syndra) = (
+        u.index("Renata").expect("Renata"),
+        u.index("Syndra").expect("Syndra"),
+    );
+    let expected = pair.fixture.role_verdict.clone().expect("a role verdict");
+    assert_eq!(expected.action, Action::pair(renata, syndra));
+    assert!(expected.ok);
+    // `Action::pair` orders the pair by index; the loader re-pairs the roles to that order, so a
+    // reader compares them with the trace's placements directly.
+    let in_action_order = if renata < syndra {
+        vec![Role::Support, Role::Adc]
+    } else {
+        vec![Role::Adc, Role::Support]
+    };
+    assert_eq!(expected.roles, in_action_order);
+
+    let refused = |field: &str| -> String {
+        match TierBFixture::from_json(&splice(&supp_19, field), "edited", &live) {
+            Err(e) => e.to_string(),
+            Ok(_) => panic!("{field} must be refused"),
+        }
+    };
+    let text =
+        refused(r#""role_verdict": {"action": "Zyra", "roles": ["adc"], "ok": false, "why": "x"}"#);
+    assert!(text.contains("unknown field `why`"), "{text}");
+    let text = refused(r#""role_verdict": {"action": "Zyra", "roles": ["bottom"], "ok": false}"#);
+    assert!(
+        text.contains("role_verdict.roles") && text.contains("unknown role key \"bottom\""),
+        "{text}"
+    );
+    let text =
+        refused(r#""role_verdict": {"action": "Zyra", "roles": ["adc", "mid"], "ok": false}"#);
+    assert!(
+        text.contains("role_verdict.roles")
+            && text.contains("2 role(s) for an action of 1 champion(s)"),
+        "{text}"
+    );
+    let text = refused(
+        r#""role_verdict": {"action": ["Zyra", "Ashe"], "roles": ["adc", "mid"], "ok": false}"#,
+    );
+    assert!(
+        text.contains("role_verdict.action") && text.contains("not a pair turn"),
+        "{text}"
+    );
+    let text = refused(r#""role_verdict": {"action": "Nobody", "roles": ["adc"], "ok": false}"#);
+    assert!(
+        text.contains("role_verdict.action") && text.contains("unknown champion"),
+        "{text}"
+    );
+
+    // A ban root: warned, as `verdict` is.
+    let raw = sample_json("sample-skip-at-slot-1").replace(
+        "\"review\": \"\"",
+        "\"review\": \"\", \"role_verdict\": {\"action\": \"Zyra\", \"roles\": [\"adc\"], \"ok\": false}",
+    );
+    let loaded = TierBFixture::from_json(&raw, "edited", &live).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(loaded.warnings.len(), 1, "{:?}", loaded.warnings);
+    assert!(
+        loaded.warnings[0].contains("role_verdict: no role question at a ban root"),
+        "{:?}",
+        loaded.warnings
     );
 }

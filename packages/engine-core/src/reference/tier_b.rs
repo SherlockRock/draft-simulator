@@ -6,15 +6,17 @@
 
 use super::entries::{
     pool_form, pool_set, role_key, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec,
-    EntrySpec, PoolForm, PoolsSpec,
+    EntrySpec, PoolForm, PoolsSpec, ROLE_KEYS,
 };
 use super::feasibility::{FeasibilityMemo, FeasibilityRule, Price};
 use super::format::Format;
 use super::live::{LiveError, LiveRoot, LiveUniverse};
 use super::node::legal_actions_under;
 use super::state::{Action, Entry, Pools, Position, PositionError};
-use super::universe::ChampionSet;
+use super::universe::{ChampionIdx, ChampionSet};
 use crate::draft_state::{ActionType, Side};
+use crate::feasibility::ROLES;
+use crate::pools::Role;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -39,6 +41,29 @@ pub enum Category {
 #[serde(deny_unknown_fields)]
 pub struct Verdict {
     pub off_pool: bool,
+}
+
+/// The user's verdict on a GRADED top (engine-role-grade design § 6, adopted 2026-10-06): would they
+/// play THIS action in THESE roles — `action` as `actual_next` is spelled, `roles` one role key per
+/// champion of the action in the same order as written (`top`, `jungle`, `mid`, `adc`, `support`;
+/// the loader re-pairs them to the action's canonical champion order), `ok` the answer. Read by the Q sweep alone: `ok: false` wants Q above every sampled Q at which the judged
+/// action, in the judged roles, is the top; `ok: true` wants Q below them. A file's validity never
+/// depends on the sweep: a verdict whose action is not a graded top at any sampled Q is warned and
+/// skipped at read time, not refused here.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleVerdictSpec {
+    pub action: ActionSpec,
+    pub roles: Vec<String>,
+    pub ok: bool,
+}
+
+/// `RoleVerdictSpec` resolved against the universe and the root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoleVerdict {
+    pub action: Action,
+    pub roles: Vec<Role>,
+    pub ok: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -74,6 +99,8 @@ struct TierBFile {
     review: String,
     #[serde(default)]
     verdict: Option<Verdict>,
+    #[serde(default)]
+    role_verdict: Option<RoleVerdictSpec>,
     /// The raw captured request (the wire `EngineRequest`, when the capture button exists), kept
     /// opaque so nothing the loader does not model (display pools, tiers) is lost. Must be an object
     /// with a string `protocolVersion`; the top-level fields win when the two disagree (warned).
@@ -119,6 +146,8 @@ pub struct TierBFixture {
     pub review: String,
     /// B-proper § 3: the calibration verdict, when the user has given one.
     pub verdict: Option<Verdict>,
+    /// Engine-role-grade § 6: the verdict on a graded top, when the user has given one.
+    pub role_verdict: Option<RoleVerdict>,
     pub capture: Option<serde_json::Value>,
     pub path: Option<PathBuf>,
 }
@@ -249,6 +278,60 @@ impl TierBFixture {
                 Some(spec_to_action(spec, root, "actual_next", universe).map_err(spec_err)?)
             }
         };
+        let role_verdict = match &file.role_verdict {
+            None => None,
+            Some(spec) => {
+                let action = spec_to_action(&spec.action, root, "role_verdict.action", universe)
+                    .map_err(spec_err)?;
+                let roles = spec
+                    .roles
+                    .iter()
+                    .map(|key| {
+                        ROLE_KEYS
+                            .iter()
+                            .position(|k| k == key)
+                            .map(|i| ROLES[i])
+                            .ok_or_else(|| {
+                                invalid(
+                                    "role_verdict.roles",
+                                    format!(
+                                        "unknown role key {key:?}; the keys are {}",
+                                        ROLE_KEYS.join(", ")
+                                    ),
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<Role>, TierBError>>()?;
+                let champions = action.champions().count();
+                if roles.len() != champions {
+                    return Err(invalid(
+                        "role_verdict.roles",
+                        format!(
+                            "{} role(s) for an action of {champions} champion(s); one role per champion, in the action's order",
+                            roles.len()
+                        ),
+                    ));
+                }
+                // The spec's order is the spec's champion order; `Action::pair` keeps a pair by
+                // index, so the roles are re-paired to `action.champions()`'s order — what the
+                // report's trace yields.
+                let spec_order: Vec<ChampionIdx> = match &spec.action {
+                    ActionSpec::Single(id) => vec![universe.index(id).expect("resolved above")],
+                    ActionSpec::Pair([a, b]) => vec![
+                        universe.index(a).expect("resolved above"),
+                        universe.index(b).expect("resolved above"),
+                    ],
+                };
+                let mut paired: Vec<(ChampionIdx, Role)> =
+                    spec_order.into_iter().zip(roles).collect();
+                paired.sort_by_key(|(c, _)| *c);
+                Some(RoleVerdict {
+                    action,
+                    roles: paired.into_iter().map(|(_, r)| r).collect(),
+                    ok: spec.ok,
+                })
+            }
+        };
 
         let mut warnings = Vec::new();
         if file.source.fm_version != live.fm_version {
@@ -312,6 +395,11 @@ impl TierBFixture {
         if file.verdict.is_some() && root.action == ActionType::Ban {
             warnings.push(format!(
                 "{id}: verdict: no off-pool question at a ban root; the report counts it as unusable"
+            ));
+        }
+        if role_verdict.is_some() && root.action == ActionType::Ban {
+            warnings.push(format!(
+                "{id}: role_verdict: no role question at a ban root; the report skips it"
             ));
         }
         // `capture` is provenance; the top-level fields are the position. Say so when they disagree.
@@ -393,6 +481,7 @@ impl TierBFixture {
                 actual_next,
                 review: file.review,
                 verdict: file.verdict,
+                role_verdict,
                 capture: file.capture,
                 path: None,
             },

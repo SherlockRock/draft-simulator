@@ -9,6 +9,7 @@ use crate::feasibility::{
     can_complete_masks, can_complete_roles, max_matching_masks, max_role_assignment,
     max_role_matching, RoleMask, ROLES,
 };
+use crate::pools::Role;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -651,6 +652,149 @@ impl ActionCharge<'_> {
             price: self.price,
         }
     }
+}
+
+/// One champion's placement in the arrangement the key priced (engine-role-grade design § 6): the
+/// role, the grade read there (0 in-pool), and whether the role is one of its pool entries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Placement {
+    pub champion: ChampionIdx,
+    pub role: Role,
+    pub grade: u8,
+    pub in_pool: bool,
+}
+
+/// The weighted table with argmin pointers, one level per pick — the report's trace, never the
+/// search's (`Profile` is copied per child; this one is built only for the actions a report prints).
+struct Traced {
+    /// Per pick, per subset: the cheapest cost onto exactly those roles, the subset the previous level
+    /// reached it from, and this pick's role bit.
+    levels: Vec<[Option<(Cost, usize, usize)>; SUBSETS]>,
+}
+
+impl Traced {
+    fn start() -> Self {
+        let mut best = [None; SUBSETS];
+        best[0] = Some((Cost::default(), 0, 0));
+        Self { levels: vec![best] }
+    }
+
+    /// `Profile::with`, with pointers; the same subset and role order and the same strict "better", so
+    /// the arrangement traced is the one whose cost the key read.
+    fn with(mut self, playable: RoleMask, listed: RoleMask, grades: [u8; 5], price: Price) -> Self {
+        let (playable, listed) = (usize::from(playable), usize::from(listed));
+        let last = self.levels.last().expect("start holds a level");
+        let mut next = [None; SUBSETS];
+        for (subset, held) in last.iter().enumerate() {
+            let Some((held, _, _)) = held else { continue };
+            for (bit, grade) in grades.iter().enumerate() {
+                let role = 1 << bit;
+                if playable & role == 0 || subset & role != 0 {
+                    continue;
+                }
+                let placement = if listed & role != 0 {
+                    Cost::default()
+                } else {
+                    Cost {
+                        off: 1,
+                        grade: u16::from(*grade),
+                    }
+                };
+                let cost = held.plus(placement);
+                let slot = &mut next[subset | role];
+                if slot.is_none_or(|(best, _, _): (Cost, usize, usize)| cost.better(best, price)) {
+                    *slot = Some((cost, subset, bit));
+                }
+            }
+        }
+        self.levels.push(next);
+        self
+    }
+
+    /// The role bit of each pick, in pick order, along the cheapest arrangement; `None` = unarrangeable.
+    fn arrangement(&self, price: Price) -> Option<Vec<usize>> {
+        let last = self.levels.last().expect("start holds a level");
+        let mut subset =
+            (0..SUBSETS)
+                .filter(|m| last[*m].is_some())
+                .fold(None, |best: Option<usize>, m| match best {
+                    Some(b)
+                        if !last[m]
+                            .expect("filtered")
+                            .0
+                            .better(last[b].expect("filtered").0, price) =>
+                    {
+                        Some(b)
+                    }
+                    _ => Some(m),
+                })?;
+        let mut bits = Vec::with_capacity(self.levels.len() - 1);
+        for level in self.levels.iter().skip(1).rev() {
+            let (_, parent, bit) = level[subset].expect("a traced subset has a parent chain");
+            bits.push(bit);
+            subset = parent;
+        }
+        bits.reverse();
+        Some(bits)
+    }
+}
+
+/// The placements of `action`'s champions in the cheapest arrangement of `side`'s locked picks plus
+/// the action, at the memo's price — the arrangement the ordering key priced (engine-role-grade
+/// design § 6). Empty for a list-form side (nothing is graded there), for a ban, and where the child
+/// cannot be arranged (the marker says what the fallback charged). Not the leaf's `a*`: wherever picks
+/// remain the two can differ; they coincide on a complete five-pick side.
+pub fn placements(
+    memo: &mut FeasibilityMemo,
+    side: Side,
+    position: &Position<'_>,
+    pools: &Pools,
+    universe: &Universe,
+    action: Action,
+) -> Vec<Placement> {
+    let Some(tags) = live_tags(side, position, pools) else {
+        return Vec::new();
+    };
+    if matches!(action, Action::Ban(_)) {
+        return Vec::new();
+    }
+    let price = memo.price;
+    let picks: Vec<ChampionIdx> = position
+        .picks(side)
+        .iter()
+        .copied()
+        .chain(action.champions())
+        .collect();
+    let traced = picks.iter().fold(Traced::start(), |t, c| {
+        t.with(
+            playable(tags, universe, *c),
+            tags.mask(*c),
+            universe.grades(*c),
+            price,
+        )
+    });
+    let Some(bits) = traced.arrangement(price) else {
+        return Vec::new();
+    };
+    let locked = position.picks(side).len();
+    picks[locked..]
+        .iter()
+        .zip(&bits[locked..])
+        .map(|(c, bit)| {
+            let role = ROLES[*bit];
+            let in_pool = tags.mask(*c) >> bit & 1 == 1;
+            Placement {
+                champion: *c,
+                role,
+                grade: if in_pool {
+                    0
+                } else {
+                    universe.grades(*c)[*bit]
+                },
+                in_pool,
+            }
+        })
+        .collect()
 }
 
 /// `ActionCharge` for `side` at `position`: its set under a list pool, its locked profile under a

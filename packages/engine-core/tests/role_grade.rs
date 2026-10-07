@@ -332,7 +332,7 @@ fn the_memo_carries_its_price() {
 
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::reference::feasibility::{
-    action_charge, critical_pool, off_pool, Charge, OffPool,
+    action_charge, critical_pool, off_pool, placements, Charge, OffPool, Placement,
 };
 use engine_core::reference::search::static_order;
 use engine_core::reference::state::{Action, Entry, RoleSets};
@@ -896,4 +896,129 @@ fn a_graded_last_pick_is_priced_p_plus_its_grade_at_the_leaf() {
             .expect("ranked alike");
         assert_eq!(theirs.value.to_bits(), r.value.to_bits(), "{:?}", r.action);
     }
+}
+
+// ---------------------------------------------------------------- the trace (§ 6)
+
+/// Design § 6: `placements` reruns the child's weighted table with argmin pointers and reports where
+/// the cheapest arrangement puts the action's champions — the arrangement the key priced. On the slot-11
+/// board of the ordering test `X` lands at Top at grade 99 (off-pool), `Z` at Top at 0; on a Blue
+/// pair `X'` (Middle, Jungle at 89) with `Z'` (Middle only) lands at Jungle at 89 and `Z'` at Middle;
+/// an in-pool pick is traced in its listed role at grade 0; a list-form side and a ban trace nothing;
+/// a child that cannot be arranged traces nothing.
+#[test]
+fn the_trace_reports_the_roles_the_key_priced() {
+    let u = with_fill(&[
+        ("X", &["Middle", "Top"], &[0.99, 0.01], 0.02),
+        ("Z", &["Top"], &[1.0], 0.0),
+        ("X2", &["Middle", "Jungle"], &[0.9, 0.1], 0.0),
+        ("Z2", &["Middle"], &[1.0], 0.0),
+    ]);
+    let red = tags(&u, &[(Role::Middle, &["M2"]), (Role::Adc, &["A2"])]);
+    let pools = Pools {
+        blue: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Red, red);
+    let format = Format::standard();
+    let entries = board(&format, &u, &["T1", "J1", "S1"], &["M2", "A2"]);
+    let position = at(&format, &entries, &u);
+    let trace = |pools: &Pools, side: Side, position: &Position<'_>, action: Action| {
+        placements(
+            &mut FeasibilityMemo::new(Price::of(0.1, 0.05)),
+            side,
+            position,
+            pools,
+            &u,
+            action,
+        )
+    };
+    let (x, z) = (idx(&u, "X"), idx(&u, "Z"));
+    let tx = trace(&pools, Side::Red, &position, Action::Pick(x));
+    let tz = trace(&pools, Side::Red, &position, Action::Pick(z));
+    println!("X {tx:?}; Z {tz:?}");
+    assert_eq!(
+        tx,
+        vec![Placement {
+            champion: x,
+            role: Role::Top,
+            grade: 99,
+            in_pool: false
+        }]
+    );
+    assert_eq!(
+        tz,
+        vec![Placement {
+            champion: z,
+            role: Role::Top,
+            grade: 0,
+            in_pool: false
+        }]
+    );
+    // An in-pool pick: its listed role, grade 0, in-pool.
+    let m2 = idx(&u, "M2");
+    let red_in = tags(&u, &[(Role::Middle, &["M2"]), (Role::Adc, &["A2"])]);
+    let pools_in = Pools {
+        blue: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Red, red_in);
+    let early = at(
+        &format,
+        &board(&format, &u, &["T1", "J1", "S1"], &["A2", "T2"]),
+        &u,
+    );
+    let tm = trace(&pools_in, Side::Red, &early, Action::Pick(m2));
+    println!("M2 {tm:?}");
+    assert_eq!(
+        tm,
+        vec![Placement {
+            champion: m2,
+            role: Role::Middle,
+            grade: 0,
+            in_pool: true
+        }]
+    );
+    // A list-form side traces nothing; so does a ban.
+    let list = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    assert!(trace(&list, Side::Red, &position, Action::Pick(x)).is_empty());
+    let ban_root = at(&format, &[], &u);
+    assert!(trace(&pools, Side::Blue, &ban_root, Action::Ban(x)).is_empty());
+
+    // A Blue pair at slot 9: both champions placed, in the action's order.
+    let blue = tags(&u, &[(Role::Top, &["T1"]), (Role::Support, &["S1"])]);
+    let pools_b = Pools {
+        red: u.all(),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let pair_root = at(&format, &board(&format, &u, &["T1"], &["T2", "J2"]), &u);
+    assert!(pair_root.next_slot().is_some_and(|s| s.pair_start));
+    let (x2, z2) = (idx(&u, "X2"), idx(&u, "Z2"));
+    let tp = trace(&pools_b, Side::Blue, &pair_root, Action::pair(x2, z2));
+    println!("pair {tp:?}");
+    assert_eq!(
+        tp,
+        vec![
+            Placement {
+                champion: x2,
+                role: Role::Jungle,
+                grade: 89,
+                in_pool: false
+            },
+            Placement {
+                champion: z2,
+                role: Role::Middle,
+                grade: 0,
+                in_pool: false
+            },
+        ]
+    );
+    // A child that cannot be arranged: two Middle-only champions.
+    let m1 = idx(&u, "M1");
+    assert!(trace(&pools_b, Side::Blue, &pair_root, Action::pair(z2, m1)).is_empty());
 }

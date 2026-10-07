@@ -527,6 +527,26 @@ impl Universe {
         self.grades[usize::from(c.0)]
     }
 
+    /// `c`'s Master+ play share in `role` (`Champion::shares`): `None` when the shares are unknown or
+    /// the role is not listed. The report prints `r = share(role) / share(primary)` beside a graded
+    /// placement.
+    pub fn share(&self, c: ChampionIdx, role: Role) -> Option<f64> {
+        let champion = &self.champions[usize::from(c.0)];
+        if champion.shares.len() != champion.positions.len() {
+            return None;
+        }
+        champion
+            .positions
+            .iter()
+            .position(|r| *r == role)
+            .map(|i| champion.shares[i])
+    }
+
+    /// `c`'s primary role: `positions[0]`, the argmax share by construction (positions refresh slice 1).
+    pub fn primary(&self, c: ChampionIdx) -> Role {
+        self.champions[usize::from(c.0)].positions[0]
+    }
+
     pub fn names(&self, champions: &[ChampionIdx]) -> Vec<String> {
         champions.iter().map(|c| self.id(*c).to_string()).collect()
     }
