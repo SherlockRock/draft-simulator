@@ -1,0 +1,234 @@
+{
+  "id": "2026-10-07-synth-dme-adc-pinch-slot-17",
+  "category": "off-pool",
+  "notes": "SYNTHETIC (2026-10-07, Q calibration): DME (Blue) pinched at adc — the opponent banned/picked the whole DME adc pool (Yunara (Kittens ban), Ziggs (Kittens ban), Aphelios (Kittens ban), Ezreal (Kittens ban), Kaisa (Kittens ban), Kalista (DME ban (synthetic)), Lucian (DME ban (synthetic)), Zeri (DME ban (synthetic))); DME's other roles are in-pool; open at slot 17: adc + support. Secondary-role fills left available: Cassiopeia (adc r 0.27), Syndra (adc r 0.16). Pools are the 2026-10-01 role maps; the board is not a played draft.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-10-07"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Kalista"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Yunara"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Lucian"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ziggs"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zeri"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Aphelios"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Rumble"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Sion"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "JarvanIV"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Naafiri"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Locke"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Galio"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ezreal"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "KSante"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Kaisa"
+    },
+    {
+      "slot": 15,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zaahen"
+    },
+    {
+      "slot": 16,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Bard"
+    }
+  ],
+  "pools": {
+    "blue": {
+      "adc": [
+        "Yunara",
+        "Ziggs",
+        "Aphelios",
+        "Ezreal",
+        "Kaisa",
+        "Kalista",
+        "Lucian",
+        "Zeri"
+      ],
+      "mid": [
+        "Locke",
+        "Syndra",
+        "Nasus",
+        "Ahri",
+        "Galio",
+        "Cassiopeia",
+        "Orianna",
+        "Ryze"
+      ],
+      "top": [
+        "Rumble",
+        "Riven",
+        "Camille",
+        "Ambessa",
+        "KSante",
+        "Aurora",
+        "Zaahen",
+        "Yone"
+      ],
+      "jungle": [
+        "Naafiri",
+        "Qiyana",
+        "LeeSin",
+        "JarvanIV",
+        "MonkeyKing",
+        "XinZhao",
+        "Vi",
+        "Shyvana"
+      ],
+      "support": [
+        "Bard",
+        "Alistar",
+        "Lulu",
+        "Milio",
+        "Nautilus",
+        "Nami",
+        "Leona",
+        "Renata"
+      ]
+    },
+    "red": {
+      "adc": [
+        "Ezreal",
+        "Caitlyn",
+        "Jhin",
+        "Jinx",
+        "Kaisa",
+        "Ashe",
+        "Sivir",
+        "Varus"
+      ],
+      "mid": [
+        "Zilean",
+        "Locke",
+        "Galio",
+        "Chogath",
+        "Orianna",
+        "Ryze",
+        "Syndra",
+        "Viktor"
+      ],
+      "top": [
+        "Sion",
+        "KSante",
+        "Zaahen",
+        "Ornn",
+        "DrMundo",
+        "Aatrox",
+        "Malphite",
+        "Renekton"
+      ],
+      "jungle": [
+        "JarvanIV",
+        "Ivern",
+        "Shyvana",
+        "XinZhao",
+        "Vi",
+        "MonkeyKing",
+        "Zaahen",
+        "Aatrox"
+      ],
+      "support": [
+        "Bard",
+        "Neeko",
+        "Seraphine",
+        "Rakan",
+        "Amumu",
+        "Alistar",
+        "Braum",
+        "Nami"
+      ]
+    }
+  },
+  "our_side": "Blue",
+  "role_verdict": {
+    "action": [
+      "Katarina",
+      "Lulu"
+    ],
+    "roles": [
+      "adc",
+      "support"
+    ],
+    "ok": true
+  },
+  "review": "The engine's roster top at Q = 0: Katarina at adc (grade 85, r 0.15) beside Lulu; Vayne adc (off-pool base) overtakes her between Q = 0.12 and 0.15. 2026-10-08 user (scored read, 16.19 table, P = 0.105): ok — with a caveat: the pick is fairly difficult, the player would need experience on the champion to play it well; assuming that, a valid pick."
+}

@@ -2477,7 +2477,10 @@ fn the_report_classes_an_in_set_off_role_pair_off_pool() {
 /// bit: values, ranks, every counter, the root fan and the searched count, each line's continuation and
 /// ending, each action's in-pool class and off count, and the root's legal-action count. Set
 /// `TIER_B_Q0_RECORD=write` to rewrite the record — only ever at the base.
-/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it.
+/// Reads the FROZEN 2026-09-05 table (`frozen()`): the values below were measured on it. The record
+/// covers the positions it was written on (the 21 of `2be5e71`); a fixture added to the corpus later
+/// (the 2026-10-07 synthetic Q positions) is outside the Q = 0 base identity and is skipped here —
+/// every recorded position must still be present (the count is asserted).
 #[test]
 fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
     use std::fmt::Write as _;
@@ -2486,9 +2489,28 @@ fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
     let corpus = dir("fixtures/tier-b");
     let loaded = TierBFixture::load_dir(&corpus, &live).unwrap_or_else(|e| panic!("{e}"));
     assert!(loaded.len() >= 21, "{} fixtures", loaded.len());
+    let path = dir("tests/data/tier-b/q0-record.txt");
+    let writing = std::env::var("TIER_B_Q0_RECORD").as_deref() == Ok("write");
+    let recorded: Option<std::collections::HashSet<String>> = if writing {
+        None
+    } else {
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        Some(
+            text.lines()
+                .filter_map(|l| l.strip_prefix("== "))
+                .map(|l| l.split(" | ").next().unwrap_or(l).to_string())
+                .collect(),
+        )
+    };
+    let mut compared = 0usize;
     let mut out = String::new();
     for l in loaded {
         let fx = l.unwrap_or_else(|e| panic!("{e}")).fixture;
+        if recorded.as_ref().is_some_and(|ids| !ids.contains(&fx.id)) {
+            continue;
+        }
+        compared += 1;
         let position = fx
             .root
             .position(u)
@@ -2589,8 +2611,7 @@ fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
             }
         }
     }
-    let path = dir("tests/data/tier-b/q0-record.txt");
-    if std::env::var("TIER_B_Q0_RECORD").as_deref() == Ok("write") {
+    if writing {
         std::fs::write(&path, &out).unwrap_or_else(|e| panic!("{e}"));
         println!("wrote {} ({} lines)", path.display(), out.lines().count());
         return;
@@ -2613,6 +2634,11 @@ fn at_q_zero_both_arms_reproduce_the_record_on_every_fixture() {
         out.lines().count(),
         record.lines().count(),
         "the record's length"
+    );
+    assert_eq!(
+        Some(compared),
+        recorded.as_ref().map(|ids| ids.len()),
+        "every recorded position is still in the corpus"
     );
 }
 
