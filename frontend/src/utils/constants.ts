@@ -648,7 +648,6 @@ const INTERNAL_NAME_OVERRIDES: Record<string, string> = {
 // non-standard filenames belong here. Verify with a live HTTP check before
 // adding an entry.
 const SPECIAL_SPLASH_URLS: Record<string, string> = {
-    Locke: `${CD_BASE}/locke/skins/base/images/locke_splash_centered_0.locke.jpg`,
     "Xin Zhao": `${CD_BASE}/xinzhao/skins/base/images/xinzhaorework_splash_centered_0.jpg`
 };
 
