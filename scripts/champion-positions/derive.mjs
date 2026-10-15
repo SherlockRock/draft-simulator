@@ -10,7 +10,16 @@
 // alone had her TOP 0.56 (Shen and Xerath flipped the same way). The pooled
 // shares are the fallback for a champion below MIN_PICKS on every patch. The
 // choice is made ONCE, in ratesFromCorpus, so every consumer of `rates`
-// (positions here, slice 8's positionShares later) reads the same shares.
+// (positions here, the five-role positionShares beside them) reads the same shares.
+//
+// Legality (docs/designs/champion-role-shares-design.md § 4.1, D2/D3): beside
+// `positions` the refresh writes `playable` — the roles the ENGINE may seat the
+// champion in — as the listed roles plus every role whose picks on the deciding
+// patch reach PLAYABLE_MIN_PICK_RATE per train game of that patch (never fewer
+// than PLAYABLE_MIN_PICKS). Two floors of the same magnitude, named apart:
+// MIN_PICKS says which PATCH decides a CHAMPION's shares; PLAYABLE_MIN_PICK_RATE
+// says which CHAMPION-ROLE pairs are legal. And `positionShares` carries all
+// five roles (0 is legal), so a weight can read any role's share.
 import { META_POSITIONS } from "./invariants.mjs";
 
 /** Design § 3. Pinned against SYNTH_ROLE_THRESHOLD in roles.py and
@@ -21,6 +30,18 @@ export const POSITIONS_THRESHOLD = 0.10;
  * one game is ten). On 16.15/16.16 the rarest champion had 2,657 pooled picks,
  * so this is a floor for a champion released mid-window, not a tuning knob. */
 export const MIN_PICKS = 300;
+/** Legality floor (champion-role-shares § 4.1, D3): a role is playable when the
+ * champion's picks in it on the deciding patch reach this many per train game
+ * of that patch — 10 per 10,000 games, 277 picks on 16.19 (277,103 train games).
+ * Measured on the 16.19 holdout: 433 pairs, both-sides feasibility 0.976, zero
+ * listed roles below it. */
+export const PLAYABLE_MIN_PICK_RATE = 10 / 10_000;
+/** The absolute minimum under the rate (judge M1): on a deciding patch thinner
+ * than ~50,000 games the rate floor admits noise pairs; 50 picks stops that. No
+ * effect today (277 > 50). */
+export const PLAYABLE_MIN_PICKS = 50;
+/** The refresh warns when the deciding patch has fewer train games than this. */
+export const THIN_PATCH_GAMES = 50_000;
 /** The name the provenance block records for the rule above. */
 export const RECENCY_RULE = "latest-patch";
 /** Design § 5 gate: a recurring run that flips more primaries than this aborts. */
@@ -69,17 +90,23 @@ export function comparePatches(a, b) {
  *
  * @returns {{rates: Map<string, Record<string, number>>, pooled: Map<string, Record<string, number>>,
  *   games: number, kind: "corpus", patches: string[], decidingPatch: string, decidingGames: number,
- *   minPicks: number, chosen: Map<string, string>, fallback: Record<string, string>}}
+ *   minPicks: number, chosen: Map<string, string>, fallback: Record<string, string>,
+ *   picks: Map<string, number>, trainGames: Map<string, number>}}
  *   `chosen` maps alias -> the patch that decided (or "pooled"); `fallback` lists only the
  *   champions NOT decided by `decidingPatch` (the newest patch), alias -> what decided instead.
+ *   `picks` and `trainGames` are the playable floor's inputs (champion-role-shares § 4.1): the
+ *   champion's picks on the patch that decided it and that patch's OWN train games — for a
+ *   pooled-fallback champion, its pooled picks and the window's games.
  */
 export function ratesFromCorpus(doc, { minPicks = MIN_PICKS } = {}) {
   const rates = new Map();
   const pooled = new Map();
   const chosen = new Map();
   const fallback = {};
+  const picks = new Map();
+  const trainGames = new Map();
   const perPatchPicks = new Map();
-  let picks = 0;
+  let totalPicks = 0;
   for (const entry of Object.values(doc)) {
     if (!entry.meta_roles) {
       throw new Error(`role_percentages.json entry ${entry.alias} has no meta_roles block — regenerate with prepare.py (the roles block spells the support role UTILITY)`);
@@ -88,7 +115,7 @@ export function ratesFromCorpus(doc, { minPicks = MIN_PICKS } = {}) {
       throw new Error(`role_percentages.json entry ${entry.alias} has no by_patch block — regenerate with prepare.py (the recency rule needs per-patch shares)`);
     }
     pooled.set(entry.alias, { ...zeroShares(), ...entry.meta_roles });
-    picks += entry.games;
+    totalPicks += entry.games;
     let patchPicks = 0;
     for (const [patch, block] of Object.entries(entry.by_patch)) {
       parsePatch(patch);
@@ -99,8 +126,8 @@ export function ratesFromCorpus(doc, { minPicks = MIN_PICKS } = {}) {
       throw new Error(`role_percentages.json entry ${entry.alias}: by_patch picks sum to ${patchPicks} but games is ${entry.games} — the per-patch block must partition the pooled picks`);
     }
   }
-  if (picks % 10 !== 0) {
-    throw new Error(`role_percentages.json games sum to ${picks}, not a multiple of 10 — one game is ten picks`);
+  if (totalPicks % 10 !== 0) {
+    throw new Error(`role_percentages.json games sum to ${totalPicks}, not a multiple of 10 — one game is ten picks`);
   }
   const patches = [...perPatchPicks.keys()].sort(comparePatches);
   for (const [patch, n] of perPatchPicks) {
@@ -113,17 +140,40 @@ export function ratesFromCorpus(doc, { minPicks = MIN_PICKS } = {}) {
     if (deciding) {
       rates.set(entry.alias, { ...zeroShares(), ...entry.by_patch[deciding].meta_roles });
       chosen.set(entry.alias, deciding);
+      picks.set(entry.alias, entry.by_patch[deciding].games);
+      trainGames.set(entry.alias, perPatchPicks.get(deciding) / 10);
       if (deciding !== decidingPatch) fallback[entry.alias] = deciding;
     } else {
       rates.set(entry.alias, pooled.get(entry.alias));
       chosen.set(entry.alias, "pooled");
+      picks.set(entry.alias, entry.games);
+      trainGames.set(entry.alias, totalPicks / 10);
       fallback[entry.alias] = "pooled";
     }
   }
   return {
-    rates, pooled, games: picks / 10, kind: "corpus", patches, decidingPatch,
-    decidingGames: perPatchPicks.get(decidingPatch) / 10, minPicks, chosen, fallback,
+    rates, pooled, games: totalPicks / 10, kind: "corpus", patches, decidingPatch,
+    decidingGames: perPatchPicks.get(decidingPatch) / 10, minPicks, chosen, fallback, picks, trainGames,
   };
+}
+
+/**
+ * The playable set (champion-role-shares § 4.1): `positions ∪ { r : picks(r) >= max(minPickRate ×
+ * trainGames, minPicks) }`, in vocabulary order. `picks` are the champion's picks on the patch that
+ * decided its shares and `trainGames` that patch's train games (`ratesFromCorpus`), so `shares[r] ×
+ * picks` is the role's picks there. The union is the construction, not a check: a listed role with
+ * 20 picks on a thin patch stays playable (Codex R2).
+ * @param {string[]} positions
+ * @param {Record<string, number>} shares
+ * @param {number} picks
+ * @param {number} trainGames
+ * @returns {string[]}
+ */
+export function playableRoles(positions, shares, picks, trainGames, { minPickRate = PLAYABLE_MIN_PICK_RATE, minPicks = PLAYABLE_MIN_PICKS } = {}) {
+  const floor = Math.max(minPickRate * trainGames, minPicks);
+  // `share × picks` is the role's pick COUNT (the shares are count / total): rounded, because the float
+  // product can sit an ulp under the integer it encodes and miss an integer floor.
+  return META_POSITIONS.filter((role) => positions.includes(role) || Math.round((shares[role] ?? 0) * picks) >= floor);
 }
 
 /** data/compiled/winrates.json (u.gg per-role match counts) -> rates by alias.
@@ -146,9 +196,20 @@ export function ratesFromUgg(doc) {
 /**
  * @param {Array<{id: string, positions: string[]}>} rows champions.json rows, any extra fields preserved
  * @param {Map<string, Record<string, number>>} rates
+ * @param {number} threshold
+ * @param {{picks: Map<string, number>, trainGames: Map<string, number>, minPickRate?: number, minPicks?: number} | undefined} floor
+ *   the playable floor's inputs (`ratesFromCorpus`); undefined for a source without train games
+ *   (`--source ugg`, design § 4.1 M4) — then `playable` is OMITTED, and a stale one from an earlier
+ *   corpus run is dropped so `positions ⊆ playable` cannot break when the positions move.
  * @returns {{rows: object[], kept: string[]}}
  */
-export function refreshPositions(rows, rates, threshold = POSITIONS_THRESHOLD) {
+export function refreshPositions(rows, rates, threshold = POSITIONS_THRESHOLD, floor = undefined) {
+  // Two floors of the same magnitude, named apart (design § 4.1): `ratesFromCorpus`'s result carries
+  // `minPicks` = MIN_PICKS, the RECENCY floor; the playable floor's `minPicks` is PLAYABLE_MIN_PICKS.
+  // Passing the corpus result itself as the floor would read the wrong one — refuse it.
+  if (floor && "chosen" in floor) {
+    throw new Error("refreshPositions: the floor is { picks, trainGames[, minPickRate, minPicks] } — not ratesFromCorpus's result, whose minPicks is the recency floor");
+  }
   const kept = [];
   const out = rows.map((row) => {
     const shares = rates.get(row.id);
@@ -157,18 +218,29 @@ export function refreshPositions(rows, rates, threshold = POSITIONS_THRESHOLD) {
       return { ...row, positions: [...row.positions] };
     }
     const positions = derivePositions(shares, threshold);
-    return { ...row, positions, positionShares: listedShares(positions, shares) };
+    const { playable: _stale, ...rest } = row;
+    const next = { ...rest, positions, positionShares: fiveShares(shares) };
+    if (floor) {
+      next.playable = playableRoles(positions, shares, floor.picks.get(row.id), floor.trainGames.get(row.id), floor);
+    }
+    return next;
   });
   return { rows: out, kept };
 }
 
 /**
- * `positionShares` (engine-role-grade design § 1, G10): the share of each LISTED role, 3 dp, keyed in
- * the positions' order — the primary first, so `positionShares[positions[0]]` is the maximum by
- * construction. Written only for a champion the source has; a kept row keeps whatever it had.
+ * `positionShares` (champion-role-shares § 4.1): ALL FIVE roles' shares, 3 dp, in vocabulary order; 0
+ * is legal. Not keyed by the positions' order — there is no ordering invariant on a stored row (an
+ * override may reorder `positions`); every consumer divides by `max(shares)`. Written only for a
+ * champion the source has; a kept row keeps whatever it had (the legacy listed-key shape included).
  */
-function listedShares(positions, shares) {
-  return Object.fromEntries(positions.map((role) => [role, Number((shares[role] ?? 0).toFixed(3))]));
+function fiveShares(shares) {
+  return Object.fromEntries(META_POSITIONS.map((role) => [role, Number((shares[role] ?? 0).toFixed(3))]));
+}
+
+/** The roles the engine may seat the champion in: `playable`, or the positions when the row has none. */
+function playableOf(row) {
+  return row.playable ?? row.positions;
 }
 
 function meanLength(rows) {
@@ -183,6 +255,8 @@ export function diffPositions(before, after) {
   const primaryFlips = [];
   const lost = [];
   const gained = [];
+  const playableLost = [];
+  const playableGained = [];
   let changedSets = 0;
   before.forEach((old, i) => {
     const next = after[i];
@@ -191,20 +265,28 @@ export function diffPositions(before, after) {
     if (from !== to) primaryFlips.push({ id: old.id, from, to });
     const oldSet = new Set(old.positions);
     const newSet = new Set(next.positions);
+    // playable: a row without the field is its positions (the engine's fallback).
+    const oldPlayable = new Set(playableOf(old));
+    const newPlayable = new Set(playableOf(next));
     for (const role of META_POSITIONS) {
       if (oldSet.has(role) && !newSet.has(role)) lost.push({ id: old.id, role });
       if (!oldSet.has(role) && newSet.has(role)) gained.push({ id: old.id, role });
+      if (oldPlayable.has(role) && !newPlayable.has(role)) playableLost.push({ id: old.id, role });
+      if (!oldPlayable.has(role) && newPlayable.has(role)) playableGained.push({ id: old.id, role });
     }
     if (oldSet.size !== newSet.size || [...oldSet].some((role) => !newSet.has(role))) changedSets += 1;
   });
-  return { primaryFlips, lost, gained, changedSets, meanBefore: meanLength(before), meanAfter: meanLength(after) };
+  return {
+    primaryFlips, lost, gained, changedSets, meanBefore: meanLength(before), meanAfter: meanLength(after),
+    playableGained, playableLost,
+  };
 }
 
 /** The champions.json root block, key order as documented in the plan.
  * `gamesUnit` and `unmeasuredAtParity` are written only for the ugg source,
  * whose `games` is a sum of per-role match counts (champion-matches) and
  * whose feasibility has never been measured at parity with the corpus. */
-export function buildProvenance({ kind, patches, games, threshold, generatedAt, feasibility, gamesUnit, unmeasuredAtParity, rule, minPicks, decidingPatch, decidingGames, fallback }) {
+export function buildProvenance({ kind, patches, games, threshold, generatedAt, feasibility, gamesUnit, unmeasuredAtParity, rule, minPicks, decidingPatch, decidingGames, fallback, playableRule }) {
   const block = { kind, patches, games };
   if (gamesUnit !== undefined) block.gamesUnit = gamesUnit;
   if (unmeasuredAtParity !== undefined) block.unmeasuredAtParity = unmeasuredAtParity;
@@ -217,6 +299,10 @@ export function buildProvenance({ kind, patches, games, threshold, generatedAt, 
     block.decidingGames = decidingGames;
     block.fallback = fallback ?? {};
   }
+  // The playable floor (corpus source only, champion-role-shares § 4.1): the
+  // rate, the absolute minimum, and the patch whose train games normalise it.
+  // The FIELD the feasibility was measured on travels inside `feasibility`.
+  if (playableRule !== undefined) block.playableRule = playableRule;
   block.threshold = threshold;
   block.generatedAt = generatedAt;
   if (feasibility !== undefined) block.feasibility = feasibility;
@@ -225,12 +311,14 @@ export function buildProvenance({ kind, patches, games, threshold, generatedAt, 
 
 /** One line for every log surface (compile, validator, backend boot — the
  * backend keeps a verbatim CommonJS copy). Says the feasibility, whether it
- * was carried forward unmeasured, and whether the source is unmeasured at parity. */
+ * was carried forward unmeasured, the field it was measured on (positions or
+ * playable; absent on a block from before the field), and whether the source
+ * is unmeasured at parity. */
 export function formatPositionsSource(block) {
   if (!block) return "none recorded (Meraki verbatim)";
   const f = block.feasibility;
   const feasibility = f
-    ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}`
+    ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}${f.field ? ` field=${f.field}` : ""}`
     : "unmeasured";
   const fallbackCount = block.fallback ? Object.keys(block.fallback).length : 0;
   const rule = block.rule
@@ -251,7 +339,15 @@ export function evaluateGate({ previous, primaryFlips, feasibility, force }) {
   }
   const prev = previous.feasibility?.bothSides;
   const now = feasibility?.bothSides;
-  if (typeof prev === "number" && typeof now === "number") {
+  // The field each number was measured on (champion-role-shares § 4.2 hop 5): the
+  // drop clause compares like with like — a positions-field 0.738 against a
+  // playable-field 0.976 says nothing about a drop. A block from before the
+  // field is "unknown" and never arms the clause.
+  const prevField = previous.feasibility?.field ?? "unknown";
+  const nowField = feasibility?.field ?? "unknown";
+  if (typeof prev === "number" && typeof now === "number" && prevField !== nowField) {
+    reasons.push(`feasibility drop clause unarmed: previous run measured ${prevField} (${prev}), this run measured ${nowField} (${now})`);
+  } else if (typeof prev === "number" && typeof now === "number") {
     if (now < prev - MAX_FEASIBILITY_DROP) {
       const carried = previous.feasibility.carriedFrom
         ? ` (previous number carried from ${previous.feasibility.carriedFrom.generatedAt}, never measured for that table)`
@@ -267,11 +363,30 @@ export function evaluateGate({ previous, primaryFlips, feasibility, force }) {
   } else {
     reasons.push("feasibility not compared (the previous run recorded none — the drop clause stays unarmed until a measured run writes one)");
   }
-  const violations = reasons.filter((r) => !r.startsWith("feasibility not compared"));
+  const violations = reasons.filter((r) => !r.startsWith("feasibility not compared") && !r.startsWith("feasibility drop clause unarmed"));
   if (violations.length > 0 && force) {
     return { armed: true, abort: false, reasons: [...reasons, "gate overridden by --force"] };
   }
   return { armed: true, abort: violations.length > 0, reasons };
+}
+
+/**
+ * What the provenance records as feasibility (the CLI's carry-forward, champion-role-shares § 4.2 hop 5):
+ * the measured block; or — under --force, when this run could not measure and the previous run recorded
+ * one — the previous block carried forward WITH its field and marked with the run it came from (an
+ * existing marker is preserved, so a chain of carries still points at the run that measured). Across a
+ * source-kind change too: a measured corpus run → a forced unmeasured ugg run → a corpus run must not
+ * lose the first measurement (the marker says which kind measured it). Unmeasured without --force:
+ * nothing — the gate refuses such a run unless forced.
+ * @returns {object | undefined}
+ */
+export function carryForward({ feasibility, previous, force }) {
+  if (feasibility) return feasibility;
+  if (!force || !previous?.feasibility) return undefined;
+  return {
+    ...previous.feasibility,
+    carriedFrom: previous.feasibility.carriedFrom ?? { generatedAt: previous.generatedAt, kind: previous.kind },
+  };
 }
 
 function ratesText(shares) {
@@ -286,8 +401,10 @@ function ratesText(shares) {
  * With `pooled` (the corpus source), each flip also shows the pooled-window
  * shares next to the deciding patch's, so a recency-driven flip is legible:
  * "Camille SUPPORT -> TOP (TOP 0.56, SUPPORT 0.44) | pooled (SUPPORT 0.71, TOP 0.29)".
- * With `rows` (the refreshed champions), a last line counts the champions with
- * and without `positionShares` (engine-role-grade design § 1). */
+ * With `rows` (the refreshed champions), a line counts the champions with and
+ * without `positionShares`, and a last line counts the playable (champion, role)
+ * pairs with the ones gained and lost (champion-role-shares § 4.1 — the diff
+ * line is the only control on playable churn, ≈ 16 pairs per refresh). */
 export function formatDiff(diff, rates, kept, pooled, rows) {
   const lines = [];
   lines.push(`primary flips (${diff.primaryFlips.length}):`);
@@ -302,6 +419,11 @@ export function formatDiff(diff, rates, kept, pooled, rows) {
   if (rows) {
     const without = rows.filter((row) => row.positionShares === undefined).map((row) => row.id);
     lines.push(`champions with positionShares: ${rows.length - without.length}; without (no source data, kept as they were): ${without.length}${without.length ? ` (${without.join(", ")})` : ""}`);
+    const pairs = rows.reduce((acc, row) => acc + playableOf(row).length, 0);
+    const pair = (p) => `${p.id} ${p.role}`;
+    const gainedPlayable = diff.playableGained ?? [];
+    const lostPlayable = diff.playableLost ?? [];
+    lines.push(`playable pairs: ${pairs} (absent playable counts as the positions); gained (${gainedPlayable.length}): ${gainedPlayable.map(pair).join(", ")}; lost (${lostPlayable.length}): ${lostPlayable.map(pair).join(", ")}`);
   }
   return lines.join("\n");
 }

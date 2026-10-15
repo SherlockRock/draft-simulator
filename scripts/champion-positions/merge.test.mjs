@@ -33,6 +33,13 @@ test("a new DDragon id is added with Meraki positions, or [] and a report when M
   assert.deepEqual(champions.find((c) => c.id === "Locke"), { name: "Locke", id: "Locke", positions: ["MIDDLE"] });
   assert.deepEqual(champions.find((c) => c.id === "Newbie"), { name: "Newbie", id: "Newbie", positions: [] });
   assert.deepEqual(missingFromMeraki, ["Newbie"]);
+  // A new row carries neither positionShares nor playable (champion-role-shares § 4.2 hop 2): the next
+  // refresh fills them; until then the loaders fall back to the positions.
+  for (const id of ["Locke", "Newbie"]) {
+    const row = champions.find((c) => c.id === id);
+    assert.equal("positionShares" in row, false, id);
+    assert.equal("playable" in row, false, id);
+  }
 });
 
 test("Meraki is never consulted for an existing id, even when it disagrees", () => {
