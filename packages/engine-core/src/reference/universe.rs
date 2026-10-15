@@ -5,7 +5,7 @@
 //! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
 //! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
-use crate::feasibility::{champion_role_mask, RoleMask, ROLES};
+use crate::feasibility::{champion_role_mask, roles_mask, RoleMask, ROLES};
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
@@ -147,6 +147,12 @@ pub struct Champion {
     /// each role's grade from it.
     #[serde(default)]
     pub shares: Vec<f64>,
+    /// The engine's legality set (champion-meta.json's `playable`, champion-role-shares design
+    /// § 4.1), or empty = unknown → the positions. Tier A fixtures omit it; the live universe copies
+    /// `ChampionMeta::playable`. Read by the TAGGED path alone (`Universe::playable_mask`, U2): the
+    /// positions-only meta map serves list-form sides and every `tags_for` = `None` context.
+    #[serde(default)]
+    pub playable: Vec<Role>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -195,6 +201,10 @@ pub enum UniverseError {
     /// maximum first (engine-role-grade design § 1).
     #[error("{0:?}: shares must be empty or one finite share in (0, 1] per listed position, the maximum first")]
     Shares(String),
+    /// `Champion::playable` is non-empty and lacks a listed position (the fallback assumes
+    /// `positions ⊆ playable`; champion-role-shares design § 4.1).
+    #[error("{0:?}: playable must be empty or contain every listed position")]
+    Playable(String),
 }
 
 #[derive(Clone, Debug)]
@@ -208,8 +218,11 @@ pub struct Universe {
     live_loss: f64,
     meta: HashMap<String, ChampionMeta>,
     /// Each champion's meta roles as the incumbent's mask (`crate::feasibility::champion_role_mask`),
-    /// by index — what a role-tagged pool is read against (role-aware pools design § 1).
+    /// by index — the positions (role-aware pools design § 1).
     role_masks: Vec<RoleMask>,
+    /// Each champion's legality mask, by index: its `playable`, or its positions when the meta has
+    /// none (champion-role-shares design § 4.1, U2) — what a role-tagged side is read against.
+    playable_masks: Vec<RoleMask>,
     /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1): 0 at the
     /// primary, `round(100 · (1 − share(role) / share(primary)))` at another listed role, 100 at a role
     /// never played; all 0 when the shares are unknown. Read only for a placement outside the side's
@@ -345,6 +358,9 @@ impl Universe {
             if c.positions.is_empty() {
                 return Err(UniverseError::NoPositions(c.id.clone()));
             }
+            if !c.playable.is_empty() && c.positions.iter().any(|p| !c.playable.contains(p)) {
+                return Err(UniverseError::Playable(c.id.clone()));
+            }
         }
         let grades = champions
             .iter()
@@ -426,6 +442,16 @@ impl Universe {
             .iter()
             .map(|c| champion_role_mask(&c.id, &meta))
             .collect();
+        let playable_masks = champions
+            .iter()
+            .map(|c| {
+                roles_mask(if c.playable.is_empty() {
+                    &c.positions
+                } else {
+                    &c.playable
+                })
+            })
+            .collect();
 
         Ok(Self {
             champions,
@@ -437,6 +463,7 @@ impl Universe {
             live_loss,
             meta,
             role_masks,
+            playable_masks,
             grades,
         })
     }
@@ -504,15 +531,33 @@ impl Universe {
             .collect()
     }
 
-    /// Positions only; every other `ChampionMeta` field is `Default`. `role_solver::solve` is never
-    /// called on this map — only `feasibility::can_complete_roles` reads it.
+    /// Positions only — `playable` is NOT carried here (U2); every other `ChampionMeta` field is
+    /// `Default`. The string predicates' input: `can_complete_roles`, `max_role_matching` and
+    /// `max_role_assignment` on list-form sides and every `tags_for` = `None` context
+    /// (`reference::feasibility::{locked_matchable, can_complete_from, role_rank, critical_pool}`).
+    /// `role_solver::solve` is never called on this map.
     pub fn champion_meta(&self) -> &HashMap<String, ChampionMeta> {
         &self.meta
     }
 
-    /// The meta's roles for `c` as a mask (bit `i` = `crate::feasibility::ROLES[i]`).
+    /// The meta's roles for `c` as a mask (bit `i` = `crate::feasibility::ROLES[i]`): the positions.
     pub(crate) fn role_mask(&self, c: ChampionIdx) -> RoleMask {
         self.role_masks[usize::from(c.0)]
+    }
+
+    /// The roles a role-tagged side may seat `c` in (champion-role-shares design § 4.1): its
+    /// `playable`, or its positions when the meta has none — bit `i` = `ROLES[i]`.
+    pub(crate) fn playable_mask(&self, c: ChampionIdx) -> RoleMask {
+        self.playable_masks[usize::from(c.0)]
+    }
+
+    /// `playable_mask` read for one role.
+    pub fn is_playable(&self, c: ChampionIdx, role: Role) -> bool {
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        (self.playable_mask(c) >> bit) & 1 == 1
     }
 
     /// `c`'s grade in `role` (engine-role-grade design G1, `Universe::grades`): 0 at the primary and

@@ -41,6 +41,9 @@ struct ChampionMetaEntry {
     /// `positionShares` (engine-role-grade design § 1): absent on a file from before the shares.
     #[serde(default)]
     position_shares: HashMap<String, f64>,
+    /// `playable` (champion-role-shares design § 4.1): absent on a file from before the field.
+    #[serde(default)]
+    playable: Vec<String>,
     damage_profile: DamageProfileFile,
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
@@ -177,6 +180,19 @@ pub fn load_production_data_from(meta_path: &Path) -> (MetaData, HashMap<String,
                     &entry.position_shares,
                 )
                 .unwrap_or_else(|e| panic!("champion-meta.json: {e}")),
+                playable: {
+                    let playable: Vec<Role> =
+                        entry.playable.iter().map(|s| parse_role(s)).collect();
+                    for p in &entry.positions {
+                        if !playable.is_empty() && !playable.contains(&parse_role(p)) {
+                            panic!(
+                                "champion-meta.json: {}: playable lacks the listed position {p}",
+                                entry.id
+                            );
+                        }
+                    }
+                    playable
+                },
                 id: entry.id,
                 positions: entry.positions.iter().map(|s| parse_role(s)).collect(),
                 damage_profile: DamageProfile {

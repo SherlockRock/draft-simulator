@@ -12,6 +12,7 @@ fn champ(id: &str, positions: Vec<Role>) -> ChampionMeta {
         id: id.into(),
         positions,
         position_shares: Vec::new(),
+        playable: Vec::new(),
         damage_profile: DamageProfile::default(),
         scaling_profile: ScalingProfile::default(),
         cc_profile: CcProfile::default(),

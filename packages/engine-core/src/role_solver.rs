@@ -38,6 +38,12 @@ pub struct ChampionMeta {
     /// or a file from before the shares were shipped. Nothing in the incumbent reads it; the reference
     /// universe grades an off-role pick by `share(role) / share(primary)`.
     pub position_shares: Vec<f64>,
+    /// The engine's legality set (champion-meta.json's `playable`; champion-role-shares design § 4.1):
+    /// the listed roles plus every role above the refresh's pick-count floor. Empty = unknown — a file
+    /// from before the field, a hand-entered champion, a test fixture — so read it through
+    /// [`ChampionMeta::playable_roles`], which falls back to `positions`: a missing field is today's
+    /// mask, never a zero mask. `positions` stays the UI's set (tabs, buckets, the gap strip's lists).
+    pub playable: Vec<Role>,
     pub damage_profile: DamageProfile,
     pub scaling_profile: ScalingProfile,
     pub cc_profile: CcProfile,
@@ -45,6 +51,15 @@ pub struct ChampionMeta {
 }
 
 impl ChampionMeta {
+    /// The roles the prune may seat the champion in: `playable`, or `positions` when unknown.
+    pub fn playable_roles(&self) -> &[Role] {
+        if self.playable.is_empty() {
+            &self.positions
+        } else {
+            &self.playable
+        }
+    }
+
     /// `role`'s share: `None` when the shares are unknown (empty, or not aligned with `positions`) or
     /// the role is not listed.
     pub fn share_of(&self, role: Role) -> Option<f64> {

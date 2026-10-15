@@ -127,6 +127,7 @@ fn malformed_shares_are_refused_by_name() {
         positions: vec![Role::Top, Role::Middle],
         linear: 0.0,
         shares: vec![0.6, f64::NAN],
+        playable: Vec::new(),
     }];
     let zero = vec![vec![0.0; 1]; 1];
     assert_eq!(

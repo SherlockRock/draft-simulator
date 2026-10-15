@@ -40,6 +40,15 @@ pub(crate) fn champion_role_mask(champion: &str, meta: &HashMap<String, Champion
     mask
 }
 
+/// The mask of `roles`: one bit per entry of [`ROLES`] that the list names.
+pub(crate) fn roles_mask(roles: &[Role]) -> RoleMask {
+    ROLES
+        .iter()
+        .enumerate()
+        .filter(|(_, role)| roles.contains(role))
+        .fold(0, |mask, (idx, _)| mask | (1 << idx))
+}
+
 fn max_bipartite_matching(champion_masks: &[RoleMask]) -> usize {
     let mut role_to_champ: [Option<usize>; 5] = [None; 5];
     let mut matched = 0;

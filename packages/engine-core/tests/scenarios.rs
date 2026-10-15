@@ -94,6 +94,7 @@ fn champion_meta_with_positions(
         id: id.to_string(),
         positions,
         position_shares: Vec::new(),
+        playable: Vec::new(),
         damage_profile: DamageProfile {
             physical: damage.0,
             magic: damage.1,

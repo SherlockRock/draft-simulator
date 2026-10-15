@@ -131,6 +131,10 @@ impl LiveUniverse {
                     .get(id)
                     .map(|m| m.position_shares.clone())
                     .expect("ids are champion-meta keys"),
+                playable: meta
+                    .get(id)
+                    .map(|m| m.playable.clone())
+                    .expect("ids are champion-meta keys"),
             });
             rows.push((s, a, b));
         }

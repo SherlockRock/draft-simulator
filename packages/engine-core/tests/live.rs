@@ -330,6 +330,47 @@ fn a_meta_only_champion_is_padded_with_a_zero_row_and_an_fm_only_champion_is_dro
     assert_eq!(live.universe.index("C"), None);
 }
 
+/// champion-role-shares design § 4.2 hop 8: the live build copies `playable` into the universe —
+/// `is_playable` reads a playable-but-unlisted role, an entry without the field is playable in its
+/// positions alone, and the meta map the string predicates read stays positions-only (U2).
+#[test]
+fn the_live_universe_copies_playable_from_the_meta() {
+    let mut meta = std::collections::HashMap::new();
+    for (id, positions, playable) in [
+        ("Kaisa", vec![Role::Adc], vec![Role::Top, Role::Adc]),
+        ("Jinx", vec![Role::Adc], vec![]),
+    ] {
+        meta.insert(
+            id.to_string(),
+            engine_core::role_solver::ChampionMeta {
+                id: id.to_string(),
+                positions,
+                playable,
+                ..Default::default()
+            },
+        );
+    }
+    let live = LiveUniverse::build(&fm(), "meta-test", &meta).unwrap_or_else(|e| panic!("{e}"));
+    let u = &live.universe;
+    let (kaisa, jinx) = (
+        u.index("Kaisa").expect("Kaisa"),
+        u.index("Jinx").expect("Jinx"),
+    );
+    assert!(u.is_playable(kaisa, Role::Top), "playable but unlisted");
+    assert!(u.is_playable(kaisa, Role::Adc));
+    assert!(!u.is_playable(kaisa, Role::Middle));
+    assert!(u.is_playable(jinx, Role::Adc));
+    assert!(
+        !u.is_playable(jinx, Role::Top),
+        "absent playable = the positions"
+    );
+    assert_eq!(
+        u.champion_meta()["Kaisa"].positions,
+        vec![Role::Adc],
+        "the meta map stays positions-only (U2)"
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // 4: the 256-champion set
 // ---------------------------------------------------------------------------------------------
@@ -375,6 +416,7 @@ fn synthetic(n: usize) -> Result<Universe, UniverseError> {
             positions: vec![Role::Top],
             linear: 0.0,
             shares: Vec::new(),
+            playable: Vec::new(),
         })
         .collect();
     let zero = vec![vec![0.0; n]; n];
@@ -400,6 +442,7 @@ fn from_tables_names_a_wrong_shape_and_a_non_finite_entry() {
                 positions: vec![Role::Top],
                 linear: 0.0,
                 shares: Vec::new(),
+                playable: Vec::new(),
             })
             .collect()
     };
@@ -1703,6 +1746,7 @@ fn self_break_is_the_worst_action_and_denial_is_a_top_action_under_the_cost() {
         positions: vec![role],
         linear: 0.0,
         shares: Vec::new(),
+        playable: Vec::new(),
     };
     let champions = vec![
         mk("T1", Role::Top),
@@ -3092,6 +3136,7 @@ fn band_universe(named: &[(&str, Role, f64)]) -> Universe {
         positions: vec![role],
         linear,
         shares: Vec::new(),
+        playable: Vec::new(),
     };
     let mut champions: Vec<Champion> = named
         .iter()
@@ -3120,6 +3165,7 @@ fn the_critical_pool_is_the_champions_whose_removal_lowers_the_rank() {
         positions: positions.to_vec(),
         linear: 0.0,
         shares: Vec::new(),
+        playable: Vec::new(),
     };
     let mut champions = vec![
         mk("BJ", &[Role::Jungle]),
@@ -3773,12 +3819,14 @@ fn a_universe_whose_largest_live_leaf_overflows_is_refused() {
                 positions: vec![Role::Top],
                 linear,
                 shares: Vec::new(),
+                playable: Vec::new(),
             },
             Champion {
                 id: "B".into(),
                 positions: vec![Role::Support],
                 linear: 0.0,
                 shares: Vec::new(),
+                playable: Vec::new(),
             },
         ]
     };

@@ -29,6 +29,10 @@ pub enum EngineLoadError {
     /// `positionShares` does not match `positions` (engine-role-grade design § 1).
     #[error("champion {id}: {reason}")]
     InvalidShares { id: String, reason: String },
+    /// `playable` lacks a listed position (champion-role-shares design § 4.1: `positions ⊆ playable`,
+    /// the invariant the engine's fallback assumes).
+    #[error("champion {id}: {reason}")]
+    InvalidPlayable { id: String, reason: String },
 }
 
 #[derive(Deserialize)]
@@ -45,6 +49,10 @@ struct ChampionMetaEntry {
     /// `positionShares` (engine-role-grade design § 1): absent on a file from before the shares.
     #[serde(default)]
     position_shares: HashMap<String, f64>,
+    /// `playable` (champion-role-shares design § 4.1): the engine's legality set; absent on a file
+    /// from before the field — `ChampionMeta::playable_roles` then falls back to the positions.
+    #[serde(default)]
+    playable: Vec<String>,
     damage_profile: DamageProfileFile,
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
@@ -193,10 +201,29 @@ fn convert_entry(entry: ChampionMetaEntry) -> Result<ChampionMeta, EngineLoadErr
         .map(|s| parse_role(s))
         .collect::<Result<Vec<_>, _>>()?;
     let position_shares = aligned_shares(&entry.id, &entry.positions, &entry.position_shares)?;
+    let playable = entry
+        .playable
+        .iter()
+        .map(|s| parse_role(s))
+        .collect::<Result<Vec<_>, _>>()?;
+    if !playable.is_empty() {
+        if let Some((name, _)) = entry
+            .positions
+            .iter()
+            .zip(&positions)
+            .find(|(_, role)| !playable.contains(role))
+        {
+            return Err(EngineLoadError::InvalidPlayable {
+                id: entry.id,
+                reason: format!("playable lacks the listed position {name}"),
+            });
+        }
+    }
     Ok(ChampionMeta {
         id: entry.id,
         positions,
         position_shares,
+        playable,
         damage_profile: DamageProfile {
             physical: entry.damage_profile.physical,
             magic: entry.damage_profile.magic,
@@ -339,6 +366,62 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("positionShares lacks the listed role BOTTOM"),
+            "{err}"
+        );
+    }
+
+    /// champion-role-shares design § 4.1 / § 4.2 hop 6: `playable` parses through `parse_role` like
+    /// `positions` (BOTTOM and ADC both spell Adc); absent it is empty and `playable_roles()` falls
+    /// back to the positions; a vocabulary miss and a list that lacks a listed position are load
+    /// errors naming the champion (the engine's fallback assumes `positions ⊆ playable`).
+    #[test]
+    fn playable_parses_like_positions_and_falls_back_to_them() {
+        let matchup_path = write_tmp(
+            "matchup-playable.json",
+            r#"{"counters":{},"synergyRules":[]}"#,
+        );
+        let with = |tail: &str| ENTRY.replace("WIN", tail);
+        let meta_path = write_tmp(
+            "meta-playable.json",
+            &with(r#","playable":["MIDDLE","BOTTOM","TOP"]"#),
+        );
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(
+            meta["Ahri"].playable,
+            vec![Role::Middle, Role::Adc, Role::Top]
+        );
+        assert_eq!(
+            meta["Ahri"].playable_roles(),
+            &[Role::Middle, Role::Adc, Role::Top]
+        );
+        assert_eq!(
+            meta["Ahri"].positions,
+            vec![Role::Middle],
+            "positions stay the UI's set"
+        );
+        let meta_path = write_tmp("meta-noplayable.json", &with(""));
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta["Ahri"].playable, Vec::<Role>::new());
+        assert_eq!(
+            meta["Ahri"].playable_roles(),
+            &[Role::Middle],
+            "absent → the positions"
+        );
+        let meta_path = write_tmp(
+            "meta-playable-utility.json",
+            &with(r#","playable":["MIDDLE","UTILITY"]"#),
+        );
+        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
+            panic!("a vocabulary miss must fail");
+        };
+        assert!(err.to_string().contains("UTILITY"), "{err}");
+        let meta_path = write_tmp("meta-playable-narrow.json", &with(r#","playable":["TOP"]"#));
+        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
+            panic!("a playable list lacking a listed position must fail");
+        };
+        assert!(
+            err.to_string()
+                .contains("playable lacks the listed position MIDDLE"),
             "{err}"
         );
     }

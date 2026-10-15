@@ -166,6 +166,49 @@ fn universe_interns_ids_and_stores_symmetric_and_antisymmetric_tables() {
     assert_eq!(u.names(&[c, a]), vec!["C".to_string(), "A".to_string()]);
 }
 
+/// champion-role-shares design § 4.2 hop 8 (U2): a champion's `playable` builds its own mask beside
+/// the positions-only meta map — `is_playable` reads it; `champion_meta()`, the string predicates'
+/// input for list-form sides, stays the positions; absent, the playable mask IS the positions. A
+/// `playable` that lacks a listed position is refused by name (the fallback assumes the subset).
+#[test]
+fn playable_masks_follow_the_champions_playable_and_the_meta_map_stays_positions_only() {
+    let spec = |champions: &str| -> engine_core::reference::universe::UniverseSpec {
+        serde_json::from_str(&format!(r#"{{"champions": [{champions}]}}"#)).expect("parses")
+    };
+    let u = Universe::new(spec(
+        r#"{"id": "A", "positions": ["Top"], "linear": 0, "playable": ["Top", "Middle"]},
+           {"id": "B", "positions": ["Jungle"], "linear": 0}"#,
+    ))
+    .expect("valid");
+    let (a, b) = (u.index("A").unwrap(), u.index("B").unwrap());
+    assert!(u.is_playable(a, Role::Top));
+    assert!(u.is_playable(a, Role::Middle), "playable but unlisted");
+    assert!(!u.is_playable(a, Role::Jungle));
+    assert!(u.is_playable(b, Role::Jungle));
+    assert!(
+        !u.is_playable(b, Role::Top),
+        "absent playable = the positions"
+    );
+    assert_eq!(
+        u.champion_meta()["A"].positions,
+        vec![Role::Top],
+        "the meta map is positions-only (U2)"
+    );
+    assert!(u.champion_meta()["A"].playable.is_empty());
+    assert_eq!(
+        u.champion_meta()["A"].playable_roles(),
+        &[Role::Top],
+        "so the string predicates fall back to the positions"
+    );
+    assert_eq!(
+        Universe::new(spec(
+            r#"{"id": "A", "positions": ["Top"], "linear": 0, "playable": ["Middle"]}"#
+        ))
+        .err(),
+        Some(UniverseError::Playable("A".into()))
+    );
+}
+
 #[test]
 fn universe_rejects_bad_tables() {
     let dup = TINY.replace(
