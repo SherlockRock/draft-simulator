@@ -3867,6 +3867,8 @@ fn cut_roster(s: &Sample, on_board: &[String], extra: &[String]) -> Vec<String> 
         Role::Adc,
         Role::Support,
     ] {
+        // positions[0] as a CATEGORY: four champions listed first in each role keep Blue's pool
+        // role-complete; no weight reads it (champion-role-shares slice B).
         let mut ids: Vec<&String> = s
             .pools
             .blue

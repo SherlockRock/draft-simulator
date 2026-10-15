@@ -45,6 +45,8 @@ fn draft_prefix(turn_index: usize, champion_meta: &HashMap<String, ChampionMeta>
     let mut by_role: HashMap<Role, Vec<String>> = HashMap::new();
     let mut ids: Vec<&String> = champion_meta.keys().collect();
     ids.sort();
+    // positions[0] as a CATEGORY is fine here: the fixture wants one champion per listed-first
+    // role per side so the prune's matching is satisfiable; no weight reads it (slice B).
     for id in ids {
         if let Some(primary) = champion_meta[id].positions.first() {
             by_role.entry(*primary).or_default().push(id.clone());
