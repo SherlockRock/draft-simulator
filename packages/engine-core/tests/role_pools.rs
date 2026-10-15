@@ -6,6 +6,7 @@ use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::engine::EngineError;
 use engine_core::pools::Role;
+use engine_core::reference::entries::with_board_picks;
 use engine_core::reference::feasibility::{
     action_charge, critical_pool, locked_matchable, off_pool, off_pool_count, pool_can_complete,
     side_feasible, tags_for, FeasibilityMemo, FeasibilityRule, OffPool, Price,
@@ -30,6 +31,36 @@ fn universe(champions: &[(&str, &[&str])]) -> Universe {
         .map(|(id, positions)| (*id, *positions, 0.0))
         .collect();
     valued_universe(&valued)
+}
+
+/// `band` plus champions with a `playable` set wider than their positions: `(id, positions, playable)`.
+/// No shares, so every grade is 0 (champion-role-shares design § 4.1: playable is legality alone).
+fn band_playable(extra: &[(&str, &[&str], &[&str])]) -> Universe {
+    let mut list: Vec<String> = ["T1", "T2", "J1", "J2", "M1", "M2", "A1", "A2", "S1", "S2"]
+        .iter()
+        .zip([
+            "Top", "Top", "Jungle", "Jungle", "Middle", "Middle", "Adc", "Adc", "Support",
+            "Support",
+        ])
+        .map(|(id, role)| format!(r#"{{"id": "{id}", "positions": ["{role}"], "linear": 0}}"#))
+        .collect();
+    for (id, positions, playable) in extra {
+        let quoted = |roles: &[&str]| -> String {
+            roles
+                .iter()
+                .map(|r| format!("\"{r}\""))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        list.push(format!(
+            r#"{{"id": "{id}", "positions": [{}], "linear": 0, "playable": [{}]}}"#,
+            quoted(positions),
+            quoted(playable)
+        ));
+    }
+    let json = format!(r#"{{"champions": [{}]}}"#, list.join(","));
+    let spec: UniverseSpec = serde_json::from_str(&json).unwrap_or_else(|e| panic!("{e}"));
+    Universe::new(spec).unwrap_or_else(|e| panic!("{e:?}"))
 }
 
 /// `(id, positions, linear)` per champion, no tables.
@@ -662,6 +693,146 @@ fn an_off_role_fill_is_charged_like_an_off_pool_pick() {
         count(FeasibilityRule::On, Side::Blue, &root, &pools, &u),
         OffPool::default()
     );
+}
+
+/// champion-role-shares design § 5.3 (D4, U2): a role-TAGGED side may seat a champion in a role its
+/// `playable` set holds beyond the listed positions — priced as off-role (one off-pool unit; the
+/// grade would ride on it) — while a LIST side keeps today's positions-only legality. `K` is listed
+/// Adc, playable Top too; Blue's map lists J1 / M1 / A1 / S1 and K under Adc, nobody under Top; Blue
+/// holds J1 M1 A1 S1 and picks last. As a map, K can take Top (one forced pick at the root, K fills it
+/// at one off unit); as a list the five cannot be matched (A1 and K both ADC-only in the meta).
+#[test]
+fn a_tagged_side_may_seat_a_champion_in_its_playable_role_and_a_list_side_may_not() {
+    let u = band_playable(&[("K", &["Adc"], &["Top", "Adc"])]);
+    let format = Format::standard();
+    let k = idx(&u, "K");
+    assert!(u.is_playable(k, Role::Top) && !u.champion_meta()["K"].positions.contains(&Role::Top));
+    let blue = tags(
+        &u,
+        &[
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1"]),
+            (Role::Adc, &["A1", "K"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let maps = Pools {
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, blue);
+    let list = as_list(&maps);
+    let entries = board(
+        &format,
+        &u,
+        &["J1", "M1", "A1", "S1"],
+        &["T2", "J2", "M2", "A2"],
+    );
+    let pick_k = Action::Pick(k);
+    for rule in LIVE {
+        let root = Position::new(&format, &entries, &maps, &u).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(root.mover(), Some(Side::Blue), "{rule:?}");
+        // The map: nobody is listed for Top, so one pick is forced; K at Top fills it as an off-role
+        // placement — one off unit made, nothing forced after.
+        let after = root.apply(pick_k);
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
+        let tags = tags_for(rule, Side::Blue, &after, &maps);
+        assert!(
+            tags.is_some(),
+            "{rule:?}: a five-pick live rule reads the tags"
+        );
+        assert!(
+            locked_matchable(&mut memo, Side::Blue, after.picks(Side::Blue), tags, &u),
+            "{rule:?}: K is playable Top for the tagged side"
+        );
+        assert!(
+            side_feasible(&mut memo, rule, Side::Blue, &after, &maps, &u),
+            "{rule:?}"
+        );
+        let charged = count(rule, Side::Blue, &after, &maps, &u);
+        assert_eq!(
+            (charged.made, charged.forced),
+            (1, 0),
+            "{rule:?}: K at Top is off-role"
+        );
+        // The list: K's legality is the positions (U2) — five picks that cannot be matched.
+        let root = Position::new(&format, &entries, &list, &u).unwrap_or_else(|e| panic!("{e}"));
+        let after = root.apply(pick_k);
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
+        assert!(
+            !locked_matchable(&mut memo, Side::Blue, after.picks(Side::Blue), None, &u),
+            "{rule:?}: the string predicate reads the positions-only meta map"
+        );
+        assert!(
+            !side_feasible(&mut memo, rule, Side::Blue, &after, &list, &u),
+            "{rule:?}"
+        );
+    }
+}
+
+/// champion-role-shares design § 5.3 / judge I1: a board pick the map OMITS is added under every role
+/// it is PLAYABLE in — a sunk fact, never charged. `K` (listed Adc, playable Top) is on Blue's board
+/// beside A1; the map lists J1 / M1 / A1 / S1 and omits K. Tagged under its playable roles K takes Top
+/// in-role and nothing is made; tagged under the meta's positions alone (Adc) it would collide with A1
+/// and the locked picks could not be matched.
+#[test]
+fn a_board_pick_the_map_omits_is_tagged_in_its_playable_roles() {
+    let u = band_playable(&[("K", &["Adc"], &["Top", "Adc"])]);
+    let format = Format::standard();
+    let k = idx(&u, "K");
+    let listed = tags(
+        &u,
+        &[
+            (Role::Jungle, &["J1"]),
+            (Role::Middle, &["M1"]),
+            (Role::Adc, &["A1"]),
+            (Role::Support, &["S1"]),
+        ],
+    );
+    let board_set = set(&u, &["K", "A1", "J1", "M1"]);
+    let tagged = with_board_picks(listed, board_set, &u);
+    assert!(
+        tagged.for_role(Role::Top).contains(k),
+        "K under its playable Top"
+    );
+    assert!(
+        tagged.for_role(Role::Adc).contains(k),
+        "and under its listed Adc"
+    );
+    assert!(!tagged.for_role(Role::Middle).contains(k));
+    assert!(
+        tagged.off_meta(&u).is_empty(),
+        "a playable role is not off-meta: {:?}",
+        tagged.off_meta(&u)
+    );
+    let pools = Pools {
+        red: set(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
+    }
+    .with_roles(Side::Blue, tagged);
+    let entries = board(
+        &format,
+        &u,
+        &["K", "A1", "J1", "M1"],
+        &["T2", "J2", "M2", "A2"],
+    );
+    for rule in LIVE {
+        let root = Position::new(&format, &entries, &pools, &u).unwrap_or_else(|e| panic!("{e}"));
+        let mut memo = FeasibilityMemo::new(Price::ZERO);
+        let tags = tags_for(rule, Side::Blue, &root, &pools);
+        assert!(
+            locked_matchable(&mut memo, Side::Blue, root.picks(Side::Blue), tags, &u),
+            "{rule:?}: K at Top, A1 at Adc"
+        );
+        assert_eq!(
+            count(rule, Side::Blue, &root, &pools, &u),
+            OffPool::default(),
+            "{rule:?}: nothing made, S1 fills support"
+        );
+    }
+    // `off_meta` reads the playable set: an entry under a role the champion is NOT playable in is noted.
+    let elsewhere = tags(&u, &[(Role::Middle, &["K"])]);
+    assert_eq!(elsewhere.off_meta(&u), vec![(Role::Middle, k)]);
 }
 
 /// Design RA4 / § 6 test 7 (pricing half): a pool entry under a role the meta does not list is

@@ -305,7 +305,8 @@ pub fn spec_to_pools(
 
 /// A role-tagged side's own board picks (design, Definitions): one the pool lists keeps its listed
 /// roles — so a later pick that displaces it is charged (RA2) — and one the pool omits is added under
-/// every meta role: a sunk fact, never off-role, never charged. A pick with no meta role would have
+/// every role it is playable in (champion-role-shares § 5.3): a sunk fact, never off-role, never
+/// charged. A pick with no meta role would have
 /// none to be added under and the root would then be refused as outside the pool (review minor F6) —
 /// unreachable: both universe constructors refuse a champion with no positions (`NoPositions`), the
 /// live loader drops one, and every listed position is playable (`playable_roles` falls back to the

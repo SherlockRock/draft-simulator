@@ -234,10 +234,13 @@ fn live_tags<'p>(side: Side, position: &Position<'_>, pools: &'p Pools) -> Optio
         .filter(|_| position.format().picks_per_side(side) == 5)
 }
 
-/// RA4: the roles `c` can fill for a role-tagged side — the meta's, plus the ones the side's own pool
-/// lists for it. Per side: the other side's entries never widen it.
+/// RA4: the roles `c` can fill for a role-tagged side — its `playable` set (champion-role-shares
+/// design § 5.3: the listed roles plus every role above the refresh's pick-count floor; the positions
+/// when the meta has none), plus the ones the side's own pool lists for it. Per side: the other
+/// side's entries never widen it. The TAGGED path alone reads the playable mask (U2): a list-form
+/// side and every `tags_for` = `None` context run the string predicates on the positions-only meta.
 fn playable(tags: &RoleSets, universe: &Universe, c: ChampionIdx) -> RoleMask {
-    universe.role_mask(c) | tags.mask(c)
+    universe.playable_mask(c) | tags.mask(c)
 }
 
 /// Role subsets, one per bit pattern over `ROLES`.

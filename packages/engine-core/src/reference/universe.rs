@@ -5,7 +5,7 @@
 //! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
 //! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
-use crate::feasibility::{champion_role_mask, roles_mask, RoleMask, ROLES};
+use crate::feasibility::{roles_mask, RoleMask, ROLES};
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
@@ -217,11 +217,9 @@ pub struct Universe {
     off_pool_cost: f64,
     live_loss: f64,
     meta: HashMap<String, ChampionMeta>,
-    /// Each champion's meta roles as the incumbent's mask (`crate::feasibility::champion_role_mask`),
-    /// by index — the positions (role-aware pools design § 1).
-    role_masks: Vec<RoleMask>,
     /// Each champion's legality mask, by index: its `playable`, or its positions when the meta has
-    /// none (champion-role-shares design § 4.1, U2) — what a role-tagged side is read against.
+    /// none (champion-role-shares design § 4.1, U2) — what a role-tagged side is read against. The
+    /// positions-only path (list-form sides, every untagged context) reads `meta` by name instead.
     playable_masks: Vec<RoleMask>,
     /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1 over the five
     /// shares, champion-role-shares § 4.2 hop 8): `round(100 · (1 − share(role) / max(shares)))` — 0 at
@@ -439,10 +437,6 @@ impl Universe {
                 )
             })
             .collect();
-        let role_masks = champions
-            .iter()
-            .map(|c| champion_role_mask(&c.id, &meta))
-            .collect();
         let playable_masks = champions
             .iter()
             .map(|c| {
@@ -463,7 +457,6 @@ impl Universe {
             off_pool_cost,
             live_loss,
             meta,
-            role_masks,
             playable_masks,
             grades,
         })
@@ -539,11 +532,6 @@ impl Universe {
     /// `role_solver::solve` is never called on this map.
     pub fn champion_meta(&self) -> &HashMap<String, ChampionMeta> {
         &self.meta
-    }
-
-    /// The meta's roles for `c` as a mask (bit `i` = `crate::feasibility::ROLES[i]`): the positions.
-    pub(crate) fn role_mask(&self, c: ChampionIdx) -> RoleMask {
-        self.role_masks[usize::from(c.0)]
     }
 
     /// The roles a role-tagged side may seat `c` in (champion-role-shares design § 4.1): its

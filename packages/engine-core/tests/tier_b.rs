@@ -1722,21 +1722,53 @@ fn the_report_sweeps_p_and_states_the_verdict_interval() {
     assert!(text.contains("sample-skip-at-slot-1"), "{text}");
 }
 
-/// Role-aware pools design § 6 test 1 (a), on the real pools: a pool written as a map of every meta
-/// role is the list. For every position along the recorded line of every Tier B file (the corpus under
-/// `fixtures/tier-b/` and the samples under `tests/data/tier-b/`), under both live rules and for both
-/// sides: the off-pool count in both parts, the pool test, feasibility, the critical set, the legal fan
-/// and the charge of every roster pick are equal for the list pools and for the same pools as maps.
-/// This is the test that ties the tagged solver to list semantics — a list side never reaches it.
+/// Role-aware pools design § 6 test 1 (a), restated for champion-role-shares U2: a pool written as a
+/// map of every role the champion is PLAYABLE in (`RoleSets::meta_roles`) equals the list ONLY on a
+/// table where playable = positions. The FROZEN 2026-09-05 table has no `playable`, so there the two
+/// forms agree on every recorded position of every Tier B file (the corpus under `fixtures/tier-b/`
+/// and the samples under `tests/data/tier-b/`), under both live rules and for both sides: the
+/// off-pool count in both parts, the pool test, feasibility, the critical set, the legal fan and the
+/// charge of every roster pick — the test that ties the tagged solver to list semantics. On the LIVE
+/// table the tagged side reads the playable mask (Kai'Sa top, Syndra support, …) while a list side
+/// keeps the positions, so the two forms DIVERGE on some asks — asserted and printed, never pinned to
+/// a count (the table refreshes).
 #[test]
-fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
-    let live = live();
+fn a_map_of_every_playable_role_is_the_list_on_the_frozen_table_and_diverges_on_the_live_one() {
+    let (files, positions, charges, divergences) = map_vs_list_everywhere(&frozen());
+    println!(
+        "frozen: {files} files, {positions} positions, {charges} charges, {divergences} divergences"
+    );
+    // Twelve corpus positions and the samples, every prefix, every roster pick at every pick slot.
+    assert!(files >= 18, "{files} files");
+    assert!(positions >= 250, "{positions} positions");
+    assert!(charges >= 1_000_000, "{charges} charges");
+    assert_eq!(
+        divergences, 0,
+        "playable = positions on the frozen table: the slice-7 identity"
+    );
+    let (_, positions, _, divergences) = map_vs_list_everywhere(&live());
+    println!(
+        "live: {positions} positions, {divergences} asks differ (map of playable roles vs list)"
+    );
+    assert!(
+        divergences > 0,
+        "the live table's playable set widens some tagged side"
+    );
+}
+
+/// The comparison behind the test above: for every prefix of every Tier B file, the list pools
+/// against the same pools as maps of every playable role. Returns (files, positions, charges compared,
+/// asks that differed) — each `ask`, each legal fan and each roster pick's charge (class and off
+/// delta; not the grade delta — a map grades a displaced outside champion, a list never does) counts
+/// one. Each form gets its own memo: a memo keyed on a locked set answers for one tag form only.
+fn map_vs_list_everywhere(live: &LiveUniverse) -> (usize, usize, u64, usize) {
     let u = &live.universe;
     let mut files = 0;
     let mut positions = 0;
     let mut charges = 0u64;
+    let mut divergences = 0usize;
     for sub in ["fixtures/tier-b", "tests/data/tier-b"] {
-        let loaded = TierBFixture::load_dir(&dir(sub), &live).unwrap_or_else(|e| panic!("{e}"));
+        let loaded = TierBFixture::load_dir(&dir(sub), live).unwrap_or_else(|e| panic!("{e}"));
         for fx in loaded
             .into_iter()
             .map(|l| l.unwrap_or_else(|e| panic!("{sub}: {e}")).fixture)
@@ -1767,7 +1799,7 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                                 critical_pool(&mut memo, side, &position, pools, u),
                             )
                         };
-                        assert_eq!(ask(&maps), ask(&list), "{} at {n} {rule:?} {side:?}", fx.id);
+                        divergences += usize::from(ask(&maps) != ask(&list));
                     }
                     let fan = |pools: &Pools| {
                         legal_actions_under(
@@ -1778,36 +1810,29 @@ fn a_map_of_every_meta_role_is_the_list_on_every_recorded_position() {
                             &mut FeasibilityMemo::new(Price::ZERO),
                         )
                     };
-                    assert_eq!(fan(&maps), fan(&list), "{} at {n} {rule:?}", fx.id);
+                    divergences += usize::from(fan(&maps) != fan(&list));
                     let Some(slot) = position.next_slot() else {
                         continue;
                     };
                     if slot.action != ActionType::Pick {
                         continue;
                     }
-                    let mut memo = FeasibilityMemo::new(Price::ZERO);
-                    let by_list = action_charge(&mut memo, rule, slot.side, &position, &list, u);
-                    let by_map = action_charge(&mut memo, rule, slot.side, &position, &maps, u);
+                    let mut list_memo = FeasibilityMemo::new(Price::ZERO);
+                    let mut map_memo = FeasibilityMemo::new(Price::ZERO);
+                    let by_list =
+                        action_charge(&mut list_memo, rule, slot.side, &position, &list, u);
+                    let by_map = action_charge(&mut map_memo, rule, slot.side, &position, &maps, u);
                     for action in position.pick_actions_from(position.available(u)) {
-                        // The class and the off delta; not the grade delta — a map grades a
-                        // displaced outside champion, a list never grades anything.
                         let (m, l) = (by_map.of(action), by_list.of(action));
-                        assert_eq!(
-                            (m.d_off, m.d_off_key),
-                            (l.d_off, l.d_off_key),
-                            "{} at {n} {rule:?} {action:?}",
-                            fx.id
-                        );
+                        divergences +=
+                            usize::from((m.d_off, m.d_off_key) != (l.d_off, l.d_off_key));
                         charges += 1;
                     }
                 }
             }
         }
     }
-    // Twelve corpus positions and the samples, every prefix, every roster pick at every pick slot.
-    assert!(files >= 18, "{files} files");
-    assert!(positions >= 250, "{positions} positions");
-    assert!(charges >= 1_000_000, "{charges} charges");
+    (files, positions, charges, divergences)
 }
 
 /// The Rourke pool as the app stores it (dev DB, 2026-10-01): 23 entries, 20 champions — Jax and Udyr
@@ -2155,12 +2180,19 @@ fn the_report_marks_an_off_role_fill_off_pool() {
     };
 
     // As a map: an off-role fill. Marked, charged L under `pool_or_roster` (0.1138 + 1026.4), counted
-    // on Red's side of the leaf, noted as an off-meta entry, and no longer one of the root's in-pool
-    // actions (52 searched: Jinx, K'Sante and the best 50 off-pool).
+    // on Red's side of the leaf, and no longer one of the root's in-pool actions (52 searched: Jinx,
+    // K'Sante and the best 50 off-pool). NOT noted as an off-meta entry: on the 16.19 table Kai'Sa is
+    // PLAYABLE mid (1.7% of her picks, above the pick-count floor — champion-role-shares § 4.1), so the
+    // mid entry is honoured without a note (the note on a role outside the playable set is pinned on
+    // the frozen table by `an_off_meta_entry_loads_and_is_noted`). Her LISTED role is still BOTTOM
+    // alone, so placing her there from a mid entry is off-role.
+    let kaisa_idx = live.universe.index("Kaisa").expect("Kaisa");
+    assert!(live.universe.is_playable(kaisa_idx, Role::Middle));
+    assert!(!live.universe.champion_meta()["Kaisa"]
+        .positions
+        .contains(&Role::Middle));
     assert!(
-        maps.contains(
-            "  note: 2026-09-27-smoke-4-red-last-pick: pools.red.mid: Kaisa is not a meta mid — playable for Red only"
-        ),
+        !maps.contains("pools.red.mid: Kaisa is not a meta mid"),
         "{maps}"
     );
     let line = kaisa(&maps);

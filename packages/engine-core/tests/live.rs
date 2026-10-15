@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{load_production_data, repo_root};
+use common::{load_production_data, load_production_data_from, repo_root};
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Side};
 use engine_core::fm::FmWeights;
@@ -4528,17 +4528,35 @@ fn the_tier_a_loader_refuses_the_live_rule() {
     assert!(Fixture::from_json(&raw, "01").is_ok());
 }
 
-/// Role-aware pools design § 6 test 1 (b): a pool written as a map of every meta role is the list, at
-/// search level. On the four smoke roots and the sample's slot-11 root, under both live
-/// rules at widths A, snipe key off and on, a depth-1 search over the list pools and over the same
-/// pools as maps agrees on every ranked action, value (bit for bit), continuation and ending, the top
-/// set, the root fan and every counter — the tagged solver, the key, the root split and the critical
-/// set all reduce to the list's when the tags say what a list means. Depth 1 keeps the pair root
-/// (smoke-2, 13 695 children) affordable in a debug build; interior nodes are compared the same way on
-/// random band boards (`tests/role_pools.rs`).
+/// Role-aware pools design § 6 test 1 (b), restated for champion-role-shares U2: at search level a
+/// map of every PLAYABLE role equals the list only where playable = positions. On the FROZEN
+/// 2026-09-05 table (no `playable`): on the four smoke roots and the sample's slot-11 root, under both
+/// live rules at widths A, snipe key off and on, a depth-1 search over the list pools and over the
+/// same pools as maps agrees on every ranked action, value (bit for bit), continuation and ending,
+/// the top set, the root fan and every counter — the tagged solver, the key, the root split and the
+/// critical set all reduce to the list's when the tags say what a list means. Depth 1 keeps the pair
+/// root (smoke-2, 13 695 children) affordable in a debug build; interior nodes are compared the same
+/// way on band boards (`tests/role_pools.rs`). On the LIVE table the tagged form reads the playable
+/// mask and at least one of the twenty comparisons differs — asserted and printed, never pinned.
 #[test]
-fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
-    let live = live_universe();
+fn a_map_of_every_playable_role_searches_exactly_as_the_list_on_the_frozen_table() {
+    let (compared, differing) = map_vs_list_searches(&frozen_universe());
+    assert_eq!((compared, differing.len()), (20, 0), "{differing:?}");
+    let (compared, differing) = map_vs_list_searches(&live_universe());
+    println!(
+        "live table: {} of {compared} map-vs-list searches differ: {differing:?}",
+        differing.len()
+    );
+    assert_eq!(compared, 20);
+    assert!(
+        !differing.is_empty(),
+        "the live table's playable set widens some tagged side"
+    );
+}
+
+/// The comparison behind the test above on one universe: (searches compared, the labels of those
+/// where the map's outcome differs from the list's in any compared part).
+fn map_vs_list_searches(live: &LiveUniverse) -> (usize, Vec<String>) {
     let u = &live.universe;
     let s = sample();
     let mut roots: Vec<(String, LiveRoot)> = [11usize]
@@ -4561,7 +4579,7 @@ fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
         "2026-09-27-smoke-3-blue-ban-denial",
         "2026-09-27-smoke-4-red-last-pick",
     ] {
-        roots.push((name.to_string(), smoke(&live, name).root));
+        roots.push((name.to_string(), smoke(live, name).root));
     }
     let widths = Shortlist {
         singles: 15,
@@ -4596,6 +4614,7 @@ fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
         )
     };
     let mut compared = 0;
+    let mut differing = Vec::new();
     for (label, root) in &roots {
         let maps = LiveRoot {
             pools: root
@@ -4620,16 +4639,24 @@ fn a_map_of_every_meta_role_searches_exactly_as_the_list() {
                 };
                 let list = run_with(root, u, Mode::Horizon(1), &params, rule, p);
                 let map = run_with(&maps, u, Mode::Horizon(1), &params, rule, p);
-                assert_eq!(
-                    everything(&map),
-                    everything(&list),
-                    "{label} {rule:?} snipe_key {snipe_key}"
-                );
+                if everything(&map) != everything(&list) {
+                    differing.push(format!("{label} {rule:?} snipe_key {snipe_key}"));
+                }
                 compared += 1;
             }
         }
     }
-    assert_eq!(compared, 20);
+    (compared, differing)
+}
+
+/// The FROZEN 2026-09-05 table (`tests/data/champion-meta-2026-09-05-positions.json`: listed-key
+/// shares, no `playable`), for the identities that hold only where playable = positions.
+fn frozen_universe() -> LiveUniverse {
+    let (_, meta) = load_production_data_from(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/champion-meta-2026-09-05-positions.json"),
+    );
+    LiveUniverse::build(&fm(), "meta-frozen-2026-09-05", &meta).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// A list of ids as the app's role map: each champion under every role the meta lists for it.
@@ -4671,12 +4698,23 @@ fn the_converter_reads_role_maps() {
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(maps.entries, list.entries);
     assert!(maps.unknown.is_empty() && maps.excluded.is_empty());
+    // `as_role_map` lists each champion under its POSITIONS (the app's buckets stay on the positions,
+    // champion-role-shares D6 / U2), so the converter's tags are the positions — not `meta_roles`,
+    // which tags the PLAYABLE set and is wider on the 16.19 table.
+    let positions_tags = |set: ChampionSet| -> RoleSets {
+        set.iter().fold(RoleSets::default(), |tags, c| {
+            u.champion_meta()[u.id(c)]
+                .positions
+                .iter()
+                .fold(tags, |tags, role| tags.with(*role, c))
+        })
+    };
     assert_eq!(
         maps.pools,
         list.pools
-            .with_roles(Side::Blue, RoleSets::meta_roles(list.pools.blue, u))
-            .with_roles(Side::Red, RoleSets::meta_roles(list.pools.red, u)),
-        "a map of every meta role is the list, tagged"
+            .with_roles(Side::Blue, positions_tags(list.pools.blue))
+            .with_roles(Side::Red, positions_tags(list.pools.red)),
+        "a map of every listed role is the list, tagged under the positions"
     );
     assert!(maps.pools.roles(Side::Blue).is_some() && maps.pools.roles(Side::Red).is_some());
     maps.position(u).unwrap_or_else(|e| panic!("{e}"));
@@ -4733,8 +4771,10 @@ fn the_converter_reads_role_maps() {
     );
     assert_eq!(root.pools, maps.pools);
 
-    // U5 for a map: Veigar is on Blue's board (slot 10); a map that omits him gets him back under
-    // the meta's roles, so the set and the tags are the full map's.
+    // U5 for a map: Veigar is on Blue's board (slot 10); a map that omits him gets him back — the set
+    // is the full map's, and he is tagged under every role he is PLAYABLE in (champion-role-shares
+    // § 5.3, judge I1: a sunk fact, never charged), which on the 16.19 table is wider than the map's
+    // listed roles (Veigar is playable top and support beside mid).
     let mut without_veigar = blue.clone();
     for row in [
         &mut without_veigar.top,
@@ -4751,5 +4791,26 @@ fn the_converter_reads_role_maps() {
     );
     let root = LiveRoot::from_draft_state_roles(&state, &without_veigar, &red, &[], u)
         .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(root.pools, maps.pools);
+    let veigar = idx("Veigar");
+    let recovered = positions_tags(list.pools.blue.without(veigar)).with_meta_roles(veigar, u);
+    assert_eq!(root.pools, maps.pools.with_roles(Side::Blue, recovered));
+    let tags = root.pools.roles(Side::Blue).expect("tagged");
+    for role in [
+        Role::Top,
+        Role::Jungle,
+        Role::Middle,
+        Role::Adc,
+        Role::Support,
+    ] {
+        assert_eq!(
+            tags.for_role(role).contains(veigar),
+            u.is_playable(veigar, role),
+            "{role:?}"
+        );
+    }
+    assert!(
+        tags.for_role(Role::Top).contains(veigar)
+            && !u.champion_meta()["Veigar"].positions.contains(&Role::Top),
+        "wider than the listed roles on this table"
+    );
 }
