@@ -1,7 +1,7 @@
 {
   "version": "16.13.1",
   "patch": "16.13.1",
-  "compiledAt": "2026-10-10T04:36:25.240Z",
+  "compiledAt": "2026-10-13T01:12:12.122Z",
   "sources": {
     "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
     "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
@@ -87,7 +87,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4985
+      "winRate": 0.4994072
     },
     "Ahri": {
       "id": "Ahri",
@@ -139,7 +139,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5082
+      "winRate": 0.5081456999999999
     },
     "Akali": {
       "id": "Akali",
@@ -184,7 +184,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4999
+      "winRate": 0.49906940000000005
     },
     "Akshan": {
       "id": "Akshan",
@@ -230,7 +230,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.511
+      "winRate": 0.5072263
     },
     "Alistar": {
       "id": "Alistar",
@@ -284,7 +284,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.501
+      "winRate": 0.5005503
     },
     "Ambessa": {
       "id": "Ambessa",
@@ -333,7 +333,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4935
+      "winRate": 0.4942419580419579
     },
     "Amumu": {
       "id": "Amumu",
@@ -388,7 +388,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4965
+      "winRate": 0.4981183183183183
     },
     "Anivia": {
       "id": "Anivia",
@@ -442,7 +442,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5129
+      "winRate": 0.5102913913913913
     },
     "Annie": {
       "id": "Annie",
@@ -494,7 +494,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5182
+      "winRate": 0.5165012012012012
     },
     "Aphelios": {
       "id": "Aphelios",
@@ -537,7 +537,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4924
+      "winRate": 0.49233053053053055
     },
     "Ashe": {
       "id": "Ashe",
@@ -589,7 +589,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5187
+      "winRate": 0.5129982017982018
     },
     "AurelionSol": {
       "id": "AurelionSol",
@@ -637,7 +637,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5157
+      "winRate": 0.5169578
     },
     "Aurora": {
       "id": "Aurora",
@@ -685,7 +685,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4945
+      "winRate": 0.49462467532467524
     },
     "Azir": {
       "id": "Azir",
@@ -732,7 +732,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4651
+      "winRate": 0.46888798798798803
     },
     "Bard": {
       "id": "Bard",
@@ -781,7 +781,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5102
+      "winRate": 0.5101015015015015
     },
     "Belveth": {
       "id": "Belveth",
@@ -825,7 +825,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.521
+      "winRate": 0.5200573
     },
     "Blitzcrank": {
       "id": "Blitzcrank",
@@ -878,7 +878,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5023
+      "winRate": 0.502007
     },
     "Brand": {
       "id": "Brand",
@@ -931,7 +931,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.503
+      "winRate": 0.5115982
     },
     "Braum": {
       "id": "Braum",
@@ -1033,7 +1033,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.507
+      "winRate": 0.5046928928928929
     },
     "Caitlyn": {
       "id": "Caitlyn",
@@ -1079,7 +1079,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4945
+      "winRate": 0.49367259999999996
     },
     "Camille": {
       "id": "Camille",
@@ -1134,7 +1134,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5045
+      "winRate": 0.49435879999999993
     },
     "Cassiopeia": {
       "id": "Cassiopeia",
@@ -1187,7 +1187,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5016
+      "winRate": 0.5094375
     },
     "Chogath": {
       "id": "Chogath",
@@ -1236,7 +1236,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5074
+      "winRate": 0.5054134
     },
     "Corki": {
       "id": "Corki",
@@ -1284,7 +1284,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4892
+      "winRate": 0.47384319999999996
     },
     "Darius": {
       "id": "Darius",
@@ -1338,7 +1338,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4945
+      "winRate": 0.49465914085914087
     },
     "Diana": {
       "id": "Diana",
@@ -1392,7 +1392,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5089
+      "winRate": 0.5048345000000001
     },
     "DrMundo": {
       "id": "DrMundo",
@@ -1442,7 +1442,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5015
+      "winRate": 0.4976778778778778
     },
     "Draven": {
       "id": "Draven",
@@ -1490,7 +1490,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5009
+      "winRate": 0.4987671671671672
     },
     "Ekko": {
       "id": "Ekko",
@@ -1538,7 +1538,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.502
+      "winRate": 0.5025258
     },
     "Elise": {
       "id": "Elise",
@@ -1588,7 +1588,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5081
+      "winRate": 0.510043
     },
     "Evelynn": {
       "id": "Evelynn",
@@ -1635,7 +1635,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5101
+      "winRate": 0.5076135135135135
     },
     "Ezreal": {
       "id": "Ezreal",
@@ -1684,7 +1684,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4788
+      "winRate": 0.4756103103103103
     },
     "Fiddlesticks": {
       "id": "Fiddlesticks",
@@ -1735,7 +1735,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.512
+      "winRate": 0.5115967
     },
     "Fiora": {
       "id": "Fiora",
@@ -1784,7 +1784,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5027
+      "winRate": 0.5023450450450451
     },
     "Fizz": {
       "id": "Fizz",
@@ -1831,7 +1831,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5081
+      "winRate": 0.5037922
     },
     "Galio": {
       "id": "Galio",
@@ -1887,7 +1887,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4943
+      "winRate": 0.4930203203203203
     },
     "Gangplank": {
       "id": "Gangplank",
@@ -1932,7 +1932,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5055
+      "winRate": 0.5036058941058941
     },
     "Garen": {
       "id": "Garen",
@@ -1982,7 +1982,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5072
+      "winRate": 0.5062817
     },
     "Gnar": {
       "id": "Gnar",
@@ -2031,7 +2031,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4895
+      "winRate": 0.48859909999999995
     },
     "Gragas": {
       "id": "Gragas",
@@ -2089,7 +2089,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.494
+      "winRate": 0.49442787212787215
     },
     "Graves": {
       "id": "Graves",
@@ -2133,7 +2133,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5008
+      "winRate": 0.49993216783216793
     },
     "Gwen": {
       "id": "Gwen",
@@ -2183,7 +2183,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4933
+      "winRate": 0.49648258258258254
     },
     "Hecarim": {
       "id": "Hecarim",
@@ -2234,7 +2234,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5026
+      "winRate": 0.5021031031031031
     },
     "Heimerdinger": {
       "id": "Heimerdinger",
@@ -2286,7 +2286,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4964
+      "winRate": 0.4982575
     },
     "Hwei": {
       "id": "Hwei",
@@ -2335,7 +2335,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5042
+      "winRate": 0.5096954
     },
     "Illaoi": {
       "id": "Illaoi",
@@ -2381,7 +2381,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4971
+      "winRate": 0.4951306920762286
     },
     "Irelia": {
       "id": "Irelia",
@@ -2435,7 +2435,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5014
+      "winRate": 0.5003979999999999
     },
     "Ivern": {
       "id": "Ivern",
@@ -2482,7 +2482,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5079
+      "winRate": 0.5050048951048951
     },
     "Janna": {
       "id": "Janna",
@@ -2527,7 +2527,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5215
+      "winRate": 0.521352952952953
     },
     "JarvanIV": {
       "id": "JarvanIV",
@@ -2580,7 +2580,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5001
+      "winRate": 0.498695
     },
     "Jax": {
       "id": "Jax",
@@ -2634,7 +2634,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4957
+      "winRate": 0.494568
     },
     "Jayce": {
       "id": "Jayce",
@@ -2683,7 +2683,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4867
+      "winRate": 0.4881299
     },
     "Jhin": {
       "id": "Jhin",
@@ -2737,7 +2737,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4915
+      "winRate": 0.49068318318318316
     },
     "Jinx": {
       "id": "Jinx",
@@ -2786,7 +2786,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5191
+      "winRate": 0.5190462462462462
     },
     "KSante": {
       "id": "KSante",
@@ -2839,7 +2839,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4713
+      "winRate": 0.4713874125874126
     },
     "Kaisa": {
       "id": "Kaisa",
@@ -2886,7 +2886,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4832
+      "winRate": 0.4812495
     },
     "Kalista": {
       "id": "Kalista",
@@ -2931,7 +2931,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4829
+      "winRate": 0.4830848
     },
     "Karma": {
       "id": "Karma",
@@ -2984,7 +2984,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4982
+      "winRate": 0.49689459999999996
     },
     "Karthus": {
       "id": "Karthus",
@@ -3033,7 +3033,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4921
+      "winRate": 0.5039367
     },
     "Kassadin": {
       "id": "Kassadin",
@@ -3078,7 +3078,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5028
+      "winRate": 0.502414914914915
     },
     "Katarina": {
       "id": "Katarina",
@@ -3125,7 +3125,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5066
+      "winRate": 0.5093834
     },
     "Kayle": {
       "id": "Kayle",
@@ -3172,7 +3172,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5278
+      "winRate": 0.5235259
     },
     "Kayn": {
       "id": "Kayn",
@@ -3218,7 +3218,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4982
+      "winRate": 0.49720830830830826
     },
     "Kennen": {
       "id": "Kennen",
@@ -3271,7 +3271,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4999
+      "winRate": 0.5003306
     },
     "Khazix": {
       "id": "Khazix",
@@ -3314,7 +3314,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4911
+      "winRate": 0.4902735735735736
     },
     "Kindred": {
       "id": "Kindred",
@@ -3357,7 +3357,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5059
+      "winRate": 0.5047187
     },
     "Kled": {
       "id": "Kled",
@@ -3403,7 +3403,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5133
+      "winRate": 0.5131988988988988
     },
     "KogMaw": {
       "id": "KogMaw",
@@ -3450,7 +3450,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5201
+      "winRate": 0.5214496000000001
     },
     "Leblanc": {
       "id": "Leblanc",
@@ -3498,7 +3498,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4979
+      "winRate": 0.4952874
     },
     "LeeSin": {
       "id": "LeeSin",
@@ -3552,7 +3552,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4988
+      "winRate": 0.4968497502497503
     },
     "Leona": {
       "id": "Leona",
@@ -3605,7 +3605,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5054
+      "winRate": 0.5052665665665665
     },
     "Lillia": {
       "id": "Lillia",
@@ -3650,7 +3650,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5013
+      "winRate": 0.5009147147147146
     },
     "Lissandra": {
       "id": "Lissandra",
@@ -3702,7 +3702,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5157
+      "winRate": 0.5145443000000001
     },
     "Locke": {
       "id": "Locke",
@@ -3793,7 +3793,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5003
+      "winRate": 0.4881241
     },
     "Lulu": {
       "id": "Lulu",
@@ -3845,7 +3845,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5011
+      "winRate": 0.5006005
     },
     "Lux": {
       "id": "Lux",
@@ -3898,7 +3898,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4838
+      "winRate": 0.4951608608608608
     },
     "Malphite": {
       "id": "Malphite",
@@ -3953,7 +3953,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5094
+      "winRate": 0.505535035035035
     },
     "Malzahar": {
       "id": "Malzahar",
@@ -4000,7 +4000,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5042
+      "winRate": 0.5018746746746746
     },
     "Maokai": {
       "id": "Maokai",
@@ -4058,7 +4058,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5126
+      "winRate": 0.5039358358358358
     },
     "MasterYi": {
       "id": "MasterYi",
@@ -4106,7 +4106,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5012
+      "winRate": 0.4983719280719281
     },
     "Mel": {
       "id": "Mel",
@@ -4155,7 +4155,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4498
+      "winRate": 0.45269479999999995
     },
     "Milio": {
       "id": "Milio",
@@ -4243,7 +4243,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5023
+      "winRate": 0.4991346
     },
     "Mordekaiser": {
       "id": "Mordekaiser",
@@ -4290,7 +4290,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4965
+      "winRate": 0.4961384615384615
     },
     "Morgana": {
       "id": "Morgana",
@@ -4343,7 +4343,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4962
+      "winRate": 0.49673140000000005
     },
     "Naafiri": {
       "id": "Naafiri",
@@ -4390,7 +4390,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5082
+      "winRate": 0.5059693306693308
     },
     "Nami": {
       "id": "Nami",
@@ -4490,7 +4490,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4992
+      "winRate": 0.501207992007992
     },
     "Nautilus": {
       "id": "Nautilus",
@@ -4546,7 +4546,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5
+      "winRate": 0.4994877
     },
     "Neeko": {
       "id": "Neeko",
@@ -4599,7 +4599,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4828
+      "winRate": 0.4908227
     },
     "Nidalee": {
       "id": "Nidalee",
@@ -4646,7 +4646,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5
+      "winRate": 0.4996538538538538
     },
     "Nilah": {
       "id": "Nilah",
@@ -4691,7 +4691,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5229
+      "winRate": 0.522444944944945
     },
     "Nocturne": {
       "id": "Nocturne",
@@ -4736,7 +4736,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5157
+      "winRate": 0.5158826000000001
     },
     "Nunu": {
       "id": "Nunu",
@@ -4784,7 +4784,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5191
+      "winRate": 0.5087651302605212
     },
     "Olaf": {
       "id": "Olaf",
@@ -4832,7 +4832,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5178
+      "winRate": 0.5165623
     },
     "Orianna": {
       "id": "Orianna",
@@ -4884,7 +4884,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4825
+      "winRate": 0.4821483999999999
     },
     "Ornn": {
       "id": "Ornn",
@@ -4938,7 +4938,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5181
+      "winRate": 0.5168428
     },
     "Pantheon": {
       "id": "Pantheon",
@@ -4989,7 +4989,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5088
+      "winRate": 0.49636443556443555
     },
     "Poppy": {
       "id": "Poppy",
@@ -5043,7 +5043,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5039
+      "winRate": 0.5051244
     },
     "Pyke": {
       "id": "Pyke",
@@ -5088,7 +5088,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.489
+      "winRate": 0.488938
     },
     "Qiyana": {
       "id": "Qiyana",
@@ -5136,7 +5136,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4902
+      "winRate": 0.4955915999999999
     },
     "Quinn": {
       "id": "Quinn",
@@ -5185,7 +5185,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4486
+      "winRate": 0.48109090000000004
     },
     "Rakan": {
       "id": "Rakan",
@@ -5237,7 +5237,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4982
+      "winRate": 0.49817977977977973
     },
     "Rammus": {
       "id": "Rammus",
@@ -5284,7 +5284,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5181
+      "winRate": 0.5136534534534536
     },
     "RekSai": {
       "id": "RekSai",
@@ -5330,7 +5330,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5283
+      "winRate": 0.5263208
     },
     "Rell": {
       "id": "Rell",
@@ -5384,7 +5384,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5148
+      "winRate": 0.5147413413413414
     },
     "Renata": {
       "id": "Renata",
@@ -5432,7 +5432,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5002
+      "winRate": 0.5004636636636637
     },
     "Renekton": {
       "id": "Renekton",
@@ -5481,7 +5481,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4935
+      "winRate": 0.49317294589178357
     },
     "Rengar": {
       "id": "Rengar",
@@ -5528,7 +5528,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4857
+      "winRate": 0.482621
     },
     "Riven": {
       "id": "Riven",
@@ -5579,7 +5579,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5077
+      "winRate": 0.5099052052052051
     },
     "Rumble": {
       "id": "Rumble",
@@ -5626,7 +5626,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4872
+      "winRate": 0.48712552552552557
     },
     "Ryze": {
       "id": "Ryze",
@@ -5674,7 +5674,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4724
+      "winRate": 0.4758172
     },
     "Samira": {
       "id": "Samira",
@@ -5718,7 +5718,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5085
+      "winRate": 0.5077046
     },
     "Sejuani": {
       "id": "Sejuani",
@@ -5774,7 +5774,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5023
+      "winRate": 0.5025972972972973
     },
     "Senna": {
       "id": "Senna",
@@ -5822,7 +5822,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4931
+      "winRate": 0.4939021021021021
     },
     "Seraphine": {
       "id": "Seraphine",
@@ -5870,7 +5870,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5122
+      "winRate": 0.510482117882118
     },
     "Sett": {
       "id": "Sett",
@@ -5926,7 +5926,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5
+      "winRate": 0.4976969
     },
     "Shaco": {
       "id": "Shaco",
@@ -5971,7 +5971,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4972
+      "winRate": 0.4919377
     },
     "Shen": {
       "id": "Shen",
@@ -6024,7 +6024,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5161
+      "winRate": 0.5093306693306694
     },
     "Shyvana": {
       "id": "Shyvana",
@@ -6070,7 +6070,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5021
+      "winRate": 0.4980046
     },
     "Singed": {
       "id": "Singed",
@@ -6118,7 +6118,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5159
+      "winRate": 0.5140968031968032
     },
     "Sion": {
       "id": "Sion",
@@ -6168,7 +6168,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5023
+      "winRate": 0.502964
     },
     "Sivir": {
       "id": "Sivir",
@@ -6211,7 +6211,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5011
+      "winRate": 0.49984029999999996
     },
     "Skarner": {
       "id": "Skarner",
@@ -6262,7 +6262,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5045
+      "winRate": 0.49467999999999995
     },
     "Smolder": {
       "id": "Smolder",
@@ -6309,7 +6309,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5044
+      "winRate": 0.4937912
     },
     "Sona": {
       "id": "Sona",
@@ -6360,7 +6360,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5175
+      "winRate": 0.5174807
     },
     "Soraka": {
       "id": "Soraka",
@@ -6405,7 +6405,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5157
+      "winRate": 0.5148307000000002
     },
     "Swain": {
       "id": "Swain",
@@ -6461,7 +6461,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4744
+      "winRate": 0.5001547000000001
     },
     "Sylas": {
       "id": "Sylas",
@@ -6511,7 +6511,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4904
+      "winRate": 0.4908858
     },
     "Syndra": {
       "id": "Syndra",
@@ -6563,7 +6563,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4971
+      "winRate": 0.5000768
     },
     "TahmKench": {
       "id": "TahmKench",
@@ -6616,7 +6616,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4966
+      "winRate": 0.4986059
     },
     "Taliyah": {
       "id": "Taliyah",
@@ -6666,7 +6666,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4847
+      "winRate": 0.4905137
     },
     "Talon": {
       "id": "Talon",
@@ -6711,7 +6711,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5008
+      "winRate": 0.49814330000000007
     },
     "Taric": {
       "id": "Taric",
@@ -6758,7 +6758,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5293
+      "winRate": 0.5264082999999999
     },
     "Teemo": {
       "id": "Teemo",
@@ -6808,7 +6808,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.505
+      "winRate": 0.4994436563436564
     },
     "Thresh": {
       "id": "Thresh",
@@ -6862,7 +6862,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.512
+      "winRate": 0.5117898
     },
     "Tristana": {
       "id": "Tristana",
@@ -6915,7 +6915,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5046
+      "winRate": 0.4984939060939061
     },
     "Trundle": {
       "id": "Trundle",
@@ -6964,7 +6964,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4882
+      "winRate": 0.4930127
     },
     "Tryndamere": {
       "id": "Tryndamere",
@@ -7012,7 +7012,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4991
+      "winRate": 0.500939039039039
     },
     "TwistedFate": {
       "id": "TwistedFate",
@@ -7060,7 +7060,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.515
+      "winRate": 0.5111777000000001
     },
     "Twitch": {
       "id": "Twitch",
@@ -7107,7 +7107,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5074
+      "winRate": 0.49903386613386613
     },
     "Udyr": {
       "id": "Udyr",
@@ -7154,7 +7154,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5122
+      "winRate": 0.5056092999999999
     },
     "Urgot": {
       "id": "Urgot",
@@ -7200,7 +7200,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5163
+      "winRate": 0.5128449
     },
     "Varus": {
       "id": "Varus",
@@ -7250,7 +7250,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4767
+      "winRate": 0.48517001003009025
     },
     "Vayne": {
       "id": "Vayne",
@@ -7297,7 +7297,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5054
+      "winRate": 0.5022573573573573
     },
     "Veigar": {
       "id": "Veigar",
@@ -7347,7 +7347,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.508
+      "winRate": 0.5097646
     },
     "Velkoz": {
       "id": "Velkoz",
@@ -7397,7 +7397,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5005
+      "winRate": 0.5080431000000001
     },
     "Vex": {
       "id": "Vex",
@@ -7442,7 +7442,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5147
+      "winRate": 0.5130658658658659
     },
     "Vi": {
       "id": "Vi",
@@ -7493,7 +7493,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4915
+      "winRate": 0.4894734734734735
     },
     "Viego": {
       "id": "Viego",
@@ -7540,7 +7540,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4888
+      "winRate": 0.4880129129129129
     },
     "Viktor": {
       "id": "Viktor",
@@ -7588,7 +7588,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5027
+      "winRate": 0.5114027
     },
     "Vladimir": {
       "id": "Vladimir",
@@ -7638,7 +7638,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5031
+      "winRate": 0.5029192
     },
     "Volibear": {
       "id": "Volibear",
@@ -7691,7 +7691,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.491
+      "winRate": 0.4932305694305694
     },
     "Warwick": {
       "id": "Warwick",
@@ -7739,7 +7739,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4921
+      "winRate": 0.5005690380761523
     },
     "MonkeyKing": {
       "id": "MonkeyKing",
@@ -7786,7 +7786,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4983
+      "winRate": 0.49866859999999996
     },
     "Xayah": {
       "id": "Xayah",
@@ -7829,7 +7829,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5123
+      "winRate": 0.5121123123123122
     },
     "Xerath": {
       "id": "Xerath",
@@ -7878,7 +7878,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5146
+      "winRate": 0.5070539999999999
     },
     "XinZhao": {
       "id": "XinZhao",
@@ -7924,7 +7924,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5054
+      "winRate": 0.5033378
     },
     "Yasuo": {
       "id": "Yasuo",
@@ -7979,7 +7979,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4895
+      "winRate": 0.49437329999999996
     },
     "Yone": {
       "id": "Yone",
@@ -8034,7 +8034,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4898
+      "winRate": 0.4846931
     },
     "Yorick": {
       "id": "Yorick",
@@ -8079,7 +8079,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4933
+      "winRate": 0.49270990000000003
     },
     "Yunara": {
       "id": "Yunara",
@@ -8123,7 +8123,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4861
+      "winRate": 0.4856947
     },
     "Yuumi": {
       "id": "Yuumi",
@@ -8211,7 +8211,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4968
+      "winRate": 0.4969671328671329
     },
     "Zac": {
       "id": "Zac",
@@ -8268,7 +8268,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4996
+      "winRate": 0.5000438
     },
     "Zed": {
       "id": "Zed",
@@ -8315,7 +8315,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.4978
+      "winRate": 0.49476300000000006
     },
     "Zeri": {
       "id": "Zeri",
@@ -8358,7 +8358,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5016
+      "winRate": 0.5002190000000001
     },
     "Ziggs": {
       "id": "Ziggs",
@@ -8404,7 +8404,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.508
+      "winRate": 0.5045252252252252
     },
     "Zilean": {
       "id": "Zilean",
@@ -8452,7 +8452,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5197
+      "winRate": 0.5240636
     },
     "Zoe": {
       "id": "Zoe",
@@ -8500,7 +8500,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.508
+      "winRate": 0.5034358999999999
     },
     "Zyra": {
       "id": "Zyra",
@@ -8557,7 +8557,7 @@
       "blindability": 0.5,
       "pickRate": 0,
       "banRate": 0,
-      "winRate": 0.5113
+      "winRate": 0.5079306
     }
   }
 }

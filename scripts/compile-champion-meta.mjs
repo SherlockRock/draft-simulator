@@ -33,6 +33,7 @@ import { writeJson, normalize } from "./lib/fetch-utils.mjs";
 import { assertChampionRows } from "./champion-positions/invariants.mjs";
 import { formatPositionsSource } from "./champion-positions/derive.mjs";
 import { applyOverrides } from "./champion-positions/overrides.mjs";
+import { formatWinRateReport, shareWeightedWinRate } from "./champion-positions/winrate.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -265,18 +266,17 @@ async function main() {
       winratesByNorm.set(normalize(alias), byRole);
     }
   }
+  // winRate (champion-role-shares D5): the share-weighted mean over the roles u.gg has data for,
+  // today's rule (the first listed position with data, else any) when the covered share mass is
+  // under 0.5 or the row has no shares. The previous compile at --out, when there is one, gives
+  // the report its per-champion diff.
+  const previousCompile = existsSync(values.out) ? readJson(values.out).champions ?? {} : {};
+  const winRateRows = [];
   const lookupWinrate = (canonical) => {
-    if (!winratesByNorm.size) return 0;
     const byRole = winratesByNorm.get(normalize(canonical.id));
-    if (!byRole) return 0;
-    // Prefer the champion's declared positions in order. Falls back to any
-    // role with data so off-meta picks still get a non-zero number.
-    for (const pos of canonical.positions ?? []) {
-      const entry = byRole[pos];
-      if (entry) return entry.wr;
-    }
-    const fallback = Object.values(byRole)[0];
-    return fallback?.wr ?? 0;
+    const result = shareWeightedWinRate(byRole, canonical.positions, canonical.positionShares);
+    winRateRows.push({ id: canonical.id, ...result, previous: previousCompile[canonical.id]?.winRate });
+    return result.winRate;
   };
 
   // Build lookup maps by normalized name
@@ -352,6 +352,7 @@ async function main() {
   console.log(`  positions source: ${formatPositionsSource(positionsSource)}${positionsSource ? "" : " — run refresh-champion-positions.mjs"}`);
 
   console.log(`\n  Compiled: ${Object.keys(champions).length} champions`);
+  for (const line of formatWinRateReport(winRateRows)) console.log(`  ${line}`);
   if (warnings.length > 0) {
     console.log("  Warnings:");
     for (const w of warnings) console.log(`    - ${w}`);
