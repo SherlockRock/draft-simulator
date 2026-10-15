@@ -11,6 +11,11 @@ vi.mock("../data/champions.json", async () => ({
     default: (await import("./__fixtures__/champions-2026-09-05-positions.json")).default
 }));
 import item4 from "./__fixtures__/navigator-item4-snapshot.json";
+import {
+    getChampionPlayable,
+    getChampionRoles,
+    getChampionShares
+} from "./championRoles";
 import { NavigatorTreeNodeSchema } from "./navigatorTreeSchema";
 import {
     NON_LISTED_FACTOR,
@@ -18,7 +23,7 @@ import {
     SECONDARY_FACTOR,
     emptyFanReason,
     formatRoleGap,
-    listedAssignments,
+    playableAssignments,
     positionFactor,
     roleGap,
     roleLineForPick,
@@ -202,7 +207,15 @@ describe("roleLineForPick (design § 2 role line)", () => {
     });
 });
 
-describe("roleGap — feasibility.rs semantics (listed roles only)", () => {
+describe("roleGap — feasibility.rs semantics on a table without playable (the listed roles)", () => {
+    test("a table from before the field falls back to the listed roles everywhere", () => {
+        // champion-role-shares § 4.1: absent `playable` is the positions, absent shares is null — so
+        // every pin below is today's, and the parity snapshots above do not move in slice A.
+        for (const id of ["Sylas", "Vayne", "Pantheon", "Jinx"]) {
+            expect(getChampionPlayable(id)).toEqual(getChampionRoles(id));
+            expect(getChampionShares(id)).toBeNull();
+        }
+    });
     test("tour state at Red Pick 4: red needs ADC + one of the rest; blue needs ADC + Sup", () => {
         expect(roleGap(["Sejuani", "Sylas", "Lissandra"])).toEqual({
             feasible: true,
@@ -220,7 +233,7 @@ describe("roleGap — feasibility.rs semantics (listed roles only)", () => {
     });
     test("item7 red is infeasible (two jungle-only picks)", () => {
         expect(roleGap(RED_ITEM7).feasible).toBe(false);
-        expect(listedAssignments(RED_ITEM7)).toEqual([]);
+        expect(playableAssignments(RED_ITEM7)).toEqual([]);
     });
     test("item4 red: jungle or support still open", () => {
         expect(roleGap(RED_ITEM4)).toEqual({
