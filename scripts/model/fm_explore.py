@@ -57,10 +57,15 @@ def load_table(path=COMPILED / "fm-weights.json"):
 
 
 def load_meta(path=COMPILED / "champion-meta.json"):
-    """alias → {positions (linear_roles vocabulary), win_rate}; win_rate defaults to 0.5
-    like the engine's serde default (design §3)."""
+    """alias → {positions, playable (linear_roles vocabulary), win_rate}; win_rate defaults to 0.5
+    like the engine's serde default (design §3). `positions` stays the LISTED roles — the display
+    buckets `build_engine_request` files champions under (champion-role-shares D6) and the
+    "primary" `fm_explore_scan` reads; `playable` is the engine's LEGALITY set (the entry's
+    `playable`, champion-role-shares § 4.1, falling back to the listed roles for an entry without
+    it), which `role_feasible` — the port of the prune — reads."""
     raw = json.loads(Path(path).read_text())["champions"]
     return {alias: {"positions": [POS_TO_ROLE[p] for p in e.get("positions", [])],
+                    "playable": [POS_TO_ROLE[p] for p in (e.get("playable") or e.get("positions", []))],
                     "win_rate": float(e.get("winRate", 0.5))}
             for alias, e in raw.items()}
 
@@ -209,11 +214,14 @@ def _max_matching(masks):
 
 def role_feasible(picks, meta):
     """feasibility.rs on the LOCKED picks only (a full roster can always fill the
-    rest): every listed champion-meta position counts as playable (factor ≥ 0.4)."""
+    rest) over each champion's `playable` entry of `meta` (the engine's legality
+    set, champion-role-shares § 5.1), or its `positions` when the entry has no
+    `playable` (a synthetic table, a table from before the field)."""
     masks = []
     for c in picks:
         mask = 0
-        for pos in meta.get(c, {}).get("positions", []):
+        entry = meta.get(c, {})
+        for pos in entry.get("playable") or entry.get("positions", []):
             mask |= 1 << ROLE_ORDER.index(pos)
         masks.append(mask)
     return _max_matching(masks) == len(picks)

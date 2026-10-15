@@ -1,6 +1,7 @@
 """fm_explore.py — data-free tests on a tiny synthetic artifact, plus one
 engine cross-check that skips unless the prebuilt index.node and the shipped
 weights are present."""
+import json
 import shutil
 from pathlib import Path
 
@@ -111,7 +112,14 @@ def test_find_turn_matches_the_draft_sequence():
     assert fx.next_side(3, 4) == "blue" and fx.next_side(5, 5) is None
 
 
-def test_role_feasible_is_a_bipartite_matching(meta):
+def test_role_feasible_is_a_bipartite_matching():
+    # A synthetic table, not the shipped one: the shipped table's legality set is `playable` (a
+    # pick-count floor over the live corpus, champion-role-shares design § 4.1), which widens with
+    # every refresh — the matching's semantics are what this pins, not any champion's roles.
+    meta = {"Galio": {"positions": ["MIDDLE"]}, "Leblanc": {"positions": ["MIDDLE"]},
+            "Annie": {"positions": ["MIDDLE", "UTILITY"]}, "Olaf": {"positions": ["JUNGLE", "TOP"]},
+            "XinZhao": {"positions": ["JUNGLE"]}, "Urgot": {"positions": ["TOP"]},
+            "Fiddlesticks": {"positions": ["JUNGLE", "UTILITY"]}}
     assert fx.role_feasible(["Galio", "Leblanc"], meta) is False      # two MIDDLE-only
     assert fx.role_feasible(["Galio", "Annie"], meta) is True         # Annie flexes to UTILITY
     assert fx.role_feasible(["Olaf", "XinZhao", "Galio"], meta) is True   # Olaf must yield JUNGLE and take TOP
@@ -119,6 +127,33 @@ def test_role_feasible_is_a_bipartite_matching(meta):
     assert fx.role_feasible(["Olaf", "XinZhao", "Fiddlesticks"], meta) is True
     assert fx.role_feasible(["Unknown"], meta) is False               # no positions → no role
     assert fx.role_feasible([], meta) is True
+
+
+def test_load_meta_projects_playable_over_positions_and_falls_back_without_it(tmp_path):
+    # champion-role-shares design § 5.4: the Python mirror of the prune reads `playable ?? positions`
+    # (the engine's legality set and its fallback), mapped through POS_TO_ROLE like the positions.
+    doc = {"champions": {
+        "Kaisa": {"id": "Kaisa", "positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "winRate": 0.51},
+        "Jinx": {"id": "Jinx", "positions": ["BOTTOM"], "playable": ["BOTTOM"]},
+        "Lulu": {"id": "Lulu", "positions": ["SUPPORT", "MIDDLE"]},
+    }}
+    path = tmp_path / "champion-meta.json"
+    path.write_text(json.dumps(doc))
+    meta = fx.load_meta(path)
+    # `positions` stays the listed roles (the display buckets, D6); `playable` is the legality set.
+    assert meta["Kaisa"] == {"positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "win_rate": 0.51}
+    assert meta["Jinx"] == {"positions": ["BOTTOM"], "playable": ["BOTTOM"], "win_rate": 0.5}
+    assert meta["Lulu"] == {"positions": ["UTILITY", "MIDDLE"], "playable": ["UTILITY", "MIDDLE"], "win_rate": 0.5}
+    # The request's display buckets read the LISTED roles: Kai'Sa is filed under ADC alone.
+    request = fx.build_engine_request([], [], "blue", meta, "blue", bans=[f"Ban{i}" for i in range(6)])
+    display = request["pools"]["blue"]["display"]
+    assert "Kaisa" in display["ADC"] and "Kaisa" not in display["TOP"]
+    # Jinx + Kai'Sa: listed-infeasible (two BOTTOM), playable-feasible (Kai'Sa top) — the gap-strip
+    # divergence the design measured at 0.9–12.8% of real sides (§ 3).
+    assert fx.role_feasible(["Jinx", "Kaisa"], meta) is True
+    assert fx.role_feasible(["Jinx", "Kaisa", "Lulu"], meta) is True
+    # A synthetic table without `playable` (the matching test above) reads the positions.
+    assert fx.role_feasible(["Jinx", "Kaisa"], {"Jinx": {"positions": ["BOTTOM"]}, "Kaisa": {"positions": ["BOTTOM"]}}) is False
 
 
 def test_engine_request_pads_bans_to_the_pick_turn(meta):

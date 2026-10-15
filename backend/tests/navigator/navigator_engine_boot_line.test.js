@@ -32,6 +32,18 @@ describe("formatPositionsSourceLine", () => {
     );
   });
 
+  it("names the field the feasibility was measured on (playable or positions), after the number", () => {
+    const block = { kind: "corpus", patches: ["16.18", "16.19"], games: 816793, rule: "latest-patch", minPicks: 300, decidingPatch: "16.19",
+      decidingGames: 277103, fallback: {}, playableRule: { minPickRate: 0.001, minPicks: 50, decidingPatch: "16.19", decidingGames: 277103 },
+      threshold: 0.1, generatedAt: "2026-10-09T00:00:00.000Z", feasibility: { sets: 102100, bothSides: 0.976, field: "playable" } };
+    expect(formatPositionsSourceLine({ positions: block })).toBe(
+      "[navigator] champion-meta positions: corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 threshold=0.1 generated=2026-10-09T00:00:00.000Z feasibility=0.976 field=playable",
+    );
+    expect(formatPositionsSourceLine({ positions: { ...block, feasibility: { sets: 102100, bothSides: 0.976, field: "playable", carriedFrom: { generatedAt: "2026-10-09T00:00:00.000Z", kind: "corpus" } } } })).toBe(
+      "[navigator] champion-meta positions: corpus patches=16.18,16.19 rule=latest-patch deciding=16.19 threshold=0.1 generated=2026-10-09T00:00:00.000Z feasibility=0.976 (carried from 2026-10-09T00:00:00.000Z) field=playable",
+    );
+  });
+
   it("shows a carried-forward feasibility and an unmeasured-at-parity source", () => {
     expect(formatPositionsSourceLine({ positions: { kind: "corpus", patches: ["16.17"], games: 1, threshold: 0.1, generatedAt: "2026-10-01T00:00:00.000Z",
       feasibility: { sets: 34159, bothSides: 0.785, carriedFrom: { generatedAt: "2026-09-05T10:00:00.000Z", kind: "corpus" } } } })).toBe(

@@ -14,10 +14,13 @@
  *   pickRate/banRate/winRate — defaults to 0 (no source available yet)
  *   positions      — copied verbatim from champions.json (refreshed by
  *                    refresh-champion-positions.mjs; provenance carried into sources.positions)
- *   positionShares — copied verbatim when champions.json carries it (the refresh writes the
- *                    play share of each listed role; the reference engine grades off-role picks
- *                    by it). An override that names `positions` for such a champion must also
- *                    replace `positionShares` whole (champion-positions/overrides.mjs).
+ *   positionShares — copied verbatim when champions.json carries it (the refresh writes all five
+ *                    roles' play shares; the engines weight and grade a role by its share over
+ *                    the largest). Measured data: an override cannot touch it
+ *                    (champion-positions/overrides.mjs).
+ *   playable       — copied verbatim when champions.json carries it (the refresh writes the
+ *                    engine's legality set: the listed roles plus every role above a pick-count
+ *                    floor — champion-role-shares design § 4.1). Overrides may only widen it.
  *
  * Usage: node scripts/compile-champion-meta.mjs [--champions PATH] [--out PATH]
  */
@@ -302,6 +305,7 @@ async function main() {
       name: canonical.name,
       positions: canonical.positions,
       ...(canonical.positionShares !== undefined ? { positionShares: canonical.positionShares } : {}),
+      ...(canonical.playable !== undefined ? { playable: canonical.playable } : {}),
       damageProfile: deriveDamageProfile(meraki),
       scalingProfile: deriveScalingProfile(meraki),
       ccProfile: deriveCcProfile(canonical.id, ccMapping, meraki),

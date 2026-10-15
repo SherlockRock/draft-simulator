@@ -86,7 +86,7 @@ function formatPositionsSource(block) {
   if (!block) return "none recorded (Meraki verbatim)";
   const f = block.feasibility;
   const feasibility = f
-    ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}`
+    ? `${f.bothSides}${f.carriedFrom ? ` (carried from ${f.carriedFrom.generatedAt})` : ""}${f.field ? ` field=${f.field}` : ""}`
     : "unmeasured";
   const fallbackCount = block.fallback ? Object.keys(block.fallback).length : 0;
   const rule = block.rule
