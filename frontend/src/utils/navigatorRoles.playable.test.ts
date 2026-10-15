@@ -134,16 +134,18 @@ describe("playableAssignments / roleGap — D9 over the maximally listed playabl
     });
 });
 
-describe("the A-only artefact (design § 5): the role line still weights 1.0 / 0.4 / 0.01 over the positions", () => {
-    test("Jinx + Ashe: the line seats a champion in a role the strip calls must; slice B resolves it", () => {
-        // Both are bottom-listed, so every non-adc placement weighs 0.01 and the top assignment is
-        // the first of eight 0.01 ties in enumeration order. Pinned as printed, not derived.
+describe("the slice-A artefact resolved (design § 5 / § 6): the role line reads the shares", () => {
+    test("Jinx + Ashe: the line seats Ashe at support — the role the strip is feasible through", () => {
+        // In slice A both were bottom-listed category 1.0s, every other placement weighed 0.01, and
+        // the line took the first of eight ties: Jinx TOP, Ashe ADC — a role the strip called
+        // `must`. With the shares (Jinx BOTTOM 0.998, Ashe BOTTOM 0.926 / SUPPORT 0.057) Ashe at
+        // support outweighs every alternative: one maximum, no shift. Pinned as printed.
         const line = roleLineForPick(["Jinx"], ["Ashe"]);
-        expect(line.roles).toEqual(["adc"]);
-        expect(line.shift).toEqual({ championId: "Jinx", from: "adc", to: "top" });
-        expect(roleGap(["Jinx", "Ashe"]).must).toContain("top");
-        // The weights themselves are unchanged in slice A: eight assignments share the maximum.
+        expect(line.roles).toEqual(["support"]);
+        expect(line.shift).toBeNull();
+        expect(roleGap(["Jinx", "Ashe"]).must).toEqual(["top", "jungle", "mid"]);
         const weights = solveRoles(["Jinx", "Ashe"]).map((w) => w.weight);
-        expect(weights.filter((w) => w === Math.max(...weights))).toHaveLength(8);
+        expect(weights.filter((w) => w === Math.max(...weights))).toHaveLength(1);
+        expect(Math.max(...weights)).toBeCloseTo(0.7130358485836049, 12);
     });
 });

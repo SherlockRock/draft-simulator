@@ -66,14 +66,6 @@ export function riotPositionToRole(position: string): Role | null {
     return RIOT_POSITION_TO_ROLE[position] ?? null;
 }
 
-// Returns the champion's primary role (first position in their data).
-// Returns null if the champion has no known positions.
-export function getChampionPrimaryRole(championId: string): Role | null {
-    const champ = champions.find((c) => c.id === championId);
-    if (!champ || !champ.positions || champ.positions.length === 0) return null;
-    return riotPositionToRole(champ.positions[0]);
-}
-
 // Returns the champion's LISTED roles (champions.json `positions`): the UI's set — tabs, buckets,
 // Load defaults, the stale pill, and the gap strip's must/maybe (champion-role-shares D6, D9).
 export function getChampionRoles(championId: string): Role[] {
@@ -94,7 +86,7 @@ export function getChampionPlayable(championId: string): Role[] {
 
 // Returns the champion's play share in every role (champions.json `positionShares`, 3 dp — a role
 // never played is 0), keyed by Role; null when the table carries no shares. The largest share is
-// the denominator of every weight (slice B); nothing in slice A reads them.
+// the denominator of every weight (navigatorRoles.ts positionFactor, champion-role-shares § 6).
 export function getChampionShares(championId: string): Record<Role, number> | null {
     const shares = sharesById.get(championId);
     if (shares === undefined) return null;

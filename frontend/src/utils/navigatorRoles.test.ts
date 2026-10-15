@@ -18,9 +18,7 @@ import {
 } from "./championRoles";
 import { NavigatorTreeNodeSchema } from "./navigatorTreeSchema";
 import {
-    NON_LISTED_FACTOR,
-    PRIMARY_FACTOR,
-    SECONDARY_FACTOR,
+    SHARE_EPSILON,
     emptyFanReason,
     formatRoleGap,
     playableAssignments,
@@ -71,14 +69,18 @@ describe("fixtures are the wire shape", () => {
     });
 });
 
-describe("solveRoles — engine parity (role_solver.rs)", () => {
-    test("constants match role_solver.rs", () => {
-        expect([PRIMARY_FACTOR, SECONDARY_FACTOR, NON_LISTED_FACTOR]).toEqual([
-            1.0, 0.4, 0.01
-        ]);
-        expect(positionFactor("support", ["support", "top"])).toBe(1.0);
-        expect(positionFactor("top", ["support", "top"])).toBe(0.4);
-        expect(positionFactor("adc", ["support", "top"])).toBe(0.01);
+describe("solveRoles — engine parity (role_solver.rs) on a table without shares", () => {
+    test("the category factors are role_solver.rs's: 1.0 / 0.4 / 0.01 over the listed positions", () => {
+        // champion-role-shares slice B: the table carries no shares, so every champion reads the
+        // category factors the engine falls back to — the branch these snapshots were recorded on.
+        expect(SHARE_EPSILON).toBe(0.001);
+        expect(getChampionShares("Sylas")).toBeNull();
+        expect(getChampionRoles("Sylas")).toEqual(["mid", "jungle", "support"]);
+        expect(positionFactor("mid", "Sylas")).toBe(1.0);
+        expect(positionFactor("jungle", "Sylas")).toBe(0.4);
+        expect(positionFactor("support", "Sylas")).toBe(0.4);
+        expect(positionFactor("top", "Sylas")).toBe(0.01);
+        expect(positionFactor("top", "Nobody")).toBe(0.01);
     });
     test("returns [] for 0 or more than 5 champions", () => {
         expect(solveRoles([])).toEqual([]);

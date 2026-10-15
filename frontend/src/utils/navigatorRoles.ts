@@ -3,18 +3,31 @@ import type {
     NavigatorRoleAssignment,
     NavigatorWeightedAssignment
 } from "../contexts/NavigatorContext";
-import { ROLES, getChampionPlayable, getChampionRoles } from "./championRoles";
+import {
+    ROLES,
+    getChampionPlayable,
+    getChampionRoles,
+    getChampionShares
+} from "./championRoles";
 
 // Frontend port of packages/engine-core/src/role_solver.rs (`solve`,
 // `position_factor`) and feasibility.rs (perfect matching over the PLAYABLE
 // roles — champion-role-shares design § 5; the listed roles on a table without
-// `playable`).
-// The three constants MUST equal PRIMARY_FACTOR / SECONDARY_FACTOR /
-// NON_LISTED_FACTOR in role_solver.rs. navigatorRoles.test.ts pins this port
-// against persisted engine output, so a change on either side fails loudly.
-export const PRIMARY_FACTOR = 1.0;
-export const SECONDARY_FACTOR = 0.4;
-export const NON_LISTED_FACTOR = 0.01;
+// `playable`). navigatorRoles.test.ts (the 2026-09-05 table, no shares) and
+// navigatorRoles.shares.test.ts (the 2026-10-10 table) pin this port against
+// persisted engine output, so a change on either side fails loudly.
+
+/** role_solver.rs SHARE_EPSILON: the floor under a share before the ratio
+ *  (champion-role-shares D8 / U3) — a never-played role still weighs something,
+ *  so the total stays positive and exact ties resolve in enumeration order. */
+export const SHARE_EPSILON = 0.001;
+
+// role_solver.rs's category factors, read only when the table carries no shares
+// for the champion (a table from before the field, a hand row): the first listed
+// position 1.0, another listed position 0.4, anything else 0.01.
+const PRIMARY_FACTOR = 1.0;
+const SECONDARY_FACTOR = 0.4;
+const NON_LISTED_FACTOR = 0.01;
 
 export const ROLE_SHORT_LABELS: Record<Role, string> = {
     top: "Top",
@@ -32,10 +45,30 @@ const ASSIGNMENT_KEY: Record<Role, keyof NavigatorRoleAssignment> = {
     support: "SUPPORT"
 };
 
-export function positionFactor(role: Role, positions: readonly Role[]): number {
+function categoryFactor(role: Role, positions: readonly Role[]): number {
     if (positions[0] === role) return PRIMARY_FACTOR;
     if (positions.includes(role)) return SECONDARY_FACTOR;
     return NON_LISTED_FACTOR;
+}
+
+/** role_solver.rs `position_factor` (champion-role-shares design § 6): with the
+ *  shares known, `max(share, ε) / max(shares)` for EVERY role — the ratio to the
+ *  champion's largest share, never to the first listed position's — as one max
+ *  then one division, the engine's operation order, so the two agree bit for
+ *  bit; with no shares (or all zero), the category factors over the listed
+ *  positions. */
+export function positionFactor(role: Role, championId: string): number {
+    const shares = getChampionShares(championId);
+    if (shares === null) return categoryFactor(role, getChampionRoles(championId));
+    const maxShare = Math.max(
+        shares.top,
+        shares.jungle,
+        shares.mid,
+        shares.adc,
+        shares.support
+    );
+    if (!(maxShare > 0)) return categoryFactor(role, getChampionRoles(championId));
+    return Math.max(shares[role], SHARE_EPSILON) / maxShare;
 }
 
 /** role_solver.rs `permute_choose`: ordered k-selections of `items`, items in
@@ -64,13 +97,17 @@ function emptyAssignment(): NavigatorRoleAssignment {
 
 /** role_solver.rs `solve`: every P(5, n) ordered role selection for n champions,
  *  weight = ∏ positionFactor, normalised to sum 1. `[]` for 0 or > 5 champions.
- *  An unknown champion id has no listed positions (every role 0.01); the engine
- *  would panic there, the frontend degrades. */
+ *  An unknown champion id has no shares and no listed positions (every role
+ *  0.01); the engine would panic there, the frontend degrades. The factors are
+ *  read once per champion and role (a pure function of the table — the same
+ *  values the engine recomputes per seat). */
 export function solveRoles(
     championIds: readonly string[]
 ): NavigatorWeightedAssignment[] {
     if (championIds.length === 0 || championIds.length > 5) return [];
-    const positions = championIds.map((id) => getChampionRoles(id));
+    const factors = championIds.map((id) =>
+        ROLES.map((role) => positionFactor(role, id))
+    );
     const perms: number[][] = [];
     permuteChoose([0, 1, 2, 3, 4], championIds.length, [], perms);
     const weighted = perms.map((perm) => {
@@ -78,7 +115,7 @@ export function solveRoles(
         const assignment = emptyAssignment();
         perm.forEach((roleIdx, champIdx) => {
             const role = ROLES[roleIdx];
-            weight *= positionFactor(role, positions[champIdx]);
+            weight *= factors[champIdx][roleIdx];
             assignment[ASSIGNMENT_KEY[role]] = championIds[champIdx];
         });
         return { assignment, weight };
