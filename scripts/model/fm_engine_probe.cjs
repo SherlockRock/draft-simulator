@@ -3,11 +3,13 @@
 // stdin to the prebuilt engine-node binding and print the EngineResponse JSON.
 // Never touches the dev servers — it loads packages/engine-node/index.node in
 // this process, exactly the artifact backend/services/navigatorEngine.js loads.
-// CHAMPION_META_PATH=<abs path> points it at another compiled meta (positions_before_after.py).
+// CHAMPION_META_PATH=<abs path> points it at another compiled meta (positions_before_after.py);
+// ENGINE_NODE_DIR=<abs path> at another worktree's prebuilt packages/engine-node (a before/after
+// of the ENGINE on one meta — champion-role-shares slice B's measurements).
 const path = require("path");
 
 const root = path.resolve(__dirname, "..", "..");
-const { Engine, CancelToken } = require(path.join(root, "packages", "engine-node"));
+const { Engine, CancelToken } = require(process.env.ENGINE_NODE_DIR || path.join(root, "packages", "engine-node"));
 
 const options = {
   championMetaPath: process.env.CHAMPION_META_PATH || path.join(root, "data", "compiled", "champion-meta.json"),

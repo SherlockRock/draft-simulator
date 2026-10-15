@@ -23,6 +23,7 @@ from features import champ_matrix
 from fm import AntisymmetricFM, predict_logit
 from measure_vs_evaluator import dims_of
 from prepare import build_masked_states
+# The solver-parity table: the share ratios the engine weights with (champion-role-shares U1).
 from roles import position_factor_table, team_posterior
 from sibling_scores import TRAIN_DIR
 

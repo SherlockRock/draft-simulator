@@ -133,17 +133,24 @@ def test_load_meta_projects_playable_over_positions_and_falls_back_without_it(tm
     # champion-role-shares design § 5.4: the Python mirror of the prune reads `playable ?? positions`
     # (the engine's legality set and its fallback), mapped through POS_TO_ROLE like the positions.
     doc = {"champions": {
-        "Kaisa": {"id": "Kaisa", "positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "winRate": 0.51},
-        "Jinx": {"id": "Jinx", "positions": ["BOTTOM"], "playable": ["BOTTOM"]},
+        "Kaisa": {"id": "Kaisa", "positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "winRate": 0.51,
+                  "positionShares": {"TOP": 0.019, "JUNGLE": 0.006, "MIDDLE": 0.017, "BOTTOM": 0.957, "SUPPORT": 0.001}},
+        "Jinx": {"id": "Jinx", "positions": ["BOTTOM"], "playable": ["BOTTOM"],
+                 "positionShares": {"BOTTOM": 0.998}},
         "Lulu": {"id": "Lulu", "positions": ["SUPPORT", "MIDDLE"]},
     }}
     path = tmp_path / "champion-meta.json"
     path.write_text(json.dumps(doc))
     meta = fx.load_meta(path)
-    # `positions` stays the listed roles (the display buckets, D6); `playable` is the legality set.
-    assert meta["Kaisa"] == {"positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "win_rate": 0.51}
-    assert meta["Jinx"] == {"positions": ["BOTTOM"], "playable": ["BOTTOM"], "win_rate": 0.5}
-    assert meta["Lulu"] == {"positions": ["UTILITY", "MIDDLE"], "playable": ["UTILITY", "MIDDLE"], "win_rate": 0.5}
+    # `positions` stays the listed roles (the display buckets, D6); `playable` is the legality set;
+    # `shares` the five 3-dp shares keyed by role (champion-role-shares § 4.2 hop 9) — a legacy
+    # listed-key map reads 0 for its absent roles, a row without shares reads None.
+    assert meta["Kaisa"] == {"positions": ["BOTTOM"], "playable": ["TOP", "BOTTOM"], "win_rate": 0.51,
+                             "shares": {"TOP": 0.019, "JUNGLE": 0.006, "MIDDLE": 0.017, "BOTTOM": 0.957, "UTILITY": 0.001}}
+    assert meta["Jinx"] == {"positions": ["BOTTOM"], "playable": ["BOTTOM"], "win_rate": 0.5,
+                            "shares": {"TOP": 0.0, "JUNGLE": 0.0, "MIDDLE": 0.0, "BOTTOM": 0.998, "UTILITY": 0.0}}
+    assert meta["Lulu"] == {"positions": ["UTILITY", "MIDDLE"], "playable": ["UTILITY", "MIDDLE"], "win_rate": 0.5,
+                            "shares": None}
     # The request's display buckets read the LISTED roles: Kai'Sa is filed under ADC alone.
     request = fx.build_engine_request([], [], "blue", meta, "blue", bans=[f"Ban{i}" for i in range(6)])
     display = request["pools"]["blue"]["display"]

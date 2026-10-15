@@ -63,7 +63,11 @@ def diff(new, base):
 
 
 def main():
-    meta = load_meta()
+    # The "today" baseline must be the LISTED positions as legality (what this probe's derived rows
+    # use), not `load_meta`'s `playable` — since champion-role-shares slice A `role_feasible` reads
+    # the entry's `playable`, so a meta carrying it would score the baseline on the wider set
+    # (0.976) and every derived threshold would read as a loss. Project a positions-only meta.
+    meta = {a: {k: v for k, v in e.items() if k != "playable"} for a, e in load_meta().items()}
     sets = load_sets_with_patch()
     # The corpus window's patches in release order (patch_vocab); [1] labels the
     # pooled table with them and [2] compares the two newest — the first run was

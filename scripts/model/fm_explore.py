@@ -57,15 +57,25 @@ def load_table(path=COMPILED / "fm-weights.json"):
 
 
 def load_meta(path=COMPILED / "champion-meta.json"):
-    """alias → {positions, playable (linear_roles vocabulary), win_rate}; win_rate defaults to 0.5
-    like the engine's serde default (design §3). `positions` stays the LISTED roles — the display
-    buckets `build_engine_request` files champions under (champion-role-shares D6) and the
+    """alias → {positions, playable, shares (linear_roles vocabulary), win_rate}; win_rate defaults
+    to 0.5 like the engine's serde default (design §3). `positions` stays the LISTED roles — the
+    display buckets `build_engine_request` files champions under (champion-role-shares D6) and the
     "primary" `fm_explore_scan` reads; `playable` is the engine's LEGALITY set (the entry's
     `playable`, champion-role-shares § 4.1, falling back to the listed roles for an entry without
-    it), which `role_feasible` — the port of the prune — reads."""
+    it), which `role_feasible` — the port of the prune — reads; `shares` the five 3-dp
+    `positionShares` the engine weights with (§ 4.2 hop 9 — from this compiled file, never the
+    unrounded corpus), keyed by role, 0 for a role the map lacks, or None without shares."""
     raw = json.loads(Path(path).read_text())["champions"]
+
+    def shares_of(e):
+        shares = e.get("positionShares")
+        if not shares:
+            return None
+        return {POS_TO_ROLE[p]: float(shares.get(p, 0.0)) for p in ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "SUPPORT")}
+
     return {alias: {"positions": [POS_TO_ROLE[p] for p in e.get("positions", [])],
                     "playable": [POS_TO_ROLE[p] for p in (e.get("playable") or e.get("positions", []))],
+                    "shares": shares_of(e),
                     "win_rate": float(e.get("winRate", 0.5))}
             for alias, e in raw.items()}
 
