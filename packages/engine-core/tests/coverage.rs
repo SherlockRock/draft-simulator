@@ -11,6 +11,8 @@ fn champ(id: &str, positions: Vec<Role>) -> ChampionMeta {
     ChampionMeta {
         id: id.into(),
         positions,
+        position_shares: Vec::new(),
+        playable: Vec::new(),
         damage_profile: DamageProfile::default(),
         scaling_profile: ScalingProfile::default(),
         cc_profile: CcProfile::default(),
@@ -229,4 +231,76 @@ fn missing_roles_full_comp_returns_empty() {
         .map(|s| (*s).into())
         .collect();
     assert!(missing_roles(&picks, &m, 0.9).is_empty());
+}
+
+// --- champion-role-shares slice B (design § 6): coverage reads the share ratio -------------------
+
+fn meta_from_shared(entries: &[(&str, Vec<Role>, [f64; 5])]) -> HashMap<String, ChampionMeta> {
+    entries
+        .iter()
+        .map(|(id, positions, shares)| {
+            let mut m = champ(id, positions.clone());
+            m.position_shares = shares.to_vec();
+            ((*id).into(), m)
+        })
+        .collect()
+}
+
+#[test]
+fn per_role_max_factors_reads_the_share_ratio_and_keeps_the_0_01_floor() {
+    // Sylas-shaped: MIDDLE 0.6 (the largest), TOP 0.3, SUPPORT 0.079, JUNGLE 0.02, BOTTOM 0.001.
+    // Coverage reads the ratio per role but never below its own 0.01 floor (a floor ABOVE ε / max:
+    // the open-role term is 0.01 whatever ε is, so a never-played role reads 0.01, not 0.0017).
+    let m = meta_from_shared(&[(
+        "Sylas",
+        vec![Role::Middle, Role::Top],
+        [0.3, 0.02, 0.6, 0.001, 0.079],
+    )]);
+    let picks = vec!["Sylas".to_string()];
+    let f = per_role_max_factors(&picks, &m);
+    assert_eq!(f[0], 0.3_f64 / 0.6); // TOP: a listed secondary reads 0.5, not 0.4
+    assert_eq!(f[1], 0.02_f64 / 0.6); // JUNGLE: an unlisted 2% role reads 0.033, not 0.01
+    assert_eq!(f[2], 1.0);
+    assert_eq!(f[3], 0.01); // BOTTOM: 0.001 / 0.6 = 0.0017 sits under the floor
+    assert_eq!(f[4], 0.079_f64 / 0.6);
+}
+
+#[test]
+fn missing_roles_at_0_9_names_the_roles_no_pick_is_within_ten_percent_of_its_best_in() {
+    // Ekko-shaped: JUNGLE at 0.909 of his MIDDLE share is NOT missing at 0.9 — the thresholded step
+    // the design names (five champions count for two roles at once); at 0.89 it is. Under the
+    // category factors a secondary read 0.4 and was missing either way.
+    let picks = vec!["Ekko".to_string()];
+    let within = meta_from_shared(&[(
+        "Ekko",
+        vec![Role::Middle, Role::Jungle],
+        [0.001, 0.4545, 0.5, 0.0, 0.0],
+    )]);
+    assert_eq!(
+        missing_roles(&picks, &within, 0.9),
+        vec![Role::Top, Role::Adc, Role::Support]
+    );
+    let below = meta_from_shared(&[(
+        "Ekko",
+        vec![Role::Middle, Role::Jungle],
+        [0.001, 0.445, 0.5, 0.0, 0.0],
+    )]);
+    assert_eq!(
+        missing_roles(&picks, &below, 0.9),
+        vec![Role::Top, Role::Jungle, Role::Adc, Role::Support]
+    );
+}
+
+#[test]
+fn coverage_score_over_shares_is_the_geometric_mean_of_the_floored_ratios() {
+    // Pantheon alone covers TOP at 1.0 and SUPPORT at 0.959 (flex double-cover, design § 6),
+    // JUNGLE at 0.255, MIDDLE at 0.128 and BOTTOM at the floor.
+    let m = meta_from_shared(&[(
+        "Pantheon",
+        vec![Role::Top, Role::Support],
+        [0.392, 0.1, 0.05, 0.0, 0.376],
+    )]);
+    let picks = vec!["Pantheon".to_string()];
+    let expected = (1.0_f64 * (0.1 / 0.392) * (0.05 / 0.392) * 0.01 * (0.376 / 0.392)).powf(0.2);
+    assert!((coverage_score(&picks, &m) - expected).abs() < 1e-12);
 }

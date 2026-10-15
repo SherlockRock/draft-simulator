@@ -1,0 +1,234 @@
+{
+  "id": "2026-10-07-synth-dme-top-pinch-slot-17",
+  "category": "off-pool",
+  "notes": "SYNTHETIC (2026-10-07, Q calibration): DME (Blue) pinched at top — the opponent banned/picked the whole DME top pool (KSante (Kittens pick as top), Zaahen (Kittens pick as jungle), Rumble (Kittens ban), Riven (Kittens ban), Camille (Kittens ban), Ambessa (Kittens ban), Aurora (Kittens ban), Yone (DME ban (synthetic))); DME's other roles are in-pool; open at slot 17: top + support. Secondary-role fills left available: Cassiopeia (top r 0.46), MonkeyKing (top r 0.15), Ryze (top r 0.27). Pools are the 2026-10-01 role maps; the board is not a played draft.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-10-07"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Yone"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Rumble"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Sion"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Riven"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Ornn"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Camille"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Naafiri"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "KSante"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Zaahen"
+    },
+    {
+      "slot": 9,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Locke"
+    },
+    {
+      "slot": 10,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Yunara"
+    },
+    {
+      "slot": 11,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Galio"
+    },
+    {
+      "slot": 12,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ambessa"
+    },
+    {
+      "slot": 13,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "DrMundo"
+    },
+    {
+      "slot": 14,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Aurora"
+    },
+    {
+      "slot": 15,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Aatrox"
+    },
+    {
+      "slot": 16,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Bard"
+    }
+  ],
+  "pools": {
+    "blue": {
+      "adc": [
+        "Yunara",
+        "Ziggs",
+        "Aphelios",
+        "Ezreal",
+        "Kaisa",
+        "Kalista",
+        "Lucian",
+        "Zeri"
+      ],
+      "mid": [
+        "Locke",
+        "Syndra",
+        "Nasus",
+        "Ahri",
+        "Galio",
+        "Cassiopeia",
+        "Orianna",
+        "Ryze"
+      ],
+      "top": [
+        "Rumble",
+        "Riven",
+        "Camille",
+        "Ambessa",
+        "KSante",
+        "Aurora",
+        "Zaahen",
+        "Yone"
+      ],
+      "jungle": [
+        "Naafiri",
+        "Qiyana",
+        "LeeSin",
+        "JarvanIV",
+        "MonkeyKing",
+        "XinZhao",
+        "Vi",
+        "Shyvana"
+      ],
+      "support": [
+        "Bard",
+        "Alistar",
+        "Lulu",
+        "Milio",
+        "Nautilus",
+        "Nami",
+        "Leona",
+        "Renata"
+      ]
+    },
+    "red": {
+      "adc": [
+        "Ezreal",
+        "Caitlyn",
+        "Jhin",
+        "Jinx",
+        "Kaisa",
+        "Ashe",
+        "Sivir",
+        "Varus"
+      ],
+      "mid": [
+        "Zilean",
+        "Locke",
+        "Galio",
+        "Chogath",
+        "Orianna",
+        "Ryze",
+        "Syndra",
+        "Viktor"
+      ],
+      "top": [
+        "Sion",
+        "KSante",
+        "Zaahen",
+        "Ornn",
+        "DrMundo",
+        "Aatrox",
+        "Malphite",
+        "Renekton"
+      ],
+      "jungle": [
+        "JarvanIV",
+        "Ivern",
+        "Shyvana",
+        "XinZhao",
+        "Vi",
+        "MonkeyKing",
+        "Zaahen",
+        "Aatrox"
+      ],
+      "support": [
+        "Bard",
+        "Neeko",
+        "Seraphine",
+        "Rakan",
+        "Amumu",
+        "Alistar",
+        "Braum",
+        "Nami"
+      ]
+    }
+  },
+  "our_side": "Blue",
+  "role_verdict": {
+    "action": [
+      "Fiddlesticks",
+      "Lulu"
+    ],
+    "roles": [
+      "top",
+      "support"
+    ],
+    "ok": true
+  },
+  "review": "The engine's roster top at Q = 0: Fiddlesticks at top (grade 82, r 0.18) beside Lulu; Olaf top (off-pool base) overtakes him between Q = 0.10 and 0.12. 2026-10-08 user (scored read, 16.19 table, P = 0.105): ok — with a caveat: the pick is fairly difficult, the player would need experience on the champion to play it well; assuming that, a valid pick."
+}

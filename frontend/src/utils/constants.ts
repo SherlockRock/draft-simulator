@@ -181,6 +181,22 @@ const positionsByName = new Map<string, string[]>(
 const idsByName = new Map<string, string>(
     championData.champions.map((c) => [c.name, c.id])
 );
+// champion-role-shares design § 4.1, keyed by champion id: `positionShares` (all five roles' play
+// shares, 3 dp) and `playable` (the engine's legality set — the listed roles plus every role above
+// the refresh's pick-count floor). Both are absent on a table from before the field (the
+// 2026-09-05 test fixture) or on a hand-entered row; readers fall back to the positions through
+// championRoles.ts. Kept beside the champion objects, not on them: those objects are the picker's
+// `FilterableItem`s, whose values are scalars and string lists, not nested maps.
+export const sharesById = new Map<string, Record<string, number>>(
+    championData.champions.flatMap((c) =>
+        c.positionShares === undefined ? [] : [[c.id, c.positionShares] as const]
+    )
+);
+export const playableById = new Map<string, string[]>(
+    championData.champions.flatMap((c) =>
+        c.playable === undefined ? [] : [[c.id, c.playable] as const]
+    )
+);
 
 export const champions = [
     { name: "Aatrox", img: Aatrox },

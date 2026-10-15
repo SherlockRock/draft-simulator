@@ -208,9 +208,10 @@
     "S1"
   ],
   "epsilon": 1e-09,
+  "top_line_denies": true,
   "dry_run": {
-    "value": 24.0,
-    "leaves": 85,
-    "nodes": 147
+    "value": 46.0,
+    "leaves": 108,
+    "nodes": 205
   }
 }

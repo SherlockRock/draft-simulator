@@ -222,7 +222,7 @@
   "epsilon": 1e-09,
   "dry_run": {
     "value": -9.0,
-    "leaves": 8880,
-    "nodes": 13212
+    "leaves": 14400,
+    "nodes": 21972
   }
 }

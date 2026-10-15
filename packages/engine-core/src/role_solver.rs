@@ -33,10 +33,55 @@ pub struct ChampionTags {
 pub struct ChampionMeta {
     pub id: String,
     pub positions: Vec<Role>,
+    /// All five roles' Master+ play shares, aligned with `ROLES` (Top, Jungle, Middle, Adc, Support) —
+    /// champion-meta.json's `positionShares` (champion-role-shares design § 4.1; a legacy listed-key
+    /// map loads with 0 for its absent roles). Empty = unknown: a hand-entered champion, or a file from
+    /// before the shares. NO ordering rule: the largest share may sit at any role (an override may
+    /// reorder `positions`), so every weight and grade divides by [`ChampionMeta::max_share`], never by
+    /// `positions[0]`'s share. [`position_factor`] reads it (every weight in the incumbent: the role
+    /// solver, coverage, the 0.9 injection threshold); the reference universe grades every role by it.
+    pub position_shares: Vec<f64>,
+    /// The engine's legality set (champion-meta.json's `playable`; champion-role-shares design § 4.1):
+    /// the listed roles plus every role above the refresh's pick-count floor. Empty = unknown — a file
+    /// from before the field, a hand-entered champion, a test fixture — so read it through
+    /// [`ChampionMeta::playable_roles`], which falls back to `positions`: a missing field is today's
+    /// mask, never a zero mask. `positions` stays the UI's set (tabs, buckets, the gap strip's lists).
+    pub playable: Vec<Role>,
     pub damage_profile: DamageProfile,
     pub scaling_profile: ScalingProfile,
     pub cc_profile: CcProfile,
     pub tags: ChampionTags,
+}
+
+impl ChampionMeta {
+    /// The roles the prune may seat the champion in: `playable`, or `positions` when unknown.
+    pub fn playable_roles(&self) -> &[Role] {
+        if self.playable.is_empty() {
+            &self.positions
+        } else {
+            &self.playable
+        }
+    }
+
+    /// `role`'s share: `None` when the shares are unknown (not five values); 0 for a role never played.
+    pub fn share_of(&self, role: Role) -> Option<f64> {
+        if self.position_shares.len() != ROLES.len() {
+            return None;
+        }
+        ROLES
+            .iter()
+            .position(|r| *r == role)
+            .map(|i| self.position_shares[i])
+    }
+
+    /// The largest share — the denominator of every weight and grade; `None` when the shares are
+    /// unknown.
+    pub fn max_share(&self) -> Option<f64> {
+        if self.position_shares.len() != ROLES.len() {
+            return None;
+        }
+        self.position_shares.iter().copied().reduce(f64::max)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -54,11 +99,34 @@ pub struct WeightedAssignment {
     pub weight: f64,
 }
 
+/// The floor under a share before the ratio (champion-role-shares design D8 / U3): one tenth of the
+/// 0.01 a non-listed role weighed under the category factors, so a never-played role still weighs
+/// something — the solver's total stays positive and its top assignment deterministic (exact ties
+/// resolve in enumeration order, as the 0.01 ties did) — and no playable role can weigh less than a
+/// non-playable one. Weight never depends on legality: nothing jumps when a role crosses the
+/// refresh's pick-count floor.
+pub const SHARE_EPSILON: f64 = 0.001;
+
+// The category factors of a champion whose shares are unknown (a hand row, a file from before the
+// shares, a test literal): the primary 1.0, another listed role 0.4, anything else 0.01.
 const PRIMARY_FACTOR: f64 = 1.0;
 const SECONDARY_FACTOR: f64 = 0.4;
 const NON_LISTED_FACTOR: f64 = 0.01;
 
-pub fn position_factor(role: Role, positions: &[Role]) -> f64 {
+/// The weight of seating `meta`'s champion in `role` (champion-role-shares design § 6): with the
+/// shares known, `max(share(role), ε) / max(shares)` for EVERY role — the ratio to the champion's
+/// largest share, never to `positions[0]`'s (an override may reorder the positions, and a ratio
+/// above 1.0 would follow) — computed as one max then one division, the operation order the
+/// TypeScript port (`navigatorRoles.ts positionFactor`) uses, so the two agree bit for bit. With the
+/// shares unknown (or all zero, which the loaders refuse), the category factors over `positions`.
+pub fn position_factor(role: Role, meta: &ChampionMeta) -> f64 {
+    match (meta.share_of(role), meta.max_share()) {
+        (Some(share), Some(max)) if max > 0.0 => share.max(SHARE_EPSILON) / max,
+        _ => category_factor(role, &meta.positions),
+    }
+}
+
+fn category_factor(role: Role, positions: &[Role]) -> f64 {
     if positions.first().copied() == Some(role) {
         PRIMARY_FACTOR
     } else if positions.contains(&role) {
@@ -72,7 +140,12 @@ const ROLES: [Role; 5] = [Role::Top, Role::Jungle, Role::Middle, Role::Adc, Role
 
 /// Enumerates the P(5, n) ordered selections of role-indices for n champions
 /// (1..=5), scores each by product of per-slot position factors, normalizes
-/// weights to sum to 1.
+/// weights to sum to 1. A champion's denominator (its largest share) is the same
+/// in every assignment, so it cancels here: raw shares and ratios give the same
+/// weights (design D8); the ratio matters to coverage, which reads the factor
+/// unnormalised. The total is positive whenever the champions are known (ε), so
+/// the normalisation guard only fires for the empty-positions, shares-unknown
+/// case the solver is never given in production.
 ///
 /// Panics if any `champion_ids` entry is absent from `meta` — caller MUST
 /// guard with `meta.contains_key` before calling. Currently this is enforced
@@ -94,7 +167,7 @@ pub fn solve(champion_ids: &[&str], meta: &HashMap<String, ChampionMeta>) -> Vec
         let mut weight = 1.0;
         for (champ_idx, &role_idx) in role_perm.iter().enumerate() {
             let role = ROLES[role_idx];
-            weight *= position_factor(role, &champs[champ_idx].positions);
+            weight *= position_factor(role, champs[champ_idx]);
         }
         let mut assignment = RoleAssignment {
             top: String::new(),

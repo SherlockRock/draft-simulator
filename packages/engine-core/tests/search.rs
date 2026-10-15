@@ -391,13 +391,22 @@ fn opp_turn_maximizes_opp_value() {
     // maximizes its own composite. At opp's turn, this means opp picks
     // best-for-opp — not worst-for-us. Distinguish from minimax with a
     // fixture where the two opp candidates produce different opp values.
-    use engine_core::role_solver::{CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile};
     use engine_core::evaluator::PhaseWeights;
+    use engine_core::role_solver::{
+        CcProfile, ChampionMeta, ChampionTags, DamageProfile, ScalingProfile,
+    };
 
     fn champ(id: &str, positions: Vec<Role>) -> ChampionMeta {
-        ChampionMeta { id: id.into(), positions, damage_profile: DamageProfile::default(),
-            scaling_profile: ScalingProfile::default(), cc_profile: CcProfile::default(),
-            tags: ChampionTags::default() }
+        ChampionMeta {
+            id: id.into(),
+            positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
+            damage_profile: DamageProfile::default(),
+            scaling_profile: ScalingProfile::default(),
+            cc_profile: CcProfile::default(),
+            tags: ChampionTags::default(),
+        }
     }
 
     // Slot 16 (R Pick2 single): 5 blue bans + 5 red bans + 3 blue picks + 3 red picks.
@@ -507,6 +516,8 @@ fn pick2_pair_seeding_includes_missing_role_specialists_via_bucket_2() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -768,6 +779,8 @@ fn pick2_pair_seeding_surfaces_specialists_at_production_branch_width() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -929,6 +942,8 @@ fn leaf_eval_rewards_whole_comp_role_coverage() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -1071,6 +1086,8 @@ fn pick2_pair_three_missing_roles_seeds_all_unordered_pair_shapes() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -1227,6 +1244,8 @@ fn pick2_pair_role_balanced_outscores_high_winrate_mismatch() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -1382,6 +1401,8 @@ fn pick2_pair_three_missing_top_pair_must_fill_two_missing_roles() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -1578,6 +1599,8 @@ fn pick2_single_pick_includes_missing_role_specialist_in_branch_width() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),
@@ -1780,6 +1803,8 @@ fn pick2_pair_end_b5_after_lulu_must_pick_adc_or_top_not_milio() {
         ChampionMeta {
             id: id.into(),
             positions,
+            position_shares: Vec::new(),
+            playable: Vec::new(),
             damage_profile: DamageProfile::default(),
             scaling_profile: ScalingProfile::default(),
             cc_profile: CcProfile::default(),

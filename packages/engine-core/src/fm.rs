@@ -73,7 +73,8 @@ pub struct FmWeights {
 
 static MISSING_LOGGED: Once = Once::new();
 
-fn dot(x: &[f64; RANK], y: &[f64; RANK]) -> f64 {
+/// Shared with `reference::live` so the reference tables use the serving arithmetic, not a copy.
+pub(crate) fn dot(x: &[f64; RANK], y: &[f64; RANK]) -> f64 {
     x.iter().zip(y).map(|(a, b)| a * b).sum()
 }
 

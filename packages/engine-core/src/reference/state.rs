@@ -5,6 +5,8 @@
 use super::format::{Format, Slot};
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
+use crate::feasibility::{RoleMask, ROLES};
+use crate::pools::Role;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entry {
@@ -41,11 +43,104 @@ impl Action {
     }
 }
 
-/// A side's pool is a set (D4): a champion outside it is not a pick for that side; bans are unrestricted.
+/// One side's pool by role (role-aware pools design § 1): the champions the pool lists for each role,
+/// in `crate::feasibility::ROLES` order (top, jungle, middle, adc, support). A champion may sit under
+/// several roles (RA1) and under a role the meta does not list for it (RA4: the entry makes that role
+/// playable for this side).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RoleSets {
+    by_role: [ChampionSet; 5],
+}
+
+impl RoleSets {
+    fn slot(role: Role) -> usize {
+        match role {
+            Role::Top => 0,
+            Role::Jungle => 1,
+            Role::Middle => 2,
+            Role::Adc => 3,
+            Role::Support => 4,
+        }
+    }
+
+    /// `c` listed under `role`, beside whatever it is already listed under.
+    pub fn with(mut self, role: Role, c: ChampionIdx) -> Self {
+        let slot = Self::slot(role);
+        self.by_role[slot] = self.by_role[slot].with(c);
+        self
+    }
+
+    pub fn for_role(&self, role: Role) -> ChampionSet {
+        self.by_role[Self::slot(role)]
+    }
+
+    /// Every champion listed under any role: the pool as a set.
+    pub fn union(&self) -> ChampionSet {
+        self.by_role
+            .iter()
+            .fold(ChampionSet::EMPTY, |all, set| all.union(*set))
+    }
+
+    /// `set` as tags: each champion under every role it is PLAYABLE in (champion-role-shares design
+    /// § 5.3 — its `playable` set, or the positions when the meta has none). On a table where
+    /// playable = positions this is the list form made a value (role-aware pools, Definitions: "a
+    /// list means every meta role"); on a table with a wider `playable` it is wider than the list —
+    /// the list form itself stays on the positions (U2).
+    pub fn meta_roles(set: ChampionSet, universe: &Universe) -> Self {
+        set.iter()
+            .fold(Self::default(), |tags, c| tags.with_meta_roles(c, universe))
+    }
+
+    /// `c` listed under every role it is playable in — how a board pick the pool omits is added (a
+    /// sunk fact: it can never be off-role, so it is never charged; design, Definitions). Reads the
+    /// playable mask, not the positions (judge I1): tagged under the positions alone, a board pick in
+    /// a playable-but-unlisted role would become chargeable.
+    pub fn with_meta_roles(self, c: ChampionIdx, universe: &Universe) -> Self {
+        ROLES
+            .iter()
+            .enumerate()
+            .filter(|(bit, _)| (universe.playable_mask(c) >> bit) & 1 == 1)
+            .fold(self, |tags, (_, role)| tags.with(*role, c))
+    }
+
+    /// The entries under a role the champion is not playable in (RA4: honoured — the entry makes the
+    /// role playable for this side — and worth saying to whoever reads a report), in role then index
+    /// order.
+    pub fn off_meta(&self, universe: &Universe) -> Vec<(Role, ChampionIdx)> {
+        ROLES
+            .iter()
+            .enumerate()
+            .flat_map(|(bit, role)| {
+                self.by_role[bit]
+                    .iter()
+                    .filter(move |c| (universe.playable_mask(*c) >> bit) & 1 == 0)
+                    .map(move |c| (*role, c))
+            })
+            .collect()
+    }
+
+    /// The roles this pool lists for `c` (0 = not in the pool), bit `i` = `ROLES[i]`.
+    pub(crate) fn mask(&self, c: ChampionIdx) -> RoleMask {
+        self.by_role
+            .iter()
+            .enumerate()
+            .filter(|(_, set)| set.contains(c))
+            .fold(0, |mask, (bit, _)| mask | (1 << bit))
+    }
+}
+
+/// A side's pool as a set (D4): a champion outside it is not a pick for that side under the gate; bans
+/// are unrestricted. `blue_roles` / `red_roles` are the optional role tags (role-aware pools design
+/// § 1): `None` is list form — every reader runs the set code — and `Some` must list exactly the
+/// champions of the side's set ([`Pools::with_roles`] keeps the two in step). Tags are read only under
+/// a live rule on a five-pick format (`feasibility::tags_for`); a search or an oracle run refuses them
+/// anywhere else.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Pools {
     pub blue: ChampionSet,
     pub red: ChampionSet,
+    pub blue_roles: Option<RoleSets>,
+    pub red_roles: Option<RoleSets>,
 }
 
 impl Pools {
@@ -54,6 +149,29 @@ impl Pools {
             Side::Blue => self.blue,
             Side::Red => self.red,
         }
+    }
+
+    /// `side`'s role tags, when its pool carries them.
+    pub fn roles(&self, side: Side) -> Option<&RoleSets> {
+        match side {
+            Side::Blue => self.blue_roles.as_ref(),
+            Side::Red => self.red_roles.as_ref(),
+        }
+    }
+
+    /// `side`'s pool replaced by `roles`: the set becomes their union, so the two cannot disagree.
+    pub fn with_roles(mut self, side: Side, roles: RoleSets) -> Self {
+        match side {
+            Side::Blue => {
+                self.blue = roles.union();
+                self.blue_roles = Some(roles);
+            }
+            Side::Red => {
+                self.red = roles.union();
+                self.red_roles = Some(roles);
+            }
+        }
+        self
     }
 }
 
@@ -71,6 +189,8 @@ pub enum PositionError {
     PickOutsidePool { slot: usize, id: String },
 }
 
+/// `blue` / `red` are kept **index-sorted** (slice-5 U3): a leaf value computed over them is then a
+/// function of the pick SETS, so two paths to the same board give bit-equal values on any floats.
 #[derive(Clone, Debug)]
 pub struct Position<'f> {
     format: &'f Format,
@@ -127,7 +247,7 @@ impl<'f> Position<'f> {
                         });
                     }
                     pos.taken = pos.taken.with(c);
-                    pos.picks_mut(slot.side).push(c);
+                    pos.insert_pick(slot.side, c);
                 }
                 _ => return Err(PositionError::KindMismatch { slot: i }),
             }
@@ -136,11 +256,14 @@ impl<'f> Position<'f> {
         Ok(pos)
     }
 
-    fn picks_mut(&mut self, side: Side) -> &mut Vec<ChampionIdx> {
-        match side {
+    /// Sorted insert (U3): the pick lists are index-sorted sets, never slot-ordered.
+    fn insert_pick(&mut self, side: Side, c: ChampionIdx) {
+        let picks = match side {
             Side::Blue => &mut self.blue,
             Side::Red => &mut self.red,
-        }
+        };
+        let at = picks.partition_point(|&p| p < c);
+        picks.insert(at, c);
     }
 
     pub fn format(&self) -> &'f Format {
@@ -175,14 +298,28 @@ impl<'f> Position<'f> {
         self.next_slot().is_some_and(|s| s.pair_end)
     }
 
+    /// Everything unavailable: the board's bans and picks, plus any champions folded in by
+    /// [`Position::with_excluded`].
     pub fn taken(&self) -> ChampionSet {
         self.taken
+    }
+
+    /// Cross-game exclusions (target note § 2; slice-5 U5): champions unavailable to both sides this
+    /// game. Folded into `taken`, so they are never generated as bans or picks, never count towards
+    /// feasibility, and ride the transposition key unchanged (constant within a search). Banning one
+    /// would be a no-op — exactly the `Skip` D5 does not generate. A position rebuilt from
+    /// `entries()` with `Position::new` does NOT carry them: re-apply this on every rebuild
+    /// (`live::LiveRoot::position` does).
+    pub fn with_excluded(mut self, excluded: ChampionSet) -> Self {
+        self.taken = self.taken.union(excluded);
+        self
     }
 
     pub fn available(&self, universe: &Universe) -> ChampionSet {
         universe.all().minus(self.taken)
     }
 
+    /// Index-sorted (U3).
     pub fn picks(&self, side: Side) -> &[ChampionIdx] {
         match side {
             Side::Blue => &self.blue,
@@ -191,7 +328,9 @@ impl<'f> Position<'f> {
     }
 
     /// Ban slot: every available champion. Pick slot: every available champion in the mover's
-    /// pool — all unordered pairs at a pair's first half, singles otherwise. Never `Skip`.
+    /// pool — all unordered pairs at a pair's first half, singles otherwise. Never `Skip`. This is
+    /// the hard gate (D4, `FeasibilityRule::On`); `node::legal_actions_under` applies the
+    /// `PoolOrRoster` widening on top of it.
     pub fn legal_actions(&self, universe: &Universe, pools: &Pools) -> Vec<Action> {
         let Some(slot) = self.next_slot() else {
             return Vec::new();
@@ -200,23 +339,29 @@ impl<'f> Position<'f> {
         match slot.action {
             ActionType::Ban => available.iter().map(Action::Ban).collect(),
             ActionType::Pick => {
-                let mine: Vec<ChampionIdx> = available
-                    .intersect(pools.for_side(slot.side))
-                    .iter()
-                    .collect();
-                if slot.pair_start {
-                    let mut pairs =
-                        Vec::with_capacity(mine.len() * mine.len().saturating_sub(1) / 2);
-                    for (i, &a) in mine.iter().enumerate() {
-                        for &b in &mine[i + 1..] {
-                            pairs.push(Action::pair(a, b));
-                        }
-                    }
-                    pairs
-                } else {
-                    mine.into_iter().map(Action::Pick).collect()
+                self.pick_actions_from(available.intersect(pools.for_side(slot.side)))
+            }
+        }
+    }
+
+    /// The pick actions over an explicit candidate set at the next slot: all unordered pairs at a
+    /// pair's first half, singles otherwise. Callers pass `available ∩ pool` (the gate) or
+    /// `available` (the roster fallback, U10).
+    pub fn pick_actions_from(&self, candidates: ChampionSet) -> Vec<Action> {
+        let Some(slot) = self.next_slot() else {
+            return Vec::new();
+        };
+        let mine: Vec<ChampionIdx> = candidates.iter().collect();
+        if slot.pair_start {
+            let mut pairs = Vec::with_capacity(mine.len() * mine.len().saturating_sub(1) / 2);
+            for (i, &a) in mine.iter().enumerate() {
+                for &b in &mine[i + 1..] {
+                    pairs.push(Action::pair(a, b));
                 }
             }
+            pairs
+        } else {
+            mine.into_iter().map(Action::Pick).collect()
         }
     }
 
@@ -248,6 +393,6 @@ impl<'f> Position<'f> {
     fn push_pick(&mut self, side: Side, c: ChampionIdx) {
         self.taken = self.taken.with(c);
         self.entries.push(Entry::Pick(c));
-        self.picks_mut(side).push(c);
+        self.insert_pick(side, c);
     }
 }

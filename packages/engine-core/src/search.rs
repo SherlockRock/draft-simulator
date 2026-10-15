@@ -6,8 +6,7 @@ use crate::feasibility::can_complete_roles;
 use crate::evaluator::{phase_weight_for, score_pick, EvalContext, ScoreSet, SideValues};
 use crate::forced_branches::{resolve_path, ForcedBranch, ForcedMode, PathMatch};
 use crate::pair_filter::{seed_pair_candidates, PairFilterConfig};
-use crate::pools::{Role, TeamPool};
-use crate::role_solver::ChampionMeta;
+use crate::pools::{scored_role, Role, TeamPool};
 use crate::transposition::{StateHash, TranspositionCache};
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -331,9 +330,9 @@ fn search_recursive(
                     top_k_for_role(*role, state, turn, eval_ctx, cancel, PROTECTED_K)?;
                 for champ in specialists {
                     if already.insert(champ.clone()) {
-                        let pri =
-                            primary_role(&champ, &eval_ctx.champion_meta).unwrap_or(*role);
-                        let s = score_pick(&champ, pri, state, &sub_ctx, turn.action_type);
+                        let at = scored_role(&champ, &sub_ctx.our_pool, &eval_ctx.champion_meta)
+                            .unwrap_or(*role);
+                        let s = score_pick(&champ, at, state, &sub_ctx, turn.action_type);
                         ranked.push((champ, s.composite));
                     }
                 }
@@ -700,7 +699,7 @@ fn phase_for_state(state: &DraftState, _side: Side) -> Phase {
 fn side_total(state: &DraftState, our_picks: &[String], ctx: &EvalContext) -> f64 {
     let mut total = 0.0;
     for champ in our_picks {
-        let role = primary_role(champ, &ctx.champion_meta).unwrap_or(Role::Top);
+        let role = scored_role(champ, &ctx.our_pool, &ctx.champion_meta).unwrap_or(Role::Top);
         let s = score_pick(champ, role, state, ctx, ActionType::Pick);
         total += s.composite;
     }
@@ -759,7 +758,8 @@ fn score_and_rank(
             if cancel.should_stop() {
                 None
             } else {
-                let role = primary_role(c, &ctx.champion_meta).unwrap_or(Role::Top);
+                let role =
+                    scored_role(c, &sub_ctx.our_pool, &ctx.champion_meta).unwrap_or(Role::Top);
                 let s = score_pick(c, role, state, &sub_ctx, turn.action_type);
                 Some((c.clone(), s.composite))
             }
@@ -772,10 +772,6 @@ fn score_and_rank(
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
     scored.truncate(branch_width);
     Ok(scored)
-}
-
-fn primary_role(champ: &str, meta: &HashMap<String, ChampionMeta>) -> Option<Role> {
-    meta.get(champ).and_then(|m| m.positions.first().copied())
 }
 
 fn push_action(state: &mut DraftState, turn: TurnInfo, champ: &str) {
@@ -821,7 +817,8 @@ fn expand_pair(
             if cancel.should_stop() {
                 None
             } else {
-                let role = primary_role(c, &eval_ctx.champion_meta).unwrap_or(Role::Top);
+                let role =
+                    scored_role(c, &sub_ctx.our_pool, &eval_ctx.champion_meta).unwrap_or(Role::Top);
                 let s = score_pick(c, role, state, &sub_ctx, turn.action_type);
                 Some((c.clone(), s.composite))
             }

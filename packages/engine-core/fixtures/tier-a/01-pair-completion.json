@@ -228,6 +228,6 @@
   "dry_run": {
     "value": 6.0,
     "leaves": 3,
-    "nodes": 5
+    "nodes": 6
   }
 }

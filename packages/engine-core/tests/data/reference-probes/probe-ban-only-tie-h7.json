@@ -99,6 +99,7 @@
     "C4"
   ],
   "epsilon": 1e-09,
+  "top_line_denies": false,
   "dry_run": {
     "value": 5.0,
     "leaves": 40320,

@@ -1,5 +1,5 @@
 import type { Role } from "@draft-sim/shared-types";
-import { champions } from "./constants";
+import { champions, playableById, sharesById } from "./constants";
 
 export const ROLES: Role[] = ["top", "jungle", "mid", "adc", "support"];
 
@@ -66,19 +66,37 @@ export function riotPositionToRole(position: string): Role | null {
     return RIOT_POSITION_TO_ROLE[position] ?? null;
 }
 
-// Returns the champion's primary role (first position in their data).
-// Returns null if the champion has no known positions.
-export function getChampionPrimaryRole(championId: string): Role | null {
-    const champ = champions.find((c) => c.id === championId);
-    if (!champ || !champ.positions || champ.positions.length === 0) return null;
-    return riotPositionToRole(champ.positions[0]);
-}
-
-// Returns all roles a champion is playable in.
+// Returns the champion's LISTED roles (champions.json `positions`): the UI's set — tabs, buckets,
+// Load defaults, the stale pill, and the gap strip's must/maybe (champion-role-shares D6, D9).
 export function getChampionRoles(championId: string): Role[] {
     const champ = champions.find((c) => c.id === championId);
     if (!champ || !champ.positions) return [];
     return champ.positions.map(riotPositionToRole).filter((r): r is Role => r !== null);
+}
+
+// Returns the roles the ENGINE may seat the champion in (champions.json `playable`: the listed
+// roles plus every role above the refresh's pick-count floor — champion-role-shares § 4.1), or the
+// listed roles when the table carries no `playable` (a table from before the field, a hand row).
+// The prune's mask, mirrored for the gap strip's `feasible` and the empty-fan reason.
+export function getChampionPlayable(championId: string): Role[] {
+    const playable = playableById.get(championId);
+    if (playable === undefined) return getChampionRoles(championId);
+    return playable.map(riotPositionToRole).filter((r): r is Role => r !== null);
+}
+
+// Returns the champion's play share in every role (champions.json `positionShares`, 3 dp — a role
+// never played is 0), keyed by Role; null when the table carries no shares. The largest share is
+// the denominator of every weight (navigatorRoles.ts positionFactor, champion-role-shares § 6).
+export function getChampionShares(championId: string): Record<Role, number> | null {
+    const shares = sharesById.get(championId);
+    if (shares === undefined) return null;
+    return {
+        top: shares.TOP ?? 0,
+        jungle: shares.JUNGLE ?? 0,
+        mid: shares.MIDDLE ?? 0,
+        adc: shares.BOTTOM ?? 0,
+        support: shares.SUPPORT ?? 0
+    };
 }
 
 // Returns champion IDs that list the given role in their positions.

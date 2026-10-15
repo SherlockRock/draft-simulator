@@ -2,21 +2,28 @@
 //! spec Obsidian `draft-simulator-engine-target` § 3, D6, D9).
 //!
 //! Per fixture: load → bounds → oracle → check 1 (top set == intended) → dry-run parity (value,
-//! leaves, nodes exactly as the independent prototype measured) → pair-order swap. Check 2 (a
-//! candidate engine's top action ∈ the oracle's top set) has no candidate until slice 4 and is
-//! an ignored stub that fails if run.
+//! leaves, nodes exactly as the independent prototype measured) → pair-order swap → the reference
+//! search against the oracle (slice 4, inside `run`: check 2 — the candidate's top action is in the
+//! oracle's top set — then ranked equality, every horizon, the pruning/table switches, PV replay, the
+//! budget property and the S11 guard). Check 2 has no test of its own: it is live on every fixture.
 //!
 //!   cargo test -p engine-core --test tier_a -- --nocapture
 
+use engine_core::cancellation::CancelHandle;
+use engine_core::draft_state::Side;
 use engine_core::reference::fixture::Fixture;
+use engine_core::reference::node::LeafKind;
+use engine_core::reference::objective::{Leaf, Objective};
 use engine_core::reference::oracle::{evaluate, Evaluation, Mode, OracleInput};
+use engine_core::reference::search::{max_depth_for, search, SearchOutcome, SearchParams};
 use engine_core::reference::state::{Action, Position};
 use engine_core::reference::universe::Universe;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// One entry per file in fixtures/tier-a/. `every_fixture_file_has_a_test` keeps this honest.
-const FIXTURES: [&str; 8] = [
+const FIXTURES: [&str; 9] = [
     "01-pair-completion",
     "02-profitable-denial",
     "03-declining-denial",
@@ -25,6 +32,7 @@ const FIXTURES: [&str; 8] = [
     "06a-ban-truncated",
     "06b-ban-horizon",
     "07-slot6-bound",
+    "07b-slot6-full-fan",
 ];
 
 fn fixtures_dir() -> PathBuf {
@@ -49,6 +57,52 @@ fn ranked_report(u: &Universe, eval: &Evaluation) -> String {
         .map(|av| format!("    {:>10}  {}", av.value, label(u, av.action)))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn params(prune: bool, transposition: bool, node_budget: Option<u64>) -> SearchParams {
+    SearchParams {
+        node_budget,
+        prune,
+        transposition,
+        wall_budget: Duration::from_secs(86_400),
+        min_completed_depth: 1,
+        shortlist: None,
+        snipe_key: false,
+    }
+}
+
+fn candidate(fx: &Fixture, mode: Mode, p: &SearchParams) -> SearchOutcome {
+    let position = fx.position();
+    search(
+        &OracleInput {
+            position: &position,
+            universe: &fx.universe,
+            pools: &fx.pools,
+            objective: &fx.universe,
+            feasibility: fx.feasibility,
+            mode,
+            epsilon: fx.epsilon,
+            off_pool_cost: None,
+            off_role_cost: None,
+        },
+        p,
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{}: candidate: {e}", fx.id))
+}
+
+fn oracle_at(fx: &Fixture, mode: Mode) -> Evaluation {
+    fx.evaluate_with(&fx.universe, mode)
+        .unwrap_or_else(|e| panic!("{}: oracle at {mode:?}: {e}", fx.id))
+}
+
+fn as_pairs(o: &SearchOutcome) -> Vec<(Action, f64)> {
+    o.ranked.iter().map(|r| (r.action, r.value)).collect()
+}
+
+fn oracle_pairs(e: &Evaluation) -> Vec<(Action, f64)> {
+    e.ranked.iter().map(|av| (av.action, av.value)).collect()
 }
 
 fn run(name: &str) {
@@ -109,6 +163,8 @@ fn run(name: &str) {
             feasibility: fx.feasibility,
             mode: fx.mode,
             epsilon: fx.epsilon,
+            off_pool_cost: None,
+            off_role_cost: None,
         })
         .unwrap_or_else(|e| panic!("{name}: swapped pair at slot {slot}: {e}"));
         assert_eq!(
@@ -124,6 +180,175 @@ fn run(name: &str) {
             "{name}: leaf count changed when the pair at slot {slot} was swapped"
         );
     }
+
+    // ---- slice 4: the candidate engine against the oracle (design § 6)
+    let position = fx.position();
+    let d_max = max_depth_for(&OracleInput {
+        position: &position,
+        universe: &fx.universe,
+        pools: &fx.pools,
+        objective: &fx.universe,
+        feasibility: fx.feasibility,
+        mode: fx.mode,
+        epsilon: fx.epsilon,
+        off_pool_cost: None,
+        off_role_cost: None,
+    });
+    let cand = candidate(&fx, fx.mode, &params(true, true, None));
+
+    // check 2 — the candidate's top action is in the oracle's top set (D6)
+    assert!(
+        eval.top_set.contains(&cand.ranked[0].action),
+        "\n{name}: check 2 FAILED — the engine's top action {} is not in the oracle's top set {:?}\n",
+        label(&fx.universe, cand.ranked[0].action),
+        labels(&fx.universe, &eval.top_set),
+    );
+
+    // root-exactness — the whole ranked list, values and order, equals the oracle's (R3)
+    assert_eq!(
+        as_pairs(&cand),
+        oracle_pairs(&eval),
+        "{name}: ranked list differs from the oracle"
+    );
+    assert_eq!(cand.top_set, eval.top_set, "{name}");
+    assert!(
+        !cand.partial && cand.depth == d_max,
+        "{name}: unbudgeted must complete depth {d_max}"
+    );
+
+    // every horizon — pruning soundness at equal h (D2 ii)
+    for d in 1..=d_max {
+        let at_d = candidate(&fx, Mode::Horizon(d), &params(true, true, None));
+        let oracle_d = oracle_at(&fx, Mode::Horizon(d));
+        assert_eq!(
+            as_pairs(&at_d),
+            oracle_pairs(&oracle_d),
+            "{name}: horizon {d}"
+        );
+    }
+
+    // switches — neither pruning nor the table changes an answer; both off walks the oracle's tree
+    for (prune, table) in [(true, false), (false, true), (false, false)] {
+        let c = candidate(&fx, fx.mode, &params(prune, table, None));
+        assert_eq!(
+            as_pairs(&c),
+            as_pairs(&cand),
+            "{name}: prune={prune} table={table}"
+        );
+        if !prune && !table {
+            assert_eq!(
+                c.nodes, eval.nodes,
+                "{name}: plain search must visit the oracle's nodes"
+            );
+            assert_eq!(
+                c.leaves, eval.leaves,
+                "{name}: plain search must evaluate the oracle's leaves"
+            );
+        }
+    }
+
+    // principal continuation replays to its own value (R8)
+    for r in &cand.ranked {
+        let mut pos = position.apply(r.action);
+        for a in &r.continuation {
+            pos = pos.apply(*a);
+        }
+        let leaf = Leaf {
+            blue: pos.picks(Side::Blue),
+            red: pos.picks(Side::Red),
+            blue_feasible: r.ends.blue_feasible,
+            red_feasible: r.ends.red_feasible,
+        };
+        assert_eq!(
+            fx.universe.value(&leaf),
+            r.value,
+            "{name}: {}",
+            label(&fx.universe, r.action)
+        );
+        if r.ends.kind == LeafKind::DryPool {
+            assert!(r.continuation.len() < d_max, "{name}");
+        } else {
+            assert_eq!(
+                r.continuation.len(),
+                d_max - 1,
+                "{name}: {}",
+                label(&fx.universe, r.action)
+            );
+        }
+    }
+
+    // budget property (R6, R7) — every fixture, deterministic
+    let cut = candidate(
+        &fx,
+        fx.mode,
+        &params(true, true, Some(cand.nodes_total - 1)),
+    );
+    assert!(
+        cut.partial && cut.depth == d_max - 1,
+        "{name}: one node short returns depth {}",
+        d_max - 1
+    );
+    assert_eq!(
+        as_pairs(&cut),
+        oracle_pairs(&oracle_at(&fx, Mode::Horizon(d_max - 1))),
+        "{name}: cut depth is exact"
+    );
+    let whole = candidate(&fx, fx.mode, &params(true, true, Some(cand.nodes_total)));
+    assert!(
+        !whole.partial && as_pairs(&whole) == as_pairs(&cand),
+        "{name}: a budget of the control's total completes"
+    );
+
+    // S11 guard — (1) no top-set continuation ends with the MOVER's own side broken; (2) whether a top line
+    // breaks the opponent (a denial) must match what the fixture DECLARES (`top_line_denies`), so a pool edit
+    // that silently turns a tactic into an L-sized denial goes red; (3) the oracle's root value sits in the
+    // band the declaration names (|U| > L/2 iff a denial), independent of the search's `ends`.
+    for r in cand
+        .ranked
+        .iter()
+        .filter(|r| eval.top_set.contains(&r.action))
+    {
+        assert!(
+            !r.breaks_mover(cand.mover),
+            "{name}: top action {} ends with the mover's side broken (blue_feasible={} red_feasible={})",
+            label(&fx.universe, r.action),
+            r.ends.blue_feasible,
+            r.ends.red_feasible
+        );
+        let denies = !(r.ends.blue_feasible && r.ends.red_feasible);
+        assert_eq!(
+            denies,
+            fx.top_line_denies,
+            "{name}: top action {} — the fixture declares top_line_denies={}, the search found {} ({:?})",
+            label(&fx.universe, r.action),
+            fx.top_line_denies,
+            denies,
+            r.ends
+        );
+    }
+    // (3) the oracle's own root value must sit in the band the declaration names: the feasible band and a
+    // both-broken leaf have |U| ≤ Σ = (L − 1)/2 < L/2; a one-side denial has |U| ≥ L − Σ = (L + 1)/2 > L/2.
+    // Independent of the search's `ends`, so it is a second witness to (2), and it fails both ways.
+    let half_l = fx.universe.loss() / 2.0;
+    assert_eq!(
+        eval.value.abs() > half_l,
+        fx.top_line_denies,
+        "{name}: root value {} is {} L/2 = {} but the fixture declares top_line_denies={} — the tactic and its declaration disagree",
+        eval.value,
+        if eval.value.abs() > half_l { "above" } else { "within" },
+        half_l,
+        fx.top_line_denies
+    );
+
+    eprintln!(
+        "{name}: candidate depth {d_max}, {} leaves, {} nodes, {} cutoffs, {} table hits, {:.1} ms; plain {} nodes",
+        cand.leaves,
+        cand.nodes,
+        cand.cutoffs,
+        cand.table_hits,
+        cand.elapsed.as_secs_f64() * 1000.0,
+        eval.nodes,
+    );
 }
 
 #[test]
@@ -164,6 +389,11 @@ fn fixture_06b_ban_horizon() {
 #[test]
 fn fixture_07_slot6_bound() {
     run("07-slot6-bound");
+}
+
+#[test]
+fn fixture_07b_slot6_full_fan() {
+    run("07b-slot6-full-fan");
 }
 
 /// Three-way: the files on disk == the `FIXTURES` list == the `fixture_*` test functions in this
@@ -220,10 +450,79 @@ fn every_fixture_file_has_a_test() {
     );
 }
 
-/// D9: check 2 has no candidate engine until slice 4 lands the reference alpha-beta. This is a
-/// stub that reports so and can never pass — `cargo test -- --ignored` fails it on purpose.
+/// Snipe-key design § 3 test 5 (the gate half): under `On` / `Off` the off-pool term never rides the
+/// key, so the snipe-aware key changes nothing on any fixture — values, continuations and every count
+/// bit for bit, no child charged — and fixture 04 keeps its candidate counts (2500 nodes, 714
+/// cutoffs, 80 table hits).
 #[test]
-#[ignore = "check 2: no candidate engine yet (slice 4)"]
-fn check_2_candidate_top_action_in_oracle_top_set() {
-    panic!("check 2: no candidate engine yet (slice 4 wires the reference alpha-beta here)");
+fn the_snipe_key_is_inert_on_every_fixture() {
+    for name in FIXTURES {
+        let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let off = candidate(&fx, fx.mode, &params(true, true, None));
+        let on = candidate(
+            &fx,
+            fx.mode,
+            &SearchParams {
+                snipe_key: true,
+                ..params(true, true, None)
+            },
+        );
+        let view = |o: &SearchOutcome| {
+            (
+                o.ranked
+                    .iter()
+                    .map(|r| (r.action, r.value.to_bits(), r.continuation.clone()))
+                    .collect::<Vec<_>>(),
+                o.nodes,
+                o.leaves,
+                o.orderings,
+                o.cutoffs,
+                o.table_hits,
+                o.snipe_charged,
+            )
+        };
+        assert_eq!(view(&on), view(&off), "{name}");
+        assert_eq!(on.snipe_charged, 0, "{name}");
+        if name == "04-partner-protection" {
+            assert_eq!((on.nodes, on.cutoffs, on.table_hits), (2500, 714, 80));
+        }
+    }
+}
+
+/// technique_vacuous_gate: a search that never prunes, or a table that never hits, passes every equality above.
+#[test]
+fn pruning_is_not_vacuous() {
+    for name in ["04-partner-protection", "06a-ban-truncated"] {
+        let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let c = candidate(&fx, fx.mode, &params(true, false, None));
+        let e = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
+        assert!(c.cutoffs > 0, "{name}: no cutoff fired");
+        assert!(
+            c.nodes < e.nodes,
+            "{name}: {} candidate nodes vs {} oracle nodes",
+            c.nodes,
+            e.nodes
+        );
+    }
+}
+
+#[test]
+fn table_is_not_vacuous() {
+    for name in ["06a-ban-truncated", "06b-ban-horizon"] {
+        let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let c = candidate(&fx, fx.mode, &params(true, true, None));
+        let without = candidate(&fx, fx.mode, &params(true, false, None));
+        // cumulative over the search: the per-iteration count on 06b is 1 and sits in the last iteration by luck
+        // (measured 2026-09-14: 06a 19 per-iteration / 06a+06b totals well above; 06b 1 per-iteration, 2 total)
+        assert!(c.table_hits_total > 0, "{name}: the table never hit");
+        assert!(
+            c.nodes < without.nodes,
+            "{name}: the table hit but saved nothing ({} vs {})",
+            c.nodes,
+            without.nodes
+        );
+    }
 }

@@ -14,6 +14,13 @@
  *   pickRate/banRate/winRate — defaults to 0 (no source available yet)
  *   positions      — copied verbatim from champions.json (refreshed by
  *                    refresh-champion-positions.mjs; provenance carried into sources.positions)
+ *   positionShares — copied verbatim when champions.json carries it (the refresh writes all five
+ *                    roles' play shares; the engines weight and grade a role by its share over
+ *                    the largest). Measured data: an override cannot touch it
+ *                    (champion-positions/overrides.mjs).
+ *   playable       — copied verbatim when champions.json carries it (the refresh writes the
+ *                    engine's legality set: the listed roles plus every role above a pick-count
+ *                    floor — champion-role-shares design § 4.1). Overrides may only widen it.
  *
  * Usage: node scripts/compile-champion-meta.mjs [--champions PATH] [--out PATH]
  */
@@ -25,6 +32,8 @@ import { dirname, join } from "path";
 import { writeJson, normalize } from "./lib/fetch-utils.mjs";
 import { assertChampionRows } from "./champion-positions/invariants.mjs";
 import { formatPositionsSource } from "./champion-positions/derive.mjs";
+import { applyOverrides } from "./champion-positions/overrides.mjs";
+import { formatWinRateReport, shareWeightedWinRate } from "./champion-positions/winrate.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -218,24 +227,6 @@ function clamp(n, min = 0, max = 1) {
   return Math.min(max, Math.max(min, n));
 }
 
-/**
- * Deep merge override fields onto a champion entry.
- * Only specified fields are overridden. Skips keys starting with "_".
- */
-function applyOverrides(champion, overrides) {
-  if (!overrides) return champion;
-  const result = { ...champion };
-  for (const [key, value] of Object.entries(overrides)) {
-    if (key.startsWith("_")) continue;
-    if (typeof value === "object" && !Array.isArray(value) && value !== null) {
-      result[key] = { ...result[key], ...value };
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {
@@ -275,18 +266,17 @@ async function main() {
       winratesByNorm.set(normalize(alias), byRole);
     }
   }
+  // winRate (champion-role-shares D5): the share-weighted mean over the roles u.gg has data for,
+  // today's rule (the first listed position with data, else any) when the covered share mass is
+  // under 0.5 or the row has no shares. The previous compile at --out, when there is one, gives
+  // the report its per-champion diff.
+  const previousCompile = existsSync(values.out) ? readJson(values.out).champions ?? {} : {};
+  const winRateRows = [];
   const lookupWinrate = (canonical) => {
-    if (!winratesByNorm.size) return 0;
     const byRole = winratesByNorm.get(normalize(canonical.id));
-    if (!byRole) return 0;
-    // Prefer the champion's declared positions in order. Falls back to any
-    // role with data so off-meta picks still get a non-zero number.
-    for (const pos of canonical.positions ?? []) {
-      const entry = byRole[pos];
-      if (entry) return entry.wr;
-    }
-    const fallback = Object.values(byRole)[0];
-    return fallback?.wr ?? 0;
+    const result = shareWeightedWinRate(byRole, canonical.positions, canonical.positionShares);
+    winRateRows.push({ id: canonical.id, ...result, previous: previousCompile[canonical.id]?.winRate });
+    return result.winRate;
   };
 
   // Build lookup maps by normalized name
@@ -314,6 +304,8 @@ async function main() {
       id: canonical.id,
       name: canonical.name,
       positions: canonical.positions,
+      ...(canonical.positionShares !== undefined ? { positionShares: canonical.positionShares } : {}),
+      ...(canonical.playable !== undefined ? { playable: canonical.playable } : {}),
       damageProfile: deriveDamageProfile(meraki),
       scalingProfile: deriveScalingProfile(meraki),
       ccProfile: deriveCcProfile(canonical.id, ccMapping, meraki),
@@ -360,6 +352,7 @@ async function main() {
   console.log(`  positions source: ${formatPositionsSource(positionsSource)}${positionsSource ? "" : " — run refresh-champion-positions.mjs"}`);
 
   console.log(`\n  Compiled: ${Object.keys(champions).length} champions`);
+  for (const line of formatWinRateReport(winRateRows)) console.log(`  ${line}`);
   if (warnings.length > 0) {
     console.log("  Warnings:");
     for (const w of warnings) console.log(`    - ${w}`);

@@ -10,6 +10,13 @@ pub const ROLES: [Role; 5] = [
     Role::Support,
 ];
 
+/// Every role starts at 0.01 — a floor ABOVE the factor's ε / max_share (at
+/// most 0.0026 on the 16.19 table), so a never-played role reads 0.01 here as
+/// it did under the category factors; a listed secondary reads its share ratio
+/// (0.19 / 0.28 / 0.46 at the 16.19 quartiles, against a flat 0.4 before —
+/// champion-role-shares design § 6), and coverage is a per-role MAX, so a flex
+/// champion covers two roles at once (Pantheon alone: TOP 1.0 and SUPPORT 0.96).
+///
 /// Per-role maximum `position_factor` across all picks. Index order
 /// matches `ROLES`: TOP, JG, MID, ADC, SUP. A pick missing from `meta`
 /// contributes nothing (treated as not-listed across all roles).
@@ -21,7 +28,7 @@ pub fn per_role_max_factors(
     for (idx, role) in ROLES.iter().enumerate() {
         for pick in picks {
             if let Some(m) = meta.get(pick) {
-                let f = position_factor(*role, &m.positions);
+                let f = position_factor(*role, m);
                 if f > maxes[idx] {
                     maxes[idx] = f;
                 }
@@ -69,10 +76,13 @@ pub fn coverage_marginal_gain(
 /// strictly below `threshold`. Order matches `ROLES`.
 ///
 /// Threshold guidance:
-/// - `0.9`: a role is "missing" unless some champion has it as primary
-///   (recommended for Pick2 pair seeding — secondary fallbacks shouldn't
-///   stop us from forcing a primary specialist into the search)
-/// - `0.4`: a role is "missing" only if no champion has it anywhere
+/// - `0.9`: a role is "missing" unless some champion plays it within 10% of
+///   its own best role (its share ratio ≥ 0.9 — the continuous analogue of
+///   "has it as primary"; recommended for Pick2 pair seeding, so a secondary
+///   fallback does not stop us forcing a specialist into the search). The
+///   step stays: Ekko JUNGLE 0.909 counts, Quinn TOP 0.890 does not.
+/// - `0.4`: a role is "missing" only if no champion plays it at 40% of its
+///   best (no caller today)
 pub fn missing_roles(
     picks: &[String],
     meta: &HashMap<String, ChampionMeta>,

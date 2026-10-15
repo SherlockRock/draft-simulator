@@ -1,0 +1,88 @@
+{
+  "id": "2026-09-27-smoke-1-blue-first-pick",
+  "category": "counter-pick",
+  "notes": "SMOKE. Healthy pools. Blue (Rourke pool) first pick at slot 6 after Blue bans Azir/Vi/Aatrox and Red bans Viktor/Jhin/Kindred. Sanity: is the top pick a sensible first pick from the pool?",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-09-27"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Azir"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Viktor"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Vi"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Jhin"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Aatrox"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Kindred"
+    }
+  ],
+  "pools": {
+    "blue": [
+      "Jhin",
+      "MissFortune",
+      "Sivir",
+      "Varus",
+      "Yasuo",
+      "Viktor",
+      "Syndra",
+      "Taliyah",
+      "Garen",
+      "Jax",
+      "Nasus",
+      "Udyr",
+      "JarvanIV",
+      "Kindred",
+      "Volibear",
+      "Alistar",
+      "Amumu",
+      "Bard",
+      "Shen",
+      "Rakan"
+    ],
+    "red": [
+      "Jinx",
+      "Kaisa",
+      "Azir",
+      "Sylas",
+      "Aatrox",
+      "KSante",
+      "Renekton",
+      "Vi",
+      "MonkeyKing",
+      "Nautilus",
+      "Rakan"
+    ]
+  },
+  "our_side": "Blue",
+  "review": "2026-09-27 user: Bard first pick is 'somewhat' sensible; margins 0.003-0.012 are close enough that the order is fine."
+}

@@ -152,11 +152,16 @@ def q3_champion_coverage(df, id_to_alias, meta):
 def q4_role_quality(long, id_to_alias, meta):
     section("Q4 — Riot teamPosition vs engine champion-meta positions")
     def cls(row):
-        positions = meta.get(id_to_alias.get(row.champion, ""), {}).get("positions", [])
+        entry = meta.get(id_to_alias.get(row.champion, ""), {})
+        positions = entry.get("positions", [])
         p = META_POS[row.position]
         if not positions:
             return "no-meta"
-        if positions[0] == p:
+        # "primary" = the LARGEST SHARE's role when the table carries shares (no weight reads
+        # positions[0] since champion-role-shares slice B); positions[0] on a table without them.
+        shares = entry.get("positionShares") or {}
+        primary = max(shares, key=shares.get) if shares else positions[0]
+        if primary == p:
             return "primary"
         if p in positions:
             return "secondary"

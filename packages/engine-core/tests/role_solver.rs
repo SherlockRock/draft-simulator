@@ -154,3 +154,215 @@ fn solve_six_or_more_returns_empty() {
     let result = solve(&champs, &HashMap::new());
     assert!(result.is_empty());
 }
+
+// --- champion-role-shares slice B (design § 6, D8 / U3): the factor is the share ratio ----------
+
+use engine_core::role_solver::{position_factor, RoleAssignment, SHARE_EPSILON};
+
+/// A champion with five shares aligned with `ROLES` (Top, Jungle, Middle, Adc, Support).
+fn shared(id: &str, positions: Vec<Role>, shares: [f64; 5]) -> ChampionMeta {
+    ChampionMeta {
+        id: id.into(),
+        positions,
+        position_shares: shares.to_vec(),
+        ..Default::default()
+    }
+}
+
+/// The index into `ROLES` of the role `id` is seated in.
+fn seat(a: &RoleAssignment, id: &str) -> usize {
+    [&a.top, &a.jungle, &a.middle, &a.adc, &a.support]
+        .iter()
+        .position(|s| s.as_str() == id)
+        .expect("every champion is seated")
+}
+
+#[test]
+fn the_factor_is_the_share_over_the_largest_share_floored_at_epsilon_for_every_role() {
+    // Pantheon on 16.19: TOP 0.392 / SUPPORT 0.376 (the near-tie that flipped a primary), JUNGLE
+    // 0.1, MIDDLE 0.05, BOTTOM 0 — listed TOP and SUPPORT. One max, one division (the TypeScript
+    // port computes it in the same order, so the parity snapshots agree bit for bit).
+    let p = shared(
+        "Pantheon",
+        vec![Role::Top, Role::Support],
+        [0.392, 0.1, 0.05, 0.0, 0.376],
+    );
+    assert_eq!(SHARE_EPSILON, 0.001);
+    assert_eq!(position_factor(Role::Top, &p), 1.0);
+    assert_eq!(
+        position_factor(Role::Support, &p),
+        0.376_f64.max(SHARE_EPSILON) / 0.392
+    );
+    assert_eq!(
+        position_factor(Role::Jungle, &p),
+        0.1_f64.max(SHARE_EPSILON) / 0.392
+    );
+    // An UNLISTED role reads its ratio too, never a category: MIDDLE at 5% weighs 0.128 ...
+    assert_eq!(
+        position_factor(Role::Middle, &p),
+        0.05_f64.max(SHARE_EPSILON) / 0.392
+    );
+    // ... and a never-played role weighs ε / max — a quarter of today's 0.01 here, never 0.
+    assert_eq!(position_factor(Role::Adc, &p), SHARE_EPSILON / 0.392);
+    assert!(position_factor(Role::Adc, &p) > 0.0);
+}
+
+#[test]
+fn the_denominator_is_the_largest_share_not_the_first_listed_position() {
+    // An override may reorder `positions` (design § 4.1): SUPPORT listed first, TOP's share larger.
+    // The factor still peaks at 1.0 — at TOP — and never exceeds it anywhere.
+    let p = shared(
+        "Pantheon",
+        vec![Role::Support, Role::Top],
+        [0.392, 0.1, 0.05, 0.0, 0.376],
+    );
+    assert_eq!(position_factor(Role::Top, &p), 1.0);
+    assert_eq!(
+        position_factor(Role::Support, &p),
+        0.376_f64.max(SHARE_EPSILON) / 0.392
+    );
+    for role in [
+        Role::Top,
+        Role::Jungle,
+        Role::Middle,
+        Role::Adc,
+        Role::Support,
+    ] {
+        assert!(position_factor(role, &p) <= 1.0, "{role:?} exceeds 1.0");
+    }
+}
+
+#[test]
+fn shares_unknown_reads_the_category_factors() {
+    // A hand row, a file from before the shares, a test literal: 1.0 / 0.4 / 0.01 over the positions.
+    let m = champ("Yone", Role::Middle, Some(Role::Top));
+    assert_eq!(position_factor(Role::Middle, &m), 1.0);
+    assert_eq!(position_factor(Role::Top, &m), 0.4);
+    assert_eq!(position_factor(Role::Adc, &m), 0.01);
+    // The loaders refuse an all-zero row (design § 4.1); a literal that carries one still reads the
+    // categories rather than dividing by zero.
+    let zero = shared("Zero", vec![Role::Middle], [0.0; 5]);
+    assert_eq!(position_factor(Role::Middle, &zero), 1.0);
+    assert_eq!(position_factor(Role::Top, &zero), 0.01);
+}
+
+#[test]
+fn two_pure_marksmen_still_normalise_and_the_top_assignment_is_the_first_enumerated() {
+    // Both share 1.0 at ADC and 0 elsewhere: every assignment seats one of them off-role at ε, so
+    // without the floor every weight would be 0 and `solve` would hand back an unnormalised zero
+    // vector. With it the total is positive and the maximum — one at ADC, the other anywhere at
+    // ε — is first reached, in enumeration order, by Jinx TOP + Ashe ADC; eight assignments tie.
+    let mut m = HashMap::new();
+    m.insert(
+        "Jinx".to_string(),
+        shared("Jinx", vec![Role::Adc], [0.0, 0.0, 0.0, 1.0, 0.0]),
+    );
+    m.insert(
+        "Ashe".to_string(),
+        shared("Ashe", vec![Role::Adc], [0.0, 0.0, 0.0, 1.0, 0.0]),
+    );
+    let assignments = solve(&["Jinx", "Ashe"], &m);
+    let total: f64 = assignments.iter().map(|a| a.weight).sum();
+    assert!(
+        (total - 1.0).abs() < 1e-12,
+        "weights must normalise, total {total}"
+    );
+    let top = assignments.iter().fold(&assignments[0], |best, a| {
+        if a.weight > best.weight {
+            a
+        } else {
+            best
+        }
+    });
+    assert_eq!(
+        (top.assignment.top.as_str(), top.assignment.adc.as_str()),
+        ("Jinx", "Ashe")
+    );
+    assert_eq!(
+        assignments
+            .iter()
+            .filter(|a| a.weight == top.weight)
+            .count(),
+        8
+    );
+}
+
+#[test]
+fn raw_shares_and_ratios_give_the_same_normalised_weights() {
+    // D8: a champion's denominator is the same in every assignment of a team, so it cancels under
+    // normalisation — the ratio form changes nothing in the solver (it changes coverage and the
+    // 0.9 injection threshold, which read the factor unnormalised).
+    let rows: [(&str, Vec<Role>, [f64; 5]); 3] = [
+        (
+            "Pantheon",
+            vec![Role::Top, Role::Support],
+            [0.392, 0.1, 0.05, 0.0, 0.376],
+        ),
+        (
+            "Sylas",
+            vec![Role::Middle, Role::Top],
+            [0.3, 0.02, 0.6, 0.001, 0.079],
+        ),
+        (
+            "Ashe",
+            vec![Role::Adc, Role::Support],
+            [0.001, 0.0, 0.005, 0.8, 0.194],
+        ),
+    ];
+    let m: HashMap<String, ChampionMeta> = rows
+        .iter()
+        .map(|(id, p, s)| (id.to_string(), shared(id, p.clone(), *s)))
+        .collect();
+    let ids = ["Pantheon", "Sylas", "Ashe"];
+    let assignments = solve(&ids, &m);
+    assert_eq!(assignments.len(), 60);
+    let raw: Vec<f64> = assignments
+        .iter()
+        .map(|a| {
+            ids.iter()
+                .map(|id| m[*id].position_shares[seat(&a.assignment, id)].max(SHARE_EPSILON))
+                .product()
+        })
+        .collect();
+    let total: f64 = raw.iter().sum();
+    for (a, r) in assignments.iter().zip(&raw) {
+        assert!(
+            (a.weight - r / total).abs() < 1e-12,
+            "{:?}: {} vs {}",
+            a.assignment,
+            a.weight,
+            r / total
+        );
+    }
+}
+
+#[test]
+fn a_shares_unknown_champion_beside_known_ones_keeps_its_category_factors() {
+    // The one hand row on a team of shared champions weighs 1.0 / 0.4 / 0.01 while the others weigh
+    // their ratios — its unlisted roles sit at ten times ε (named and accepted, design § 6).
+    let mut m = HashMap::new();
+    m.insert(
+        "Sylas".to_string(),
+        shared(
+            "Sylas",
+            vec![Role::Middle, Role::Top],
+            [0.3, 0.02, 0.6, 0.001, 0.079],
+        ),
+    );
+    m.insert("Newcomer".to_string(), champ("Newcomer", Role::Adc, None));
+    let assignments = solve(&["Sylas", "Newcomer"], &m);
+    let weight = |top: &str, mid: &str, adc: &str| {
+        assignments
+            .iter()
+            .find(|a| {
+                a.assignment.top == top && a.assignment.middle == mid && a.assignment.adc == adc
+            })
+            .expect("enumerated")
+            .weight
+    };
+    // Sylas MID + Newcomer ADC: 1.0 · 1.0; Sylas TOP + Newcomer ADC: 0.5 · 1.0;
+    // Sylas MID + Newcomer TOP: 1.0 · 0.01.
+    let base = weight("", "Sylas", "Newcomer");
+    assert!((weight("Sylas", "", "Newcomer") / base - 0.3 / 0.6).abs() < 1e-12);
+    assert!((weight("Newcomer", "Sylas", "") / base - 0.01).abs() < 1e-12);
+}

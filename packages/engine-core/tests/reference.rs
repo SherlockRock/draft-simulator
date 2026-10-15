@@ -4,6 +4,7 @@
 
 use engine_core::draft_state::{ActionType, Side, TURN_SEQUENCE};
 use engine_core::reference::format::{Format, Kind, Turn, STANDARD_TURNS};
+use engine_core::reference::node::{classify, ClassifyError, LeafKind, NodeKind};
 
 // ------------------------------------------------------------------ format
 
@@ -156,13 +157,56 @@ fn universe_interns_ids_and_stores_symmetric_and_antisymmetric_tables() {
         "the reverse direction is the negation"
     );
     assert_eq!(u.counter(a, a), 0.0);
-    // L = 1 + Σ|lin| + Σ|syn| + Σ|ctr| = 1 + 3.5 + 3 + 4
-    assert_eq!(u.loss(), 11.5);
+    // L = 1 + 2·(Σ|lin| + Σ|syn| + Σ|ctr|) = 1 + 2·(3.5 + 3 + 4)   (slice-4 R1)
+    assert_eq!(u.loss(), 22.0);
     assert_eq!(u.all().len(), 3);
     let meta = u.champion_meta();
     assert_eq!(meta["B"].positions, vec![Role::Jungle, Role::Top]);
     assert_eq!(meta["B"].id, "B");
     assert_eq!(u.names(&[c, a]), vec!["C".to_string(), "A".to_string()]);
+}
+
+/// champion-role-shares design § 4.2 hop 8 (U2): a champion's `playable` builds its own mask beside
+/// the positions-only meta map — `is_playable` reads it; `champion_meta()`, the string predicates'
+/// input for list-form sides, stays the positions; absent, the playable mask IS the positions. A
+/// `playable` that lacks a listed position is refused by name (the fallback assumes the subset).
+#[test]
+fn playable_masks_follow_the_champions_playable_and_the_meta_map_stays_positions_only() {
+    let spec = |champions: &str| -> engine_core::reference::universe::UniverseSpec {
+        serde_json::from_str(&format!(r#"{{"champions": [{champions}]}}"#)).expect("parses")
+    };
+    let u = Universe::new(spec(
+        r#"{"id": "A", "positions": ["Top"], "linear": 0, "playable": ["Top", "Middle"]},
+           {"id": "B", "positions": ["Jungle"], "linear": 0}"#,
+    ))
+    .expect("valid");
+    let (a, b) = (u.index("A").unwrap(), u.index("B").unwrap());
+    assert!(u.is_playable(a, Role::Top));
+    assert!(u.is_playable(a, Role::Middle), "playable but unlisted");
+    assert!(!u.is_playable(a, Role::Jungle));
+    assert!(u.is_playable(b, Role::Jungle));
+    assert!(
+        !u.is_playable(b, Role::Top),
+        "absent playable = the positions"
+    );
+    assert_eq!(
+        u.champion_meta()["A"].positions,
+        vec![Role::Top],
+        "the meta map is positions-only (U2)"
+    );
+    assert!(u.champion_meta()["A"].playable.is_empty());
+    assert_eq!(
+        u.champion_meta()["A"].playable_roles(),
+        &[Role::Top],
+        "so the string predicates fall back to the positions"
+    );
+    assert_eq!(
+        Universe::new(spec(
+            r#"{"id": "A", "positions": ["Top"], "linear": 0, "playable": ["Middle"]}"#
+        ))
+        .err(),
+        Some(UniverseError::Playable("A".into()))
+    );
 }
 
 #[test]
@@ -208,6 +252,19 @@ fn universe_rejects_bad_tables() {
 }
 
 #[test]
+fn universe_rejects_parameters_whose_l_overflows() {
+    // Each champion's linear term is f64::MAX — finite on its own — but Sigma = Sigma|lin| sums two of
+    // them, overflowing to +inf before loss = 1 + 2*Sigma is computed (R1).
+    let huge = TINY
+        .replace(r#""linear": 2"#, &format!(r#""linear": {:e}"#, f64::MAX))
+        .replace(r#""linear": 1}"#, &format!(r#""linear": {:e}}}"#, f64::MAX));
+    assert!(matches!(
+        Universe::new(spec(&huge)),
+        Err(UniverseError::NonFinite(_))
+    ));
+}
+
+#[test]
 fn champion_set_is_a_bitmask() {
     let (a, b, c) = (ChampionIdx(0), ChampionIdx(5), ChampionIdx(31));
     let s = ChampionSet::EMPTY.with(a).with(c);
@@ -247,9 +304,14 @@ fn board_value_is_the_d3_formula() {
 }
 
 #[test]
-fn terminal_rule_orders_infeasibility_above_any_logit() {
+fn leaf_rule_is_additive_and_l_separates_the_bands() {
+    // R1: U = board − L·[Blue infeasible] + L·[Red infeasible]; both infeasible → the board.
     let u = Universe::new(spec(TINY)).expect("valid");
-    let (a, b) = (u.index("A").unwrap(), u.index("B").unwrap());
+    let (a, b, c) = (
+        u.index("A").unwrap(),
+        u.index("B").unwrap(),
+        u.index("C").unwrap(),
+    );
     let (blue, red) = ([a], [b]);
     let leaf = |bf, rf| Leaf {
         blue: &blue,
@@ -257,19 +319,58 @@ fn terminal_rule_orders_infeasibility_above_any_logit() {
         blue_feasible: bf,
         red_feasible: rf,
     };
-    assert_eq!(u.value(&leaf(true, true)), u.board_value(&[a], &[b]));
+    let board = u.board_value(&[a], &[b]);
+    assert_eq!(u.value(&leaf(true, true)), board);
     assert_eq!(
         u.value(&leaf(true, false)),
-        u.loss(),
-        "Red cannot complete → +L"
+        board + u.loss(),
+        "Red cannot complete → board + L"
     );
     assert_eq!(
         u.value(&leaf(false, true)),
-        -u.loss(),
-        "Blue cannot complete → −L"
+        board - u.loss(),
+        "Blue cannot complete → board − L"
     );
-    assert_eq!(u.value(&leaf(false, false)), 0.0, "neither can → 0");
-    assert!(u.loss() > u.board_value(&[a, b], &[]).abs());
+    assert_eq!(
+        u.value(&leaf(false, false)),
+        board,
+        "neither can → the board"
+    );
+
+    // Separation over EVERY board TINY can show (each of A, B, C on Blue, on Red, or absent):
+    // any Blue-infeasible leaf < any feasible leaf < any Red-infeasible leaf. This is why L doubled.
+    let all = [a, b, c];
+    let mut boards: Vec<(Vec<ChampionIdx>, Vec<ChampionIdx>)> = Vec::new();
+    for code in 0..27u32 {
+        let (mut bl, mut r) = (Vec::new(), Vec::new());
+        for (i, ch) in all.iter().enumerate() {
+            match (code / 3u32.pow(u32::try_from(i).expect("three champions index into u32"))) % 3 {
+                1 => bl.push(*ch),
+                2 => r.push(*ch),
+                _ => {}
+            }
+        }
+        boards.push((bl, r));
+    }
+    let values = |bf: bool, rf: bool| -> Vec<f64> {
+        boards
+            .iter()
+            .map(|(bl, r)| {
+                u.value(&Leaf {
+                    blue: bl,
+                    red: r,
+                    blue_feasible: bf,
+                    red_feasible: rf,
+                })
+            })
+            .collect()
+    };
+    let max = |v: &[f64]| v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let min = |v: &[f64]| v.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(max(&values(false, true)) < min(&values(true, true)));
+    assert!(max(&values(true, true)) < min(&values(true, false)));
+    assert!(max(&values(false, false)) < min(&values(true, false)));
+    assert!(max(&values(false, true)) < min(&values(false, false)));
 }
 
 use engine_core::reference::state::{Action, Entry, Pools, Position, PositionError};
@@ -321,6 +422,7 @@ fn legal_actions_follow_d4_d5_d8() {
     let pools = Pools {
         blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
         red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
     };
     let t1 = u.index("T1").unwrap();
 
@@ -379,6 +481,7 @@ fn position_validation_names_the_slot() {
     let pools = Pools {
         blue: ids(&u, &["T1", "J1", "M1", "A1", "S1"]),
         red: ids(&u, &["T2", "J2", "M2", "A2", "S2"]),
+        ..Pools::default()
     };
     let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
     let mut six = vec![Entry::Skip; 6];
@@ -423,7 +526,7 @@ fn position_validation_names_the_slot() {
     assert_eq!(full.mover(), Some(Side::Blue));
 }
 
-use engine_core::reference::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule};
+use engine_core::reference::feasibility::{side_feasible, FeasibilityMemo, FeasibilityRule, Price};
 
 // ------------------------------------------------------------------ feasibility
 
@@ -441,6 +544,7 @@ fn two_locked_top_only_champions_are_infeasible_even_with_a_full_pool() {
     let pools = Pools {
         blue: all,
         red: all,
+        ..Pools::default()
     };
     // explicit format: Blue picks twice, then three more Blue picks (five per side is what the predicate needs)
     let f = Format::explicit(vec![
@@ -478,7 +582,7 @@ fn two_locked_top_only_champions_are_infeasible_even_with_a_full_pool() {
         u.index("T2").unwrap(),
         u.index("J").unwrap(),
     );
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
 
     let two_tops =
         Position::new(&f, &[Entry::Pick(t1), Entry::Pick(t2)], &pools, &u).expect("position");
@@ -536,9 +640,10 @@ fn feasibility_memo_hits_on_repeated_keys() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let pos = Position::new(&f, &[], &pools, &u).expect("empty");
-    let mut memo = FeasibilityMemo::default();
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
     assert!(side_feasible(
         &mut memo,
         FeasibilityRule::On,
@@ -595,7 +700,7 @@ fn probes_dir() -> PathBuf {
 }
 
 #[test]
-fn load_dir_reads_the_eight_fixtures_in_name_order() {
+fn load_dir_reads_the_nine_fixtures_in_name_order() {
     let all = Fixture::load_dir(&fixtures_dir()).unwrap_or_else(|e| panic!("{e}"));
     let ids: Vec<&str> = all.iter().map(|f| f.id.as_str()).collect();
     assert_eq!(
@@ -609,13 +714,14 @@ fn load_dir_reads_the_eight_fixtures_in_name_order() {
             "06a-ban-truncated",
             "06b-ban-horizon",
             "07-slot6-bound",
+            "07b-slot6-full-fan",
         ]
     );
     assert_eq!(
         Fixture::load_dir(&probes_dir())
             .unwrap_or_else(|e| panic!("{e}"))
             .len(),
-        10
+        11
     );
 }
 
@@ -845,12 +951,38 @@ fn assert_dry_run(fx: &Fixture, eval: &Evaluation) {
     assert_eq!(eval.nodes, fx.dry_run.nodes, "{}: nodes", fx.id);
 }
 
-/// A strictly increasing map over the leaf value, applied after the terminal rule (D3 ii).
+/// A strictly increasing map over the leaf value, applied after the leaf rule (R1).
 struct Transformed<'a, F: Fn(f64) -> f64>(&'a Universe, F);
 
 impl<F: Fn(f64) -> f64> Objective for Transformed<'_, F> {
     fn value(&self, leaf: &Leaf<'_>) -> f64 {
         (self.1)(self.0.value(leaf))
+    }
+
+    /// Slice-5 U10: the map applies after the whole leaf rule, off-pool and grade terms and band
+    /// included.
+    #[allow(clippy::too_many_arguments)]
+    fn value_under(
+        &self,
+        leaf: &Leaf<'_>,
+        rule: FeasibilityRule,
+        off_pool_cost: f64,
+        off_role_cost: f64,
+        blue_off: usize,
+        red_off: usize,
+        blue_grade: usize,
+        red_grade: usize,
+    ) -> f64 {
+        (self.1)(self.0.value_under(
+            leaf,
+            rule,
+            off_pool_cost,
+            off_role_cost,
+            blue_off,
+            red_off,
+            blue_grade,
+            red_grade,
+        ))
     }
 }
 
@@ -977,31 +1109,36 @@ fn a_ban_that_removes_the_last_champion_for_a_role_is_worth_l() {
         eval.top_set,
         vec![Action::Ban(fx.universe.index("S1").unwrap())]
     );
-    assert_eq!(eval.value, fx.universe.loss());
+    // R1: L (47 for this universe) plus the board Red is left with after the play-out (−1) — measured 46.
+    assert_eq!(eval.value, 46.0);
+    assert_eq!(eval.value, fx.universe.loss() - 1.0);
     assert_dry_run(&fx, &eval);
 }
 
 #[test]
-fn mutual_infeasibility_ties_the_honest_line_at_zero() {
-    // design S11: both pools cover the universe and each role has two champions; Red at 0 can also
-    // reach 0 by taking both Middles or both Adcs (both sides infeasible → 0).
+fn mutual_infeasibility_no_longer_ties_the_honest_line() {
+    // S11's mover-side tie resolved (slice-4 R1; the residual is in R1's why): under "play on, additive leaf" a suicide pair lets Blue answer before the board is
+    // scored. Red M2+M3: Blue takes J1+S1 itself (T1 2 + 1 + 1 + syn 8 = 12) vs Red 7 → +5; A2+A3 symmetric → +5.
+    // Red's honest J1+S1 → Blue M2+A2, 10 vs 10 → 0, the unique top action.
     let fx = probe("probe-mutual-infeasibility");
     let eval = fx.evaluate().unwrap_or_else(|e| panic!("{e}"));
     let idx = |n: &str| fx.universe.index(n).unwrap();
-    let mut expected = vec![
-        Action::pair(idx("A2"), idx("A3")),
-        Action::pair(idx("J1"), idx("S1")),
-        Action::pair(idx("M2"), idx("M3")),
-    ];
-    expected.sort();
-    assert_eq!(eval.top_set, expected);
+    assert_eq!(eval.top_set, vec![Action::pair(idx("J1"), idx("S1"))]);
     assert_eq!(eval.value, 0.0);
+    let value_of = |a: Action| {
+        eval.ranked
+            .iter()
+            .find(|av| av.action == a)
+            .map(|av| av.value)
+    };
+    assert_eq!(value_of(Action::pair(idx("M2"), idx("M3"))), Some(5.0));
+    assert_eq!(value_of(Action::pair(idx("A2"), idx("A3"))), Some(5.0));
     assert_dry_run(&fx, &eval);
 }
 
 #[test]
 fn ranking_is_invariant_under_a_strictly_increasing_transform_including_terminals() {
-    // D3 ii: any transform applied to U must preserve terminal ordering. Fixture 05 has a −L branch.
+    // R1: any transform applied to U must preserve the band ordering. Fixture 05 has a board − L branch.
     for name in ["02-profitable-denial", "05-comp-breaking-pair"] {
         let fx = Fixture::load_file(&fixtures_dir().join(format!("{name}.json")))
             .unwrap_or_else(|e| panic!("{e}"));
@@ -1014,7 +1151,7 @@ fn ranking_is_invariant_under_a_strictly_increasing_transform_including_terminal
             .evaluate_with(&Transformed(&fx.universe, |x| x * x * x + x), fx.mode)
             .unwrap_or_else(|e| panic!("{e}"));
         // The hazard D3 ii names: a saturating map narrowing gaps toward an artificial tie. ε (1e-9) lives in the
-        // objective's output scale; x/(1+|x|) keeps every gap above 1e-4 at |x| ≤ 60, so ties stay exact and distinct stay distinct.
+        // objective's output scale; x/(1+|x|) keeps every gap above 1e-4 at |x| ≤ 80 (05's values reach board − L with L = 69), so ties stay exact and distinct stay distinct.
         let saturating = fx
             .evaluate_with(&Transformed(&fx.universe, |x| x / (1.0 + x.abs())), fx.mode)
             .unwrap_or_else(|e| panic!("{e}"));
@@ -1060,8 +1197,8 @@ fn hand_derived_root_values_independent_of_both_oracles() {
     );
     assert_eq!(
         value_of(&eval, Action::Pick(fx.universe.index("T3").unwrap())),
-        Some(-fx.universe.loss()),
-        "a fourth Top: Blue infeasible"
+        Some(8.0 - fx.universe.loss()),
+        "a fourth Top: Blue infeasible, board 8 after the play-out, minus L (73) = −65 (measured)"
     );
     // 02: ban S1 → boards tie at 0; any other ban → Red completes J1+S1 for +8 → −8
     let fx = load("02-profitable-denial");
@@ -1085,7 +1222,8 @@ fn hand_derived_root_values_independent_of_both_oracles() {
     );
     assert_eq!(
         value_of(&eval, Action::pair(idx("M3"), idx("M4"))),
-        Some(-fx.universe.loss())
+        Some(11.0 - fx.universe.loss()),
+        "three Middles: Blue infeasible, board 11 minus L (69) = −58 (measured)"
     );
 }
 
@@ -1096,6 +1234,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let pools = Pools {
         blue: u.all(),
         red: u.all(),
+        ..Pools::default()
     };
     let input = |position: &Position<'_>, mode| -> Result<Evaluation, OracleError> {
         evaluate(&OracleInput {
@@ -1106,6 +1245,8 @@ fn oracle_bounds_are_asserted_at_the_root() {
             feasibility: FeasibilityRule::Off,
             mode,
             epsilon: 1e-9,
+            off_pool_cost: None,
+            off_role_cost: None,
         })
     };
     let root = Position::new(&f, &[], &pools, &u).expect("empty");
@@ -1134,6 +1275,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let wide_pools = Pools {
         blue: wide.all(),
         red: wide.all(),
+        ..Pools::default()
     };
     let wide_root = Position::new(&f, &[], &wide_pools, &wide).expect("empty");
     let err = evaluate(&OracleInput {
@@ -1144,6 +1286,8 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::Horizon(1),
         epsilon: 1e-9,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
@@ -1175,6 +1319,8 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::DraftComplete));
@@ -1193,6 +1339,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let tiny_pools = Pools {
         blue: ChampionSet::EMPTY.with(t1),
         red: u.all(),
+        ..Pools::default()
     };
     let start = Position::new(&two, &[], &tiny_pools, &u).expect("empty");
     let err = evaluate(&OracleInput {
@@ -1203,6 +1350,8 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::Off,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(err, Some(OracleError::NoLegalAction { slot: 1 }));
@@ -1211,7 +1360,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
         input(&root, Mode::Horizon(0)).err(),
         Some(OracleError::HorizonZero)
     );
-    // an already-infeasible root is terminal, not a decision: fixture 02 with Blue's supports removed from its pool
+    // an already-infeasible root is not a decision (nothing to rank): fixture 02 with Blue's supports removed from its pool
     let fx = Fixture::load_file(&fixtures_dir().join("02-profitable-denial.json"))
         .unwrap_or_else(|e| panic!("{e}"));
     let (s4, s5) = (
@@ -1221,6 +1370,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let starved = Pools {
         blue: fx.pools.blue.without(s4).without(s5),
         red: fx.pools.red,
+        ..Pools::default()
     };
     let root02 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe).expect("position");
     let err = evaluate(&OracleInput {
@@ -1231,16 +1381,18 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::On,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
         err,
-        Some(OracleError::RootTerminal {
+        Some(OracleError::RootInfeasible {
             blue_feasible: false,
             red_feasible: true
         })
     );
-    // the terminal check precedes action generation at the root too: fixture 01's mid-pair root with Blue's
+    // root feasibility precedes action generation at the root: fixture 01's mid-pair root with Blue's
     // remaining options (S1, S2, T3) removed from its pool has no legal action AND is infeasible — infeasible wins
     let fx = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json"))
         .unwrap_or_else(|e| panic!("{e}"));
@@ -1248,6 +1400,7 @@ fn oracle_bounds_are_asserted_at_the_root() {
     let starved = Pools {
         blue: gone.iter().fold(fx.pools.blue, |p, c| p.without(*c)),
         red: fx.pools.red,
+        ..Pools::default()
     };
     let root01 = Position::new(&fx.format, &fx.entries, &starved, &fx.universe)
         .expect("board picks are still in the pool");
@@ -1259,11 +1412,13 @@ fn oracle_bounds_are_asserted_at_the_root() {
         feasibility: FeasibilityRule::On,
         mode: Mode::FullRemainder,
         epsilon: 1e-9,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .err();
     assert_eq!(
         err,
-        Some(OracleError::RootTerminal {
+        Some(OracleError::RootInfeasible {
             blue_feasible: false,
             red_feasible: true
         }),
@@ -1291,6 +1446,8 @@ fn swapping_both_completed_pairs_at_once_changes_nothing() {
         feasibility: fx.feasibility,
         mode: fx.mode,
         epsilon: fx.epsilon,
+        off_pool_cost: None,
+        off_role_cost: None,
     })
     .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
@@ -1313,4 +1470,305 @@ fn evaluation_ranks_best_first_for_the_mover_and_reports_counts() {
     // 2 Red picks + 2×3 Red bans + 8 Blue picks (banning the other Red champion leaves two Blue choices, banning B1 or B2 leaves one) = 16
     assert_eq!(eval.nodes, 16);
     assert_eq!(eval.leaves, 8);
+}
+
+// ------------------------------------------------------------------ node classification (slice 4, R2)
+
+/// Explicit `B pick, R pick`, feasibility off: two slots, so `turns_used`/`horizon` and draft completion are
+/// both reachable in a hand-built position.
+fn two_picks() -> Format {
+    Format::explicit(vec![
+        Turn {
+            side: Side::Blue,
+            kind: Kind::Pick,
+        },
+        Turn {
+            side: Side::Red,
+            kind: Kind::Pick,
+        },
+    ])
+}
+
+#[test]
+fn classify_orders_complete_before_horizon_before_dry_pool_before_interior() {
+    let u = ten();
+    let f = two_picks();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
+    let (t1, t2) = (u.index("T1").unwrap(), u.index("T2").unwrap());
+
+    // interior: the empty position, horizon not reached
+    let root = Position::new(&f, &[], &pools, &u).expect("empty");
+    match classify(
+        &root,
+        0,
+        Some(2),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Interior { slot, actions } => {
+            assert_eq!(slot.side, Side::Blue);
+            assert_eq!(actions.len(), 10);
+        }
+        NodeKind::Leaf(_) => panic!("the root is interior"),
+    }
+    // horizon reached: same position, turns_used == horizon
+    match classify(
+        &root,
+        2,
+        Some(2),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::Horizon);
+            assert!(
+                end.blue_feasible && end.red_feasible,
+                "feasibility off → both true"
+            );
+        }
+        NodeKind::Interior { .. } => panic!("turns_used == horizon is a leaf"),
+    }
+    // complete wins over horizon: both picks filled, turns_used past any horizon
+    let done =
+        Position::new(&f, &[Entry::Pick(t1), Entry::Pick(t2)], &pools, &u).expect("complete");
+    match classify(
+        &done,
+        5,
+        Some(1),
+        &u,
+        &pools,
+        FeasibilityRule::Off,
+        &mut memo,
+    )
+    .unwrap()
+    {
+        NodeKind::Leaf(end) => assert_eq!(end.kind, LeafKind::Complete),
+        NodeKind::Interior { .. } => panic!("a complete draft is a leaf"),
+    }
+    // full remainder (no horizon) at a position with turns left is interior
+    let one = Position::new(&f, &[Entry::Pick(t1)], &pools, &u).expect("one pick");
+    assert!(matches!(
+        classify(&one, 7, None, &u, &pools, FeasibilityRule::Off, &mut memo).unwrap(),
+        NodeKind::Interior { .. }
+    ));
+}
+
+#[test]
+fn classify_dry_pool_is_a_leaf_with_feasibility_on_and_an_error_with_it_off() {
+    let u = ten();
+    let f = Format::standard();
+    // Red's pool is only T1, which Blue takes at slot 6; at slot 7 (Red pair start) Red has nothing.
+    let t1 = u.index("T1").unwrap();
+    let pools = Pools {
+        blue: u.all(),
+        red: ChampionSet::EMPTY.with(t1),
+        ..Pools::default()
+    };
+    let entries = [
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Pick(t1),
+    ];
+    let pos = Position::new(&f, &entries, &pools, &u).expect("position");
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
+    match classify(&pos, 1, None, &u, &pools, FeasibilityRule::On, &mut memo).unwrap() {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::DryPool);
+            assert!(
+                !end.red_feasible,
+                "Red's pool net of the board is empty → count-infeasible"
+            );
+            assert!(end.blue_feasible);
+        }
+        NodeKind::Interior { .. } => {
+            panic!("an empty action list is a leaf when feasibility is on")
+        }
+    }
+    assert_eq!(
+        classify(&pos, 1, None, &u, &pools, FeasibilityRule::Off, &mut memo).err(),
+        Some(ClassifyError::NoLegalAction { slot: 7 })
+    );
+}
+
+#[test]
+fn classify_reads_feasibility_only_at_leaves() {
+    // Two top-only champions locked for Blue → Blue infeasible; the node is still INTERIOR (R1: never terminal).
+    let u = ten();
+    let f = Format::standard();
+    let (t1, t2, j1) = (
+        u.index("T1").unwrap(),
+        u.index("T2").unwrap(),
+        u.index("J1").unwrap(),
+    );
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    // Blue picks T1 at 6; Red pair J1 + T2 at 7–8 would take T2 — instead give Blue both Tops: Blue T1 at 6,
+    // Red J1 + M1 at 7–8, Blue T2 + M2 at 9–10 → Blue holds T1, T2 (two Tops): locked picks cannot match.
+    let (m1, m2) = (u.index("M1").unwrap(), u.index("M2").unwrap());
+    let entries = [
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Skip,
+        Entry::Pick(t1),
+        Entry::Pick(j1),
+        Entry::Pick(m1),
+        Entry::Pick(t2),
+        Entry::Pick(m2),
+    ];
+    let pos = Position::new(&f, &entries, &pools, &u).expect("position");
+    let mut memo = FeasibilityMemo::new(Price::ZERO);
+    let calls_before = memo.calls;
+    let kind = classify(&pos, 3, Some(6), &u, &pools, FeasibilityRule::On, &mut memo).unwrap();
+    assert!(
+        matches!(kind, NodeKind::Interior { .. }),
+        "infeasibility never terminates a node"
+    );
+    assert_eq!(
+        memo.calls, calls_before,
+        "no feasibility call at an interior node"
+    );
+    let kind = classify(&pos, 6, Some(6), &u, &pools, FeasibilityRule::On, &mut memo).unwrap();
+    match kind {
+        NodeKind::Leaf(end) => {
+            assert_eq!(end.kind, LeafKind::Horizon);
+            assert!(
+                !end.blue_feasible,
+                "two Tops locked: Blue's picks cannot match"
+            );
+            // ten() has exactly two Tops and Blue holds both, so Red cannot fill Top either — the flags are
+            // read at the leaf for BOTH sides, and both are false here.
+            assert!(!end.red_feasible, "no Top left for Red");
+        }
+        NodeKind::Interior { .. } => panic!("horizon leaf"),
+    }
+    assert_eq!(
+        memo.calls,
+        calls_before + 2,
+        "both sides checked once at the leaf"
+    );
+}
+
+#[test]
+fn fixture_file_rejects_unknown_fields() {
+    // R10: a typo in `epsilon` used to default silently.
+    let raw = std::fs::read_to_string(fixtures_dir().join("01-pair-completion.json")).unwrap();
+    let typo = raw.replace(r#""epsilon""#, r#""epsilonn""#);
+    assert!(typo != raw, "the fixture names epsilon");
+    let err = Fixture::from_json(&typo, "typo").expect_err("unknown field is an error");
+    let text = err.to_string();
+    assert!(text.contains("epsilonn"), "{text}");
+    assert!(matches!(err, FixtureError::Json { .. }));
+    // the slice-4 declaration: absent → false; the two denial probes say true
+    let fx = Fixture::load_file(&fixtures_dir().join("01-pair-completion.json")).unwrap();
+    assert!(!fx.top_line_denies);
+    assert!(probe("probe-dry-pool").top_line_denies);
+    assert!(probe("probe-ban-breaks-role").top_line_denies);
+}
+
+// `Entry` is already the state's entry type in this file (line 275); the table's entry gets an alias.
+use engine_core::reference::transposition::{Entry as TableEntry, Key, TranspositionTable};
+
+// ------------------------------------------------------------------ transposition table (slice 4, R5)
+
+#[test]
+fn transposition_key_is_the_board_and_the_remaining_horizon() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    let idx = |n: &str| u.index(n).unwrap();
+    // Blue bans T1 then Red bans J1 — and the other order: same slot, same sets → same key.
+    let a = Position::new(
+        &f,
+        &[Entry::Ban(idx("T1")), Entry::Ban(idx("J1"))],
+        &pools,
+        &u,
+    )
+    .unwrap();
+    let b = Position::new(
+        &f,
+        &[Entry::Ban(idx("J1")), Entry::Ban(idx("T1"))],
+        &pools,
+        &u,
+    )
+    .unwrap();
+    assert_eq!(Key::of(&a, 3), Key::of(&b, 3));
+    assert_ne!(
+        Key::of(&a, 3),
+        Key::of(&a, 2),
+        "a different remaining horizon is a different subgame"
+    );
+    // a pick and a ban of the same champion differ (the pick is on a side's set)
+    let skips = [Entry::Skip; 6];
+    let mut e1 = skips.to_vec();
+    e1.push(Entry::Pick(idx("T1")));
+    let picked = Position::new(&f, &e1, &pools, &u).unwrap();
+    let mut e2 = skips.to_vec();
+    e2.push(Entry::Pick(idx("T2")));
+    let other = Position::new(&f, &e2, &pools, &u).unwrap();
+    assert_ne!(Key::of(&picked, 1), Key::of(&other, 1));
+}
+
+#[test]
+fn transposition_table_stores_only_exact_values() {
+    let u = ten();
+    let f = Format::standard();
+    let pools = Pools {
+        blue: u.all(),
+        red: u.all(),
+        ..Pools::default()
+    };
+    let pos = Position::new(&f, &[], &pools, &u).unwrap();
+    let key = Key::of(&pos, 4);
+    let entry = || TableEntry {
+        value: 3.0,
+        continuation: vec![Action::Ban(u.index("T1").unwrap())],
+    };
+    let mut t = TranspositionTable::default();
+    // value equal to alpha0: a bound, not stored
+    assert!(!t.store_if_exact(key.clone(), entry(), 3.0, 10.0));
+    assert!(!t.store_if_exact(key.clone(), entry(), -10.0, 3.0));
+    assert_eq!(t.len(), 0);
+    assert!(t.get(&key).is_none());
+    assert_eq!(t.hits(), 0);
+    // strictly inside: stored
+    assert!(t.store_if_exact(key.clone(), entry(), 2.0, 4.0));
+    assert_eq!(t.len(), 1);
+    assert_eq!(t.get(&key).map(|e| e.value), Some(3.0));
+    assert_eq!(t.hits(), 1);
+    // a full window: a finite value is strictly inside (−∞, +∞), so the same rule stores it
+    let key2 = Key::of(&pos, 5);
+    assert!(t.store_if_exact(key2.clone(), entry(), f64::NEG_INFINITY, f64::INFINITY));
+    assert_eq!(t.len(), 2);
+    assert_eq!(t.get(&key2).map(|e| e.continuation.len()), Some(1));
+    assert_eq!(t.hits(), 2);
+    // a miss is not a hit
+    assert!(t.get(&Key::of(&pos, 6)).is_none());
+    assert_eq!(t.hits(), 2);
 }

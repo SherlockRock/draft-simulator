@@ -1,0 +1,17 @@
+{
+  "source": "dev DB Pools.champions, read 2026-10-01: 'Rourke' (Blue in the smoke fixtures) and 'Team Liquid Red Side - Spring 2026' (Red). The unions equal the smoke fixtures' list pools.",
+  "blue": {
+    "top": ["Garen", "Jax", "Nasus", "Udyr"],
+    "jungle": ["JarvanIV", "Jax", "Udyr", "Kindred", "Volibear"],
+    "mid": ["Viktor", "Syndra", "Taliyah", "Yasuo"],
+    "adc": ["Jhin", "MissFortune", "Sivir", "Varus", "Yasuo"],
+    "support": ["Alistar", "Amumu", "Bard", "Shen", "Rakan"]
+  },
+  "red": {
+    "top": ["Aatrox", "KSante", "Renekton"],
+    "jungle": ["Vi", "MonkeyKing"],
+    "mid": ["Azir", "Sylas"],
+    "adc": ["Jinx", "Kaisa"],
+    "support": ["Nautilus", "Rakan"]
+  }
+}

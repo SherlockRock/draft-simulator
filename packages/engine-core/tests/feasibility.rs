@@ -15,6 +15,42 @@ fn meta_with(positions: &[(&str, Vec<Role>)]) -> HashMap<String, ChampionMeta> {
     m
 }
 
+/// champion-role-shares design § 5.1: the prune's mask is the champion's `playable` set — the listed
+/// roles plus every role above the refresh's pick-count floor — and the positions when the meta has
+/// none. Jinx + Kai'Sa: both BOTTOM-only listed, Kai'Sa playable TOP (1.9% of 47,500 picks on 16.19),
+/// so two "ADCs" complete with three specialists; strip Kai'Sa's playable and they cannot (today's
+/// "cannot complete five roles" — the listed-roles mask was wrong one real draft in four).
+#[test]
+fn the_mask_is_the_playable_set_and_falls_back_to_the_positions() {
+    let mut meta = meta_with(&[
+        ("Jinx", vec![Role::Adc]),
+        ("Kaisa", vec![Role::Adc]),
+        ("LeeSin", vec![Role::Jungle]),
+        ("Ahri", vec![Role::Middle]),
+        ("Sona", vec![Role::Support]),
+    ]);
+    meta.get_mut("Kaisa").expect("Kaisa").playable = vec![Role::Top, Role::Adc];
+    let locked: Vec<String> = vec!["Jinx".into(), "Kaisa".into()];
+    let pool: Vec<String> = vec!["LeeSin".into(), "Ahri".into(), "Sona".into()];
+    assert!(
+        can_complete_roles(&locked, &pool, 3, &meta),
+        "Kai'Sa takes top, Jinx adc, the specialists the rest"
+    );
+    // A playable role must not come from the pool side either: the specialists stay specialists.
+    assert!(!can_complete_roles(&locked, &pool[..2], 3, &meta));
+    // Without the field the mask is the positions, and two bottom-only picks cannot complete.
+    meta.get_mut("Kaisa").expect("Kaisa").playable.clear();
+    assert!(!can_complete_roles(&locked, &pool, 3, &meta));
+    // A champion with playable set still completes a comp that needs it in a listed role.
+    meta.get_mut("Kaisa").expect("Kaisa").playable = vec![Role::Top, Role::Adc];
+    let one: Vec<String> = vec!["Kaisa".into()];
+    let four: Vec<String> = vec!["LeeSin".into(), "Ahri".into(), "Sona".into(), "Jinx".into()];
+    assert!(
+        can_complete_roles(&one, &four, 4, &meta),
+        "Kai'Sa top, Jinx adc"
+    );
+}
+
 #[test]
 fn empty_locked_with_5_pool_one_per_role_is_feasible() {
     let meta = meta_with(&[

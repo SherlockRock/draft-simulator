@@ -13,7 +13,8 @@ import pytest
 from augment import Augmenter, Masker, load_depth_distribution, PREFIX_SHARE
 from common import POSITIONS, ROOT
 from mask_table import TOTAL_TURNS, TURN_SEQUENCE, pattern_at
-from roles import position_factor_table
+# The NN training path keeps the category factors (champion-role-shares U1).
+from roles import legacy_position_factor_table
 
 TRAIN = ROOT / "data/training"
 pytestmark = pytest.mark.skipif(
@@ -30,7 +31,7 @@ def bits():
     prior = np.full((n, 5), 0.2, dtype=np.float32)
     for riot_id, e in rp.items():
         prior[vocab["riot_id_to_index"][riot_id]] = [e["roles"][p] for p in POSITIONS]
-    return n, position_factor_table(n, i2a, rp), prior
+    return n, legacy_position_factor_table(n, i2a, rp), prior
 
 
 def test_masker_uses_the_measured_depth_distribution():

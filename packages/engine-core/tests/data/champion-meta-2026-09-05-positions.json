@@ -1,0 +1,7219 @@
+{
+  "version": "16.13.1",
+  "patch": "16.13.1",
+  "compiledAt": "2026-10-06T18:59:38.355Z",
+  "sources": {
+    "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
+    "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
+    "positions": {
+      "kind": "corpus",
+      "patches": [
+        "16.15",
+        "16.16"
+      ],
+      "games": 300885,
+      "threshold": 0.1,
+      "generatedAt": "2026-10-06T18:59:02.601Z",
+      "feasibility": {
+        "sets": 34159,
+        "bothSides": 0.785
+      }
+    }
+  },
+  "champions": {
+    "Aatrox": {
+      "id": "Aatrox",
+      "name": "Aatrox",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.717,
+        "JUNGLE": 0.238
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "pull"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "sustained_damage",
+          "drain_tank"
+        ],
+        "synergy": [
+          "frontline",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4985
+    },
+    "Ahri": {
+      "id": "Ahri",
+      "name": "Ahri",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.929
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "charm"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "burst",
+          "mage"
+        ],
+        "synergy": [
+          "pick_threat",
+          "ap_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5082
+    },
+    "Akali": {
+      "id": "Akali",
+      "name": "Akali",
+      "positions": [
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.7,
+        "TOP": 0.273
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4999
+    },
+    "Akshan": {
+      "id": "Akshan",
+      "name": "Akshan",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.823
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.75,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.511
+    },
+    "Alistar": {
+      "id": "Alistar",
+      "name": "Alistar",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.994
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "knockback",
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.501
+    },
+    "Ambessa": {
+      "id": "Ambessa",
+      "name": "Ambessa",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.717,
+        "JUNGLE": 0.195
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4935
+    },
+    "Amumu": {
+      "id": "Amumu",
+      "name": "Amumu",
+      "positions": [
+        "SUPPORT",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.522,
+        "JUNGLE": 0.468
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "root"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "follow_up_cc",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5027
+    },
+    "Anivia": {
+      "id": "Anivia",
+      "name": "Anivia",
+      "positions": [
+        "MIDDLE",
+        "TOP",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.57,
+        "TOP": 0.272,
+        "SUPPORT": 0.108
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5129
+    },
+    "Annie": {
+      "id": "Annie",
+      "name": "Annie",
+      "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.772,
+        "SUPPORT": 0.114
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "ap_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5182
+    },
+    "Aphelios": {
+      "id": "Aphelios",
+      "name": "Aphelios",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.982
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4924
+    },
+    "Ashe": {
+      "id": "Ashe",
+      "name": "Ashe",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.931
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "marksman",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5187
+    },
+    "AurelionSol": {
+      "id": "AurelionSol",
+      "name": "Aurelion Sol",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.473,
+        "BOTTOM": 0.414
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5157
+    },
+    "Aurora": {
+      "id": "Aurora",
+      "name": "Aurora",
+      "positions": [
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.728,
+        "TOP": 0.227
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "burst",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4945
+    },
+    "Azir": {
+      "id": "Azir",
+      "name": "Azir",
+      "positions": [
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.863,
+        "TOP": 0.104
+      },
+      "damageProfile": {
+        "physical": 0.06,
+        "magic": 0.84,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4651
+    },
+    "Bard": {
+      "id": "Bard",
+      "name": "Bard",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.3
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5102
+    },
+    "Belveth": {
+      "id": "Belveth",
+      "name": "Bel'Veth",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.979
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.32,
+        "mid": 0.74,
+        "late": 0.85
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.521
+    },
+    "Blitzcrank": {
+      "id": "Blitzcrank",
+      "name": "Blitzcrank",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
+      "damageProfile": {
+        "physical": 0.68,
+        "magic": 0.22,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "pull",
+          "silence"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "enchanter",
+          "frontline",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "pick_threat",
+          "engage_initiator"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5023
+    },
+    "Brand": {
+      "id": "Brand",
+      "name": "Brand",
+      "positions": [
+        "BOTTOM",
+        "SUPPORT",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.356,
+        "SUPPORT": 0.344,
+        "MIDDLE": 0.164
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5292
+    },
+    "Braum": {
+      "id": "Braum",
+      "name": "Braum",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "warden",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "frontline",
+          "peel_support",
+          "disengage"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5082
+    },
+    "Briar": {
+      "id": "Briar",
+      "name": "Briar",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.886
+      },
+      "damageProfile": {
+        "physical": 0.72,
+        "magic": 0.18,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.3,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.507
+    },
+    "Caitlyn": {
+      "id": "Caitlyn",
+      "name": "Caitlyn",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.976
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4945
+    },
+    "Camille": {
+      "id": "Camille",
+      "name": "Camille",
+      "positions": [
+        "SUPPORT",
+        "TOP"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.706,
+        "TOP": 0.277
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "knockback"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": [
+          "pick_threat",
+          "splitpush",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4678
+    },
+    "Cassiopeia": {
+      "id": "Cassiopeia",
+      "name": "Cassiopeia",
+      "positions": [
+        "MIDDLE",
+        "TOP",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.599,
+        "TOP": 0.203,
+        "BOTTOM": 0.192
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "cc_heavy",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5016
+    },
+    "Chogath": {
+      "id": "Chogath",
+      "name": "Cho'Gath",
+      "positions": [
+        "TOP",
+        "MIDDLE",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.63,
+        "MIDDLE": 0.165,
+        "JUNGLE": 0.134
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "specialist",
+          "frontline",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.504
+    },
+    "Corki": {
+      "id": "Corki",
+      "name": "Corki",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.737,
+        "MIDDLE": 0.176
+      },
+      "damageProfile": {
+        "physical": 0.15,
+        "magic": 0.8,
+        "true": 0.05
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.86
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4892
+    },
+    "Darius": {
+      "id": "Darius",
+      "name": "Darius",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.845,
+        "JUNGLE": 0.134
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "pull",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": [
+          "frontline",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4945
+    },
+    "Diana": {
+      "id": "Diana",
+      "name": "Diana",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.498,
+        "JUNGLE": 0.464
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "pull",
+          "slow"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "ap_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5089
+    },
+    "DrMundo": {
+      "id": "DrMundo",
+      "name": "Dr. Mundo",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.829,
+        "JUNGLE": 0.108
+      },
+      "damageProfile": {
+        "physical": 0.7,
+        "magic": 0.2,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "slow"
+        ],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5015
+    },
+    "Draven": {
+      "id": "Draven",
+      "name": "Draven",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.923
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5009
+    },
+    "Ekko": {
+      "id": "Ekko",
+      "name": "Ekko",
+      "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.467,
+        "MIDDLE": 0.452
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5052
+    },
+    "Elise": {
+      "id": "Elise",
+      "name": "Elise",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.53,
+        "SUPPORT": 0.421
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5081
+    },
+    "Evelynn": {
+      "id": "Evelynn",
+      "name": "Evelynn",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.973
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "charm",
+          "slow"
+        ],
+        "engageQuality": 0.13,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5101
+    },
+    "Ezreal": {
+      "id": "Ezreal",
+      "name": "Ezreal",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.963
+      },
+      "damageProfile": {
+        "physical": 0.68,
+        "magic": 0.22,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4788
+    },
+    "Fiddlesticks": {
+      "id": "Fiddlesticks",
+      "name": "Fiddlesticks",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.693,
+        "SUPPORT": 0.168,
+        "TOP": 0.105
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "specialist",
+          "enchanter",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.512
+    },
+    "Fiora": {
+      "id": "Fiora",
+      "name": "Fiora",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.892
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": [
+          "splitpush",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5027
+    },
+    "Fizz": {
+      "id": "Fizz",
+      "name": "Fizz",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.78,
+        "JUNGLE": 0.144
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5081
+    },
+    "Galio": {
+      "id": "Galio",
+      "name": "Galio",
+      "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.766,
+        "SUPPORT": 0.18
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.23,
+        "mid": 0.75,
+        "late": 0.97
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "taunt"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "frontline",
+          "warden",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "follow_up_cc"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4943
+    },
+    "Gangplank": {
+      "id": "Gangplank",
+      "name": "Gangplank",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.878,
+        "MIDDLE": 0.112
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5055
+    },
+    "Garen": {
+      "id": "Garen",
+      "name": "Garen",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.868,
+        "MIDDLE": 0.121
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "sustained_damage"
+        ],
+        "synergy": [
+          "frontline",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5072
+    },
+    "Gnar": {
+      "id": "Gnar",
+      "name": "Gnar",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.987
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.32,
+        "mid": 0.74,
+        "late": 0.85
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "specialist",
+          "frontline",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4895
+    },
+    "Gragas": {
+      "id": "Gragas",
+      "name": "Gragas",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.663,
+        "JUNGLE": 0.129,
+        "MIDDLE": 0.124
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockback",
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "mage",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "disengage"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.494
+    },
+    "Graves": {
+      "id": "Graves",
+      "name": "Graves",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.98
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "marksman",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5008
+    },
+    "Gwen": {
+      "id": "Gwen",
+      "name": "Gwen",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.603,
+        "JUNGLE": 0.214,
+        "MIDDLE": 0.163
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4933
+    },
+    "Hecarim": {
+      "id": "Hecarim",
+      "name": "Hecarim",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.998
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "fear",
+          "knockback"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5026
+    },
+    "Heimerdinger": {
+      "id": "Heimerdinger",
+      "name": "Heimerdinger",
+      "positions": [
+        "TOP",
+        "BOTTOM",
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.529,
+        "BOTTOM": 0.189,
+        "MIDDLE": 0.165,
+        "SUPPORT": 0.101
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "specialist",
+          "enchanter",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4964
+    },
+    "Hwei": {
+      "id": "Hwei",
+      "name": "Hwei",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.595,
+        "BOTTOM": 0.337
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5042
+    },
+    "Illaoi": {
+      "id": "Illaoi",
+      "name": "Illaoi",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.943
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4971
+    },
+    "Irelia": {
+      "id": "Irelia",
+      "name": "Irelia",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.644,
+        "MIDDLE": 0.318
+      },
+      "damageProfile": {
+        "physical": 0.72,
+        "magic": 0.18,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": [
+          "splitpush",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5014
+    },
+    "Ivern": {
+      "id": "Ivern",
+      "name": "Ivern",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.837
+      },
+      "damageProfile": {
+        "physical": 0.08,
+        "magic": 0.83,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.27,
+        "peelQuality": 0.3
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5079
+    },
+    "Janna": {
+      "id": "Janna",
+      "name": "Janna",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.993
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.3
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5215
+    },
+    "JarvanIV": {
+      "id": "JarvanIV",
+      "name": "Jarvan IV",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.923
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5001
+    },
+    "Jax": {
+      "id": "Jax",
+      "name": "Jax",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.797,
+        "JUNGLE": 0.131
+      },
+      "damageProfile": {
+        "physical": 0.68,
+        "magic": 0.22,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": [
+          "splitpush",
+          "ad_threat",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4957
+    },
+    "Jayce": {
+      "id": "Jayce",
+      "name": "Jayce",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.61,
+        "JUNGLE": 0.228,
+        "MIDDLE": 0.126
+      },
+      "damageProfile": {
+        "physical": 0.7,
+        "magic": 0.2,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "bruiser",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4867
+    },
+    "Jhin": {
+      "id": "Jhin",
+      "name": "Jhin",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.963
+      },
+      "damageProfile": {
+        "physical": 0.84,
+        "magic": 0.06,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "mage",
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry",
+          "pick_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4915
+    },
+    "Jinx": {
+      "id": "Jinx",
+      "name": "Jinx",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.997
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5191
+    },
+    "KSante": {
+      "id": "KSante",
+      "name": "K'Sante",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.93
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockback",
+          "stun"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "skirmisher",
+          "frontline",
+          "warden"
+        ],
+        "synergy": [
+          "frontline",
+          "engage_initiator"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4713
+    },
+    "Kaisa": {
+      "id": "Kaisa",
+      "name": "Kai'Sa",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.971
+      },
+      "damageProfile": {
+        "physical": 0.1,
+        "magic": 0.8,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4832
+    },
+    "Kalista": {
+      "id": "Kalista",
+      "name": "Kalista",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.874
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4829
+    },
+    "Karma": {
+      "id": "Karma",
+      "name": "Karma",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.933
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": [
+          "shield_heal",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4982
+    },
+    "Karthus": {
+      "id": "Karthus",
+      "name": "Karthus",
+      "positions": [
+        "JUNGLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.472,
+        "BOTTOM": 0.401
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4921
+    },
+    "Kassadin": {
+      "id": "Kassadin",
+      "name": "Kassadin",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.93
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5028
+    },
+    "Katarina": {
+      "id": "Katarina",
+      "name": "Katarina",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.826,
+        "BOTTOM": 0.14
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5066
+    },
+    "Kayle": {
+      "id": "Kayle",
+      "name": "Kayle",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.68,
+        "MIDDLE": 0.269
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.18
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5278
+    },
+    "Kayn": {
+      "id": "Kayn",
+      "name": "Kayn",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.938
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4982
+    },
+    "Kennen": {
+      "id": "Kennen",
+      "name": "Kennen",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.793,
+        "MIDDLE": 0.153
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman",
+          "specialist"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "ap_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4999
+    },
+    "Khazix": {
+      "id": "Khazix",
+      "name": "Kha'Zix",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.991
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4911
+    },
+    "Kindred": {
+      "id": "Kindred",
+      "name": "Kindred",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.967
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5059
+    },
+    "Kled": {
+      "id": "Kled",
+      "name": "Kled",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.906
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "skirmisher",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5133
+    },
+    "KogMaw": {
+      "id": "KogMaw",
+      "name": "Kog'Maw",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.722,
+        "MIDDLE": 0.168
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5201
+    },
+    "Leblanc": {
+      "id": "Leblanc",
+      "name": "LeBlanc",
+      "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.766,
+        "SUPPORT": 0.179
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "burst",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4979
+    },
+    "LeeSin": {
+      "id": "LeeSin",
+      "name": "Lee Sin",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.962
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": [
+          "pick_threat",
+          "engage_initiator"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4988
+    },
+    "Leona": {
+      "id": "Leona",
+      "name": "Leona",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5054
+    },
+    "Lillia": {
+      "id": "Lillia",
+      "name": "Lillia",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.993
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "mage",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5013
+    },
+    "Lissandra": {
+      "id": "Lissandra",
+      "name": "Lissandra",
+      "positions": [
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.803,
+        "TOP": 0.119
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5157
+    },
+    "Locke": {
+      "id": "Locke",
+      "name": "Locke",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.739,
+        "JUNGLE": 0.126
+      },
+      "damageProfile": {
+        "physical": 0.5,
+        "magic": 0.4,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.5,
+        "mid": 0.5,
+        "late": 0.5
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0,
+        "peelQuality": 0
+      },
+      "tags": {
+        "archetype": [],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0
+    },
+    "Lucian": {
+      "id": "Lucian",
+      "name": "Lucian",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.954
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5003
+    },
+    "Lulu": {
+      "id": "Lulu",
+      "name": "Lulu",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.982
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "polymorph",
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "shield_heal",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5011
+    },
+    "Lux": {
+      "id": "Lux",
+      "name": "Lux",
+      "positions": [
+        "SUPPORT",
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.39,
+        "MIDDLE": 0.341,
+        "BOTTOM": 0.259
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4838
+    },
+    "Malphite": {
+      "id": "Malphite",
+      "name": "Malphite",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.819
+      },
+      "damageProfile": {
+        "physical": 0.08,
+        "magic": 0.83,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5094
+    },
+    "Malzahar": {
+      "id": "Malzahar",
+      "name": "Malzahar",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.842
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "battlemage",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5042
+    },
+    "Maokai": {
+      "id": "Maokai",
+      "name": "Maokai",
+      "positions": [
+        "SUPPORT",
+        "JUNGLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.595,
+        "JUNGLE": 0.22,
+        "TOP": 0.168
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5126
+    },
+    "MasterYi": {
+      "id": "MasterYi",
+      "name": "Master Yi",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.834
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5012
+    },
+    "Mel": {
+      "id": "Mel",
+      "name": "Mel",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.57,
+        "MIDDLE": 0.299,
+        "SUPPORT": 0.124
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4723
+    },
+    "Milio": {
+      "id": "Milio",
+      "name": "Milio",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5136
+    },
+    "MissFortune": {
+      "id": "MissFortune",
+      "name": "Miss Fortune",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.973
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5023
+    },
+    "Mordekaiser": {
+      "id": "Mordekaiser",
+      "name": "Mordekaiser",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.867
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "mage",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4965
+    },
+    "Morgana": {
+      "id": "Morgana",
+      "name": "Morgana",
+      "positions": [
+        "SUPPORT",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.742,
+        "JUNGLE": 0.106,
+        "MIDDLE": 0.102
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4962
+    },
+    "Naafiri": {
+      "id": "Naafiri",
+      "name": "Naafiri",
+      "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.741,
+        "MIDDLE": 0.181
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5082
+    },
+    "Nami": {
+      "id": "Nami",
+      "name": "Nami",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "shield_heal",
+          "peel_support",
+          "follow_up_cc"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.511
+    },
+    "Nasus": {
+      "id": "Nasus",
+      "name": "Nasus",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.583,
+        "JUNGLE": 0.204,
+        "MIDDLE": 0.194
+      },
+      "damageProfile": {
+        "physical": 0.7,
+        "magic": 0.2,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4992
+    },
+    "Nautilus": {
+      "id": "Nautilus",
+      "name": "Nautilus",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.986
+      },
+      "damageProfile": {
+        "physical": 0.06,
+        "magic": 0.84,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "stun",
+          "pull",
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "follow_up_cc"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5
+    },
+    "Neeko": {
+      "id": "Neeko",
+      "name": "Neeko",
+      "positions": [
+        "SUPPORT",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.706,
+        "MIDDLE": 0.152
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "catcher",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4828
+    },
+    "Nidalee": {
+      "id": "Nidalee",
+      "name": "Nidalee",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.914
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "mage",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5
+    },
+    "Nilah": {
+      "id": "Nilah",
+      "name": "Nilah",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.984
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5229
+    },
+    "Nocturne": {
+      "id": "Nocturne",
+      "name": "Nocturne",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.944
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.86
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5157
+    },
+    "Nunu": {
+      "id": "Nunu",
+      "name": "Nunu",
+      "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.789,
+        "MIDDLE": 0.154
+      },
+      "damageProfile": {
+        "physical": 0.08,
+        "magic": 0.83,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "frontline",
+          "vanguard"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5191
+    },
+    "Olaf": {
+      "id": "Olaf",
+      "name": "Olaf",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.816,
+        "JUNGLE": 0.115
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5178
+    },
+    "Orianna": {
+      "id": "Orianna",
+      "name": "Orianna",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.943
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "pull",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": [
+          "follow_up_cc",
+          "ap_threat",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4825
+    },
+    "Ornn": {
+      "id": "Ornn",
+      "name": "Ornn",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.923
+      },
+      "damageProfile": {
+        "physical": 0.72,
+        "magic": 0.18,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5181
+    },
+    "Pantheon": {
+      "id": "Pantheon",
+      "name": "Pantheon",
+      "positions": [
+        "SUPPORT",
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.519,
+        "TOP": 0.264,
+        "JUNGLE": 0.121
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4827
+    },
+    "Poppy": {
+      "id": "Poppy",
+      "name": "Poppy",
+      "positions": [
+        "SUPPORT",
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.695,
+        "TOP": 0.194,
+        "JUNGLE": 0.103
+      },
+      "damageProfile": {
+        "physical": 0.78,
+        "magic": 0.12,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockback",
+          "knockup",
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "warden"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5039
+    },
+    "Pyke": {
+      "id": "Pyke",
+      "name": "Pyke",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.991
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.32,
+        "mid": 0.74,
+        "late": 0.85
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.3,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "catcher",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.489
+    },
+    "Qiyana": {
+      "id": "Qiyana",
+      "name": "Qiyana",
+      "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.588,
+        "MIDDLE": 0.325
+      },
+      "damageProfile": {
+        "physical": 0.84,
+        "magic": 0.06,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4902
+    },
+    "Quinn": {
+      "id": "Quinn",
+      "name": "Quinn",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.424,
+        "JUNGLE": 0.397,
+        "MIDDLE": 0.133
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5117
+    },
+    "Rakan": {
+      "id": "Rakan",
+      "name": "Rakan",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.992
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "charm"
+        ],
+        "engageQuality": 0.3,
+        "peelQuality": 0.3
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "follow_up_cc",
+          "shield_heal"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4982
+    },
+    "Rammus": {
+      "id": "Rammus",
+      "name": "Rammus",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.751,
+        "SUPPORT": 0.187
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5181
+    },
+    "RekSai": {
+      "id": "RekSai",
+      "name": "Rek'Sai",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.903
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5283
+    },
+    "Rell": {
+      "id": "Rell",
+      "name": "Rell",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.998
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "pull",
+          "knockup"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "follow_up_cc"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5148
+    },
+    "Renata": {
+      "id": "Renata",
+      "name": "Renata Glasc",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.973
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5002
+    },
+    "Renekton": {
+      "id": "Renekton",
+      "name": "Renekton",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.937
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.74,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline"
+        ],
+        "synergy": [
+          "frontline",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4935
+    },
+    "Rengar": {
+      "id": "Rengar",
+      "name": "Rengar",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.856
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4857
+    },
+    "Riven": {
+      "id": "Riven",
+      "name": "Riven",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.622,
+        "MIDDLE": 0.271
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "knockback"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5077
+    },
+    "Rumble": {
+      "id": "Rumble",
+      "name": "Rumble",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.803,
+        "MIDDLE": 0.112
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "bruiser",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4872
+    },
+    "Ryze": {
+      "id": "Ryze",
+      "name": "Ryze",
+      "positions": [
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.785,
+        "TOP": 0.193
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "bruiser",
+          "mage",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4724
+    },
+    "Samira": {
+      "id": "Samira",
+      "name": "Samira",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.979
+      },
+      "damageProfile": {
+        "physical": 0.78,
+        "magic": 0.12,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5085
+    },
+    "Sejuani": {
+      "id": "Sejuani",
+      "name": "Sejuani",
+      "positions": [
+        "JUNGLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.674,
+        "TOP": 0.231
+      },
+      "damageProfile": {
+        "physical": 0.06,
+        "magic": 0.84,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "knockup",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "follow_up_cc"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5023
+    },
+    "Senna": {
+      "id": "Senna",
+      "name": "Senna",
+      "positions": [
+        "SUPPORT",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.748,
+        "BOTTOM": 0.24
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.43,
+        "mid": 0.72,
+        "late": 0.71
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "marksman",
+          "enchanter"
+        ],
+        "synergy": [
+          "adc",
+          "shield_heal"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4931
+    },
+    "Seraphine": {
+      "id": "Seraphine",
+      "name": "Seraphine",
+      "positions": [
+        "SUPPORT",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.593,
+        "BOTTOM": 0.374
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.26
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5122
+    },
+    "Sett": {
+      "id": "Sett",
+      "name": "Sett",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.884
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "knockup",
+          "pull",
+          "slow"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5
+    },
+    "Shaco": {
+      "id": "Shaco",
+      "name": "Shaco",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.714,
+        "SUPPORT": 0.265
+      },
+      "damageProfile": {
+        "physical": 0.72,
+        "magic": 0.18,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "assassin"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4972
+    },
+    "Shen": {
+      "id": "Shen",
+      "name": "Shen",
+      "positions": [
+        "SUPPORT",
+        "TOP"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.474,
+        "TOP": 0.474
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "taunt"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "frontline",
+          "warden"
+        ],
+        "synergy": [
+          "frontline",
+          "peel_support",
+          "engage_initiator"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.483
+    },
+    "Shyvana": {
+      "id": "Shyvana",
+      "name": "Shyvana",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.93
+      },
+      "damageProfile": {
+        "physical": 0.68,
+        "magic": 0.22,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.32,
+        "mid": 0.74,
+        "late": 0.85
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5021
+    },
+    "Singed": {
+      "id": "Singed",
+      "name": "Singed",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.768,
+        "MIDDLE": 0.136
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "specialist",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5159
+    },
+    "Sion": {
+      "id": "Sion",
+      "name": "Sion",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.698,
+        "MIDDLE": 0.18
+      },
+      "damageProfile": {
+        "physical": 0.78,
+        "magic": 0.12,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5023
+    },
+    "Sivir": {
+      "id": "Sivir",
+      "name": "Sivir",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.98
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.86
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5011
+    },
+    "Skarner": {
+      "id": "Skarner",
+      "name": "Skarner",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.641,
+        "SUPPORT": 0.252,
+        "TOP": 0.101
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.75,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "vanguard",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5045
+    },
+    "Smolder": {
+      "id": "Smolder",
+      "name": "Smolder",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.765,
+        "MIDDLE": 0.172
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5044
+    },
+    "Sona": {
+      "id": "Sona",
+      "name": "Sona",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.996
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "shield_heal",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5175
+    },
+    "Soraka": {
+      "id": "Soraka",
+      "name": "Soraka",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.972
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5157
+    },
+    "Swain": {
+      "id": "Swain",
+      "name": "Swain",
+      "positions": [
+        "BOTTOM",
+        "SUPPORT",
+        "MIDDLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.373,
+        "SUPPORT": 0.287,
+        "MIDDLE": 0.203,
+        "TOP": 0.137
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root",
+          "pull",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "enchanter",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5299
+    },
+    "Sylas": {
+      "id": "Sylas",
+      "name": "Sylas",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.433,
+        "JUNGLE": 0.364,
+        "SUPPORT": 0.108
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.23,
+        "mid": 0.75,
+        "late": 0.96
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "burst",
+          "mage",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4921
+    },
+    "Syndra": {
+      "id": "Syndra",
+      "name": "Syndra",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.603,
+        "BOTTOM": 0.369
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4971
+    },
+    "TahmKench": {
+      "id": "TahmKench",
+      "name": "Tahm Kench",
+      "positions": [
+        "SUPPORT",
+        "TOP",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.538,
+        "TOP": 0.317,
+        "BOTTOM": 0.124
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "suppress",
+          "slow"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "warden",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4966
+    },
+    "Taliyah": {
+      "id": "Taliyah",
+      "name": "Taliyah",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.477,
+        "JUNGLE": 0.34,
+        "BOTTOM": 0.13
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.75,
+        "late": 0.94
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4847
+    },
+    "Talon": {
+      "id": "Talon",
+      "name": "Talon",
+      "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.725,
+        "MIDDLE": 0.26
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5008
+    },
+    "Taric": {
+      "id": "Taric",
+      "name": "Taric",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.963
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "enchanter",
+          "frontline",
+          "warden"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5293
+    },
+    "Teemo": {
+      "id": "Teemo",
+      "name": "Teemo",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.788,
+        "JUNGLE": 0.107
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "marksman",
+          "specialist"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.505
+    },
+    "Thresh": {
+      "id": "Thresh",
+      "name": "Thresh",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.997
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.51,
+        "mid": 0.71,
+        "late": 0.61
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "pull",
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.3
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "enchanter",
+          "frontline"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "pick_threat",
+          "peel_support"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.512
+    },
+    "Tristana": {
+      "id": "Tristana",
+      "name": "Tristana",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.771,
+        "MIDDLE": 0.186
+      },
+      "damageProfile": {
+        "physical": 0.7,
+        "magic": 0.2,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.32,
+        "mid": 0.74,
+        "late": 0.86
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": [
+          "adc",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5046
+    },
+    "Trundle": {
+      "id": "Trundle",
+      "name": "Trundle",
+      "positions": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.568,
+        "JUNGLE": 0.279,
+        "SUPPORT": 0.129
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.14
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4882
+    },
+    "Tryndamere": {
+      "id": "Tryndamere",
+      "name": "Tryndamere",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.808,
+        "MIDDLE": 0.158
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4991
+    },
+    "TwistedFate": {
+      "id": "TwistedFate",
+      "name": "Twisted Fate",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.864
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.515
+    },
+    "Twitch": {
+      "id": "Twitch",
+      "name": "Twitch",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.861
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5074
+    },
+    "Udyr": {
+      "id": "Udyr",
+      "name": "Udyr",
+      "positions": [
+        "JUNGLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.711,
+        "TOP": 0.253
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5122
+    },
+    "Urgot": {
+      "id": "Urgot",
+      "name": "Urgot",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.95
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5163
+    },
+    "Varus": {
+      "id": "Varus",
+      "name": "Varus",
+      "positions": [
+        "BOTTOM",
+        "TOP"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.594,
+        "TOP": 0.354
+      },
+      "damageProfile": {
+        "physical": 0.68,
+        "magic": 0.22,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "root"
+        ],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4767
+    },
+    "Vayne": {
+      "id": "Vayne",
+      "name": "Vayne",
+      "positions": [
+        "TOP",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.568,
+        "BOTTOM": 0.384
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.88
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5033
+    },
+    "Veigar": {
+      "id": "Veigar",
+      "name": "Veigar",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.509,
+        "BOTTOM": 0.404
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.508
+    },
+    "Velkoz": {
+      "id": "Velkoz",
+      "name": "Vel'Koz",
+      "positions": [
+        "SUPPORT",
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.395,
+        "BOTTOM": 0.34,
+        "MIDDLE": 0.218
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5005
+    },
+    "Vex": {
+      "id": "Vex",
+      "name": "Vex",
+      "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.881
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5147
+    },
+    "Vi": {
+      "id": "Vi",
+      "name": "Vi",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.925
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.75,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "knockback"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "diver",
+          "bruiser"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "pick_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4915
+    },
+    "Viego": {
+      "id": "Viego",
+      "name": "Viego",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.904
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4888
+    },
+    "Viktor": {
+      "id": "Viktor",
+      "name": "Viktor",
+      "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.562,
+        "BOTTOM": 0.41
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "mage",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5027
+    },
+    "Vladimir": {
+      "id": "Vladimir",
+      "name": "Vladimir",
+      "positions": [
+        "MIDDLE",
+        "TOP",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.523,
+        "TOP": 0.261,
+        "BOTTOM": 0.215
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.1,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "battlemage",
+          "bruiser",
+          "mage",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5031
+    },
+    "Volibear": {
+      "id": "Volibear",
+      "name": "Volibear",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.706,
+        "JUNGLE": 0.267
+      },
+      "damageProfile": {
+        "physical": 0.78,
+        "magic": 0.12,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.25,
+        "mid": 0.74,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "stun",
+          "slow"
+        ],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline"
+        ],
+        "synergy": [
+          "frontline",
+          "engage_initiator"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.491
+    },
+    "Warwick": {
+      "id": "Warwick",
+      "name": "Warwick",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.485,
+        "JUNGLE": 0.473
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline",
+          "drain_tank"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5112
+    },
+    "MonkeyKing": {
+      "id": "MonkeyKing",
+      "name": "Wukong",
+      "positions": [
+        "JUNGLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.846,
+        "TOP": 0.128
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.75,
+        "late": 0.93
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4983
+    },
+    "Xayah": {
+      "id": "Xayah",
+      "name": "Xayah",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.988
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5123
+    },
+    "Xerath": {
+      "id": "Xerath",
+      "name": "Xerath",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.525,
+        "MIDDLE": 0.353,
+        "SUPPORT": 0.119
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5179
+    },
+    "XinZhao": {
+      "id": "XinZhao",
+      "name": "Xin Zhao",
+      "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.885
+      },
+      "damageProfile": {
+        "physical": 0.84,
+        "magic": 0.06,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "diver",
+          "bruiser",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5054
+    },
+    "Yasuo": {
+      "id": "Yasuo",
+      "name": "Yasuo",
+      "positions": [
+        "MIDDLE",
+        "TOP",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.535,
+        "TOP": 0.242,
+        "BOTTOM": 0.22
+      },
+      "damageProfile": {
+        "physical": 0.8,
+        "magic": 0.1,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": [
+          "follow_up_cc",
+          "ad_threat",
+          "backline_carry"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4895
+    },
+    "Yone": {
+      "id": "Yone",
+      "name": "Yone",
+      "positions": [
+        "TOP",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.491,
+        "MIDDLE": 0.46
+      },
+      "damageProfile": {
+        "physical": 0.9,
+        "magic": 0,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.3,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "knockback"
+        ],
+        "engageQuality": 0.23,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "assassin",
+          "bruiser",
+          "skirmisher"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "ad_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4898
+    },
+    "Yorick": {
+      "id": "Yorick",
+      "name": "Yorick",
+      "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.953
+      },
+      "damageProfile": {
+        "physical": 0.75,
+        "magic": 0.15,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.24,
+        "mid": 0.75,
+        "late": 0.95
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.17,
+        "peelQuality": 0.2
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "juggernaut",
+          "frontline"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4933
+    },
+    "Yunara": {
+      "id": "Yunara",
+      "name": "Yunara",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.992
+      },
+      "damageProfile": {
+        "physical": 0.6,
+        "magic": 0.3,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.13,
+        "peelQuality": 0.06
+      },
+      "tags": {
+        "archetype": [
+          "marksman",
+          "sustained_damage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4861
+    },
+    "Yuumi": {
+      "id": "Yuumi",
+      "name": "Yuumi",
+      "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.999
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.28,
+        "mid": 0.74,
+        "late": 0.9
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.18
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4893
+    },
+    "Zaahen": {
+      "id": "Zaahen",
+      "name": "Zaahen",
+      "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.81,
+        "JUNGLE": 0.139
+      },
+      "damageProfile": {
+        "physical": 0.5,
+        "magic": 0.4,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.5,
+        "mid": 0.5,
+        "late": 0.5
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0,
+        "peelQuality": 0
+      },
+      "tags": {
+        "archetype": [],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4968
+    },
+    "Zac": {
+      "id": "Zac",
+      "name": "Zac",
+      "positions": [
+        "JUNGLE",
+        "TOP"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.687,
+        "TOP": 0.158
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "knockback",
+          "slow"
+        ],
+        "engageQuality": 0.27,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "bruiser",
+          "frontline",
+          "vanguard",
+          "drain_tank"
+        ],
+        "synergy": [
+          "engage_initiator",
+          "frontline"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4996
+    },
+    "Zed": {
+      "id": "Zed",
+      "name": "Zed",
+      "positions": [
+        "MIDDLE",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.715,
+        "JUNGLE": 0.154
+      },
+      "damageProfile": {
+        "physical": 0.83,
+        "magic": 0.08,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.16,
+        "peelQuality": 0.1
+      },
+      "tags": {
+        "archetype": [
+          "assassin"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.4978
+    },
+    "Zeri": {
+      "id": "Zeri",
+      "name": "Zeri",
+      "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.947
+      },
+      "damageProfile": {
+        "physical": 0.7,
+        "magic": 0.2,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.31,
+        "mid": 0.74,
+        "late": 0.87
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.23,
+        "peelQuality": 0.12
+      },
+      "tags": {
+        "archetype": [
+          "marksman"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5016
+    },
+    "Ziggs": {
+      "id": "Ziggs",
+      "name": "Ziggs",
+      "positions": [
+        "BOTTOM",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "BOTTOM": 0.89,
+        "MIDDLE": 0.102
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.26,
+        "mid": 0.74,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "artillery",
+          "mage"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.508
+    },
+    "Zilean": {
+      "id": "Zilean",
+      "name": "Zilean",
+      "positions": [
+        "SUPPORT",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "SUPPORT": 0.775,
+        "MIDDLE": 0.117
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.74,
+        "late": 0.91
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.24
+      },
+      "tags": {
+        "archetype": [
+          "mage",
+          "specialist",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5197
+    },
+    "Zoe": {
+      "id": "Zoe",
+      "name": "Zoe",
+      "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "MIDDLE": 0.711,
+        "SUPPORT": 0.205
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.27,
+        "mid": 0.75,
+        "late": 0.92
+      },
+      "ccProfile": {
+        "hasCc": false,
+        "ccTypes": [],
+        "engageQuality": 0.2,
+        "peelQuality": 0.16
+      },
+      "tags": {
+        "archetype": [
+          "burst",
+          "mage",
+          "enchanter"
+        ],
+        "synergy": []
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.508
+    },
+    "Zyra": {
+      "id": "Zyra",
+      "name": "Zyra",
+      "positions": [
+        "JUNGLE",
+        "SUPPORT",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "JUNGLE": 0.448,
+        "SUPPORT": 0.38,
+        "BOTTOM": 0.13
+      },
+      "damageProfile": {
+        "physical": 0,
+        "magic": 0.9,
+        "true": 0.1
+      },
+      "scalingProfile": {
+        "early": 0.29,
+        "mid": 0.74,
+        "late": 0.89
+      },
+      "ccProfile": {
+        "hasCc": true,
+        "ccTypes": [
+          "knockup",
+          "root",
+          "slow"
+        ],
+        "engageQuality": 0.24,
+        "peelQuality": 0.22
+      },
+      "tags": {
+        "archetype": [
+          "catcher",
+          "mage",
+          "enchanter",
+          "cc_heavy"
+        ],
+        "synergy": [
+          "disengage",
+          "ap_threat"
+        ]
+      },
+      "blindability": 0.5,
+      "pickRate": 0,
+      "banRate": 0,
+      "winRate": 0.5113
+    }
+  }
+}

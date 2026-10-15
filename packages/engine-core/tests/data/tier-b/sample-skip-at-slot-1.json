@@ -1,0 +1,26 @@
+{
+  "id": "sample-skip-at-slot-1",
+  "category": "pro-replay",
+  "notes": "Loader sample: a forfeited Red ban at slot 1 recorded as a skip (D5), no pools (a pro replay: the whole roster on both sides). Blue ban root at slot 2.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-09-26"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Aatrox"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "skip"
+    }
+  ],
+  "our_side": "Blue",
+  "review": ""
+}

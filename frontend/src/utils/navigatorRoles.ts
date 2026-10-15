@@ -3,16 +3,31 @@ import type {
     NavigatorRoleAssignment,
     NavigatorWeightedAssignment
 } from "../contexts/NavigatorContext";
-import { ROLES, getChampionRoles } from "./championRoles";
+import {
+    ROLES,
+    getChampionPlayable,
+    getChampionRoles,
+    getChampionShares
+} from "./championRoles";
 
 // Frontend port of packages/engine-core/src/role_solver.rs (`solve`,
-// `position_factor`) and feasibility.rs (perfect matching over LISTED roles).
-// The three constants MUST equal PRIMARY_FACTOR / SECONDARY_FACTOR /
-// NON_LISTED_FACTOR in role_solver.rs. navigatorRoles.test.ts pins this port
-// against persisted engine output, so a change on either side fails loudly.
-export const PRIMARY_FACTOR = 1.0;
-export const SECONDARY_FACTOR = 0.4;
-export const NON_LISTED_FACTOR = 0.01;
+// `position_factor`) and feasibility.rs (perfect matching over the PLAYABLE
+// roles — champion-role-shares design § 5; the listed roles on a table without
+// `playable`). navigatorRoles.test.ts (the 2026-09-05 table, no shares) and
+// navigatorRoles.shares.test.ts (the 2026-10-10 table) pin this port against
+// persisted engine output, so a change on either side fails loudly.
+
+/** role_solver.rs SHARE_EPSILON: the floor under a share before the ratio
+ *  (champion-role-shares D8 / U3) — a never-played role still weighs something,
+ *  so the total stays positive and exact ties resolve in enumeration order. */
+export const SHARE_EPSILON = 0.001;
+
+// role_solver.rs's category factors, read only when the table carries no shares
+// for the champion (a table from before the field, a hand row): the first listed
+// position 1.0, another listed position 0.4, anything else 0.01.
+const PRIMARY_FACTOR = 1.0;
+const SECONDARY_FACTOR = 0.4;
+const NON_LISTED_FACTOR = 0.01;
 
 export const ROLE_SHORT_LABELS: Record<Role, string> = {
     top: "Top",
@@ -30,10 +45,30 @@ const ASSIGNMENT_KEY: Record<Role, keyof NavigatorRoleAssignment> = {
     support: "SUPPORT"
 };
 
-export function positionFactor(role: Role, positions: readonly Role[]): number {
+function categoryFactor(role: Role, positions: readonly Role[]): number {
     if (positions[0] === role) return PRIMARY_FACTOR;
     if (positions.includes(role)) return SECONDARY_FACTOR;
     return NON_LISTED_FACTOR;
+}
+
+/** role_solver.rs `position_factor` (champion-role-shares design § 6): with the
+ *  shares known, `max(share, ε) / max(shares)` for EVERY role — the ratio to the
+ *  champion's largest share, never to the first listed position's — as one max
+ *  then one division, the engine's operation order, so the two agree bit for
+ *  bit; with no shares (or all zero), the category factors over the listed
+ *  positions. */
+export function positionFactor(role: Role, championId: string): number {
+    const shares = getChampionShares(championId);
+    if (shares === null) return categoryFactor(role, getChampionRoles(championId));
+    const maxShare = Math.max(
+        shares.top,
+        shares.jungle,
+        shares.mid,
+        shares.adc,
+        shares.support
+    );
+    if (!(maxShare > 0)) return categoryFactor(role, getChampionRoles(championId));
+    return Math.max(shares[role], SHARE_EPSILON) / maxShare;
 }
 
 /** role_solver.rs `permute_choose`: ordered k-selections of `items`, items in
@@ -62,13 +97,17 @@ function emptyAssignment(): NavigatorRoleAssignment {
 
 /** role_solver.rs `solve`: every P(5, n) ordered role selection for n champions,
  *  weight = ∏ positionFactor, normalised to sum 1. `[]` for 0 or > 5 champions.
- *  An unknown champion id has no listed positions (every role 0.01); the engine
- *  would panic there, the frontend degrades. */
+ *  An unknown champion id has no shares and no listed positions (every role
+ *  0.01); the engine would panic there, the frontend degrades. The factors are
+ *  read once per champion and role (a pure function of the table — the same
+ *  values the engine recomputes per seat). */
 export function solveRoles(
     championIds: readonly string[]
 ): NavigatorWeightedAssignment[] {
     if (championIds.length === 0 || championIds.length > 5) return [];
-    const positions = championIds.map((id) => getChampionRoles(id));
+    const factors = championIds.map((id) =>
+        ROLES.map((role) => positionFactor(role, id))
+    );
     const perms: number[][] = [];
     permuteChoose([0, 1, 2, 3, 4], championIds.length, [], perms);
     const weighted = perms.map((perm) => {
@@ -76,7 +115,7 @@ export function solveRoles(
         const assignment = emptyAssignment();
         perm.forEach((roleIdx, champIdx) => {
             const role = ROLES[roleIdx];
-            weight *= positionFactor(role, positions[champIdx]);
+            weight *= factors[champIdx][roleIdx];
             assignment[ASSIGNMENT_KEY[role]] = championIds[champIdx];
         });
         return { assignment, weight };
@@ -118,10 +157,12 @@ export function roleOf(
     return null;
 }
 
-/** Every injective assignment of the picks to LISTED roles, in pick order.
- *  Non-empty ⇔ feasibility.rs's perfect matching over `position_factor >= 0.4`
- *  exists (the 0.01 never counts — memory project_navigator_role_parity_taxonomy). */
-export function listedAssignments(championIds: readonly string[]): Role[][] {
+/** Every injective assignment of the picks to PLAYABLE roles, in pick order
+ *  (each champion's roles in its playable order, the earlier pick varying
+ *  slowest). Non-empty ⇔ feasibility.rs's perfect matching over
+ *  `champion_role_mask` (the playable set) exists — the prune's "can this side
+ *  complete five roles", mirrored (champion-role-shares design § 5.1–5.2). */
+export function playableAssignments(championIds: readonly string[]): Role[][] {
     if (championIds.length > 5) return [];
     const out: Role[][] = [];
     const current: Role[] = [];
@@ -131,7 +172,7 @@ export function listedAssignments(championIds: readonly string[]): Role[][] {
             out.push([...current]);
             return;
         }
-        for (const role of getChampionRoles(championIds[i])) {
+        for (const role of getChampionPlayable(championIds[i])) {
             if (used.has(role)) continue;
             used.add(role);
             current.push(role);
@@ -145,19 +186,32 @@ export function listedAssignments(championIds: readonly string[]): Role[][] {
 }
 
 export interface RoleGap {
+    /** A playable assignment exists (the prune's answer). */
     feasible: boolean;
-    /** Open in EVERY listed assignment. */
+    /** Open in EVERY maximally listed playable assignment. */
     must: Role[];
-    /** Open in SOME listed assignment, not all. */
+    /** Open in SOME maximally listed playable assignment, not all. */
     maybe: Role[];
 }
 
+/** Design D9: `feasible` follows the playable set; `must` / `maybe` are read over
+ *  the playable assignments that seat the MOST picks in their listed roles
+ *  (RA2's "most in-role" rule applied to the gap). When a fully listed assignment
+ *  exists this is exactly today's listed-only strip ("Red needs Sup" survives);
+ *  when none does — Jinx + Kai'Sa, listed-infeasible but playable-feasible — it
+ *  names the real hole instead of "cannot complete five roles" (today) or "all
+ *  five covered" (the naive build over every playable assignment). */
 export function roleGap(championIds: readonly string[]): RoleGap {
-    const all = listedAssignments(championIds);
+    const all = playableAssignments(championIds);
     if (all.length === 0) return { feasible: false, must: [], maybe: [] };
-    const must = ROLES.filter((role) => all.every((a) => !a.includes(role)));
+    const listed = championIds.map((id) => getChampionRoles(id));
+    const listedCount = (assignment: readonly Role[]): number =>
+        assignment.filter((role, i) => listed[i].includes(role)).length;
+    const best = Math.max(...all.map(listedCount));
+    const maximal = all.filter((assignment) => listedCount(assignment) === best);
+    const must = ROLES.filter((role) => maximal.every((a) => !a.includes(role)));
     const maybe = ROLES.filter(
-        (role) => !must.includes(role) && all.some((a) => !a.includes(role))
+        (role) => !must.includes(role) && maximal.some((a) => !a.includes(role))
     );
     return { feasible: true, must, maybe };
 }
@@ -242,7 +296,7 @@ export function formatRoleGap(gap: RoleGap, pickCount: number): string {
     return parts.length === 0 ? "all five covered" : parts.join(" + ");
 }
 
-/** Design § 4 `<reason>`: the first side whose picks fail the listed-roles
+/** Design § 4 `<reason>`: the first side whose picks fail the playable-roles
  *  feasibility check, named with its picks; otherwise the search-pool hint.
  *  (The engine's prune also considers the search pool; that case is the hint.) */
 export function emptyFanReason(

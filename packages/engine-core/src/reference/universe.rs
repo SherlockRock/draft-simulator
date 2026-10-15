@@ -1,63 +1,131 @@
-//! A fixture's synthetic universe (design § 3, D1): champions with positions and a linear term,
+//! A universe (design § 3, D1; slice-5 design § 2–3): champions with positions and a linear term,
 //! a symmetric synergy table and an antisymmetric counter table. Ids are interned to `u8`
-//! indices; sets are `u32` bitmasks. Strings appear only at the JSON boundary and in messages.
+//! indices; sets are 256-bit bitmasks. Strings appear only at the JSON boundary and in messages.
+//!
+//! Two constructors: [`Universe::new`] from a fixture's entry lists (Tier A) and
+//! [`Universe::from_tables`] from dense matrices (the live universe, `super::live`).
 
+use crate::feasibility::{roles_mask, RoleMask, ROLES};
 use crate::pools::Role;
 use crate::role_solver::ChampionMeta;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-pub const MAX_CHAMPIONS: usize = 32;
+/// The off-pool cost P under `FeasibilityRule::Roster` (B-proper design B5, § 3): blue-win logits,
+/// about 2.5 percentage points of win probability near an even game. First calibrated 2026-09-29 on
+/// list pools (seven verdicts, P > 0.09 and P < 0.11; the user chose 0.10 over the 0.15 assumption).
+/// Recalibrated 2026-10-04 on ROLE MAPS (role-aware pools, slice 7), where an off-role pilot costs P
+/// too: the corpus `fixtures/tier-b/2026-09-29-*` + `2026-10-04-*` — 21 positions of the user's
+/// Kittens vs DME pinch drafts (the five parked September boards as recorded, three continuations
+/// re-derived under role maps and vetted, six engine-selected earlier stops), 20 verdicts after one
+/// was dropped as unable to bound P. Nineteen are consistent with 0.10 < P < 0.11 at a 0.01 sweep
+/// step (reports `docs/plans/2026-10-04-engine-recalibration/report-4-verdicts-prefix.txt`,
+/// `report-5-verdicts-fine.txt`); the one kept conflict (the re-derived supp-19, "stay" against a
+/// 3.9 pp gain) would need P > 0.155. The user kept 0.10: the lower edge, which leans toward leaving
+/// as the verdicts did. Caveats recorded with the verdicts: the user read the engine's scores
+/// (not blind) and reports some inaccuracy, and the meta's position lists are loose (Syndra, Hwei
+/// and Katarina at BOTTOM, Camille at SUPPORT), so roster options the user would never play reach
+/// the ranking — a secondary-role option was the engine's top on 4 of the 21 positions. That is
+/// what the graded off-role cost prices (`DEFAULT_OFF_ROLE_COST`, engine slice 8; the champion-meta
+/// `playable` floor is NOT the fix — it only widens the mask); re-read P once Q is calibrated (the
+/// report, the same files). The one kept conflict is a role question: under the grade Zyra-at-adc
+/// pays for its secondary role and Ashe is the top from Q ≈ 0.077.
+pub const DEFAULT_OFF_POOL_COST: f64 = 0.10;
 
+/// The graded off-role cost Q under `FeasibilityRule::Roster` (engine-role-grade design G4): blue-win
+/// logits per 100 grade units — a champion placed outside its pool entries in a secondary meta role
+/// pays, beside P, `Q · (1 − share(role) / share(primary))` (`Universe::grade`). An ASSUMPTION, not a
+/// calibration: 0.05 is half of P, chosen so that the roster fan's secondary-role options are priced
+/// without being priced out (at 0.05 the supp-19 Zyra-at-adc line stays ahead of Ashe; it flips at
+/// Q > 0.077 — design fact 6). To be calibrated on Tier B by the verdict-interval procedure at
+/// P = 0.105 (`TIER_B_Q`, `fixtures/tier-b/README.md` "Calibrating Q"), after the positions refresh
+/// re-exports with its recency rule. `pool_or_roster` charges Q = 0; list-form sides are never graded.
+pub const DEFAULT_OFF_ROLE_COST: f64 = 0.05;
+
+pub const MAX_CHAMPIONS: usize = 256;
+const WORDS: usize = 4;
+
+/// Index into the universe's champion list. Both constructors refuse more than `MAX_CHAMPIONS`
+/// (256), so every index they hand out addresses a bit of `ChampionSet` by construction (R10, U1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChampionIdx(pub u8);
 
+/// A set of champion indices: four 64-bit words (U1). `Hash`/`Eq` make it a key in its own right
+/// (`transposition::Key`, `FeasibilityMemo`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ChampionSet(u32);
+pub struct ChampionSet([u64; WORDS]);
 
 impl ChampionSet {
-    pub const EMPTY: Self = Self(0);
+    pub const EMPTY: Self = Self([0; WORDS]);
 
-    pub fn with(self, c: ChampionIdx) -> Self {
-        Self(self.0 | (1u32 << c.0))
+    fn place(c: ChampionIdx) -> (usize, u64) {
+        let i = usize::from(c.0);
+        (i / 64, 1u64 << (i % 64))
     }
 
-    pub fn without(self, c: ChampionIdx) -> Self {
-        Self(self.0 & !(1u32 << c.0))
+    pub fn with(mut self, c: ChampionIdx) -> Self {
+        let (word, bit) = Self::place(c);
+        self.0[word] |= bit;
+        self
+    }
+
+    pub fn without(mut self, c: ChampionIdx) -> Self {
+        let (word, bit) = Self::place(c);
+        self.0[word] &= !bit;
+        self
     }
 
     pub fn contains(self, c: ChampionIdx) -> bool {
-        self.0 & (1u32 << c.0) != 0
+        let (word, bit) = Self::place(c);
+        self.0[word] & bit != 0
     }
 
-    pub fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+    pub fn union(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a |= b;
+        }
+        self
     }
 
-    pub fn intersect(self, other: Self) -> Self {
-        Self(self.0 & other.0)
+    pub fn intersect(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a &= b;
+        }
+        self
     }
 
-    pub fn minus(self, other: Self) -> Self {
-        Self(self.0 & !other.0)
+    pub fn minus(mut self, other: Self) -> Self {
+        for (a, b) in self.0.iter_mut().zip(other.0) {
+            *a &= !b;
+        }
+        self
     }
 
     pub fn len(self) -> usize {
-        self.0.count_ones() as usize
+        self.0
+            .iter()
+            .map(|w| usize::try_from(w.count_ones()).expect("a u32 count fits usize"))
+            .sum()
     }
 
     pub fn is_empty(self) -> bool {
-        self.0 == 0
+        self.0 == [0; WORDS]
     }
 
-    pub fn bits(self) -> u32 {
-        self.0
-    }
-
+    /// Ascending index order, set bits only (no scan of the 256 positions).
     pub fn iter(self) -> impl Iterator<Item = ChampionIdx> {
-        (0..MAX_CHAMPIONS as u8)
-            .map(ChampionIdx)
-            .filter(move |c| self.contains(*c))
+        self.0.into_iter().enumerate().flat_map(|(word, mut bits)| {
+            std::iter::from_fn(move || {
+                if bits == 0 {
+                    return None;
+                }
+                let bit = usize::try_from(bits.trailing_zeros()).expect("a u32 fits usize");
+                bits &= bits - 1;
+                Some(ChampionIdx(
+                    u8::try_from(word * 64 + bit).expect("four words hold 256 indices"),
+                ))
+            })
+        })
     }
 }
 
@@ -72,6 +140,19 @@ pub struct Champion {
     pub id: String,
     pub positions: Vec<Role>,
     pub linear: f64,
+    /// All five roles' Master+ play shares aligned with `ROLES`, or empty = unknown (champion-role-
+    /// shares design § 4.1). Tier A fixtures omit it; the live universe copies
+    /// `ChampionMeta::position_shares`. `from_tables` validates it (five finite values in [0, 1] with
+    /// a positive largest — NO ordering rule, an override may reorder `positions`) and precomputes
+    /// each role's grade from it against the LARGEST share.
+    #[serde(default)]
+    pub shares: Vec<f64>,
+    /// The engine's legality set (champion-meta.json's `playable`, champion-role-shares design
+    /// § 4.1), or empty = unknown → the positions. Tier A fixtures omit it; the live universe copies
+    /// `ChampionMeta::playable`. Read by the TAGGED path alone (`Universe::playable_mask`, U2): the
+    /// positions-only meta map serves list-form sides and every `tags_for` = `None` context.
+    #[serde(default)]
+    pub playable: Vec<Role>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -113,6 +194,17 @@ pub enum UniverseError {
     NonFinite(String),
     #[error("{0:?} lists no position")]
     NoPositions(String),
+    /// `from_tables`: a table is not `n × n` for the `n` champions given.
+    #[error("{0} table is not {1}×{1}")]
+    Shape(&'static str, usize),
+    /// `Champion::shares` is neither empty nor five finite values in [0, 1] with a positive largest
+    /// (champion-role-shares design § 4.1).
+    #[error("{0:?}: shares must be empty or five finite values in [0, 1] aligned with ROLES, the largest positive")]
+    Shares(String),
+    /// `Champion::playable` is non-empty and lacks a listed position (the fallback assumes
+    /// `positions ⊆ playable`; champion-role-shares design § 4.1).
+    #[error("{0:?}: playable must be empty or contain every listed position")]
+    Playable(String),
 }
 
 #[derive(Clone, Debug)]
@@ -122,31 +214,79 @@ pub struct Universe {
     synergy: Vec<Vec<f64>>,
     counter: Vec<Vec<f64>>,
     loss: f64,
+    off_pool_cost: f64,
+    live_loss: f64,
     meta: HashMap<String, ChampionMeta>,
+    /// Each champion's legality mask, by index: its `playable`, or its positions when the meta has
+    /// none (champion-role-shares design § 4.1, U2) — what a role-tagged side is read against. The
+    /// positions-only path (list-form sides, every untagged context) reads `meta` by name instead.
+    playable_masks: Vec<RoleMask>,
+    /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1 over the five
+    /// shares, champion-role-shares § 4.2 hop 8): `round(100 · (1 − share(role) / max(shares)))` — 0 at
+    /// the largest share, 100 at a role with none, a real grade at a playable but unlisted role; all 0
+    /// when the shares are unknown. Read only for a placement outside the side's pool entries
+    /// (`reference::feasibility`).
+    grades: Vec<[u8; 5]>,
+}
+
+/// `x` as a `u8` for an integral `x` in `0..=100` (a rounded, clamped grade), without a numeric cast.
+fn grade_unit(x: f64) -> u8 {
+    (0..=100u8)
+        .find(|g| f64::from(*g) == x)
+        .expect("a rounded, clamped grade is an integer in 0..=100")
+}
+
+/// G1 for one champion over the five shares (champion-role-shares § 4.2 hop 8): every role's grade is
+/// `round(100 · (1 − share / max))` against the champion's LARGEST share — 0 at the maximum, 100 at a
+/// role with no share, a real grade at a playable but unlisted role (Kai'Sa top: 98). `f64::round` —
+/// half away from zero: shares 0.1 / 0.8 grade 88, not 87 (`1 − 0.125 = 0.875`, exactly representable).
+fn grades_of(c: &Champion) -> Result<[u8; 5], UniverseError> {
+    if c.shares.is_empty() {
+        return Ok([0; 5]);
+    }
+    let well_formed = c.shares.len() == ROLES.len()
+        && c.shares
+            .iter()
+            .all(|s| s.is_finite() && *s >= 0.0 && *s <= 1.0);
+    let max = c.shares.iter().copied().fold(0.0_f64, f64::max);
+    if !well_formed || max <= 0.0 {
+        return Err(UniverseError::Shares(c.id.clone()));
+    }
+    let mut grades = [100u8; 5];
+    for (bit, share) in c.shares.iter().enumerate() {
+        let shortfall = (100.0 * (1.0 - share / max)).round();
+        grades[bit] = grade_unit(shortfall.clamp(0.0, 100.0));
+    }
+    Ok(grades)
+}
+
+/// Interns ids in list order; refuses more than `MAX_CHAMPIONS` and duplicate ids. Shared by both
+/// constructors so the cap and the index arithmetic live in one place.
+fn intern(champions: &[Champion]) -> Result<HashMap<String, ChampionIdx>, UniverseError> {
+    let n = champions.len();
+    if n > MAX_CHAMPIONS {
+        return Err(UniverseError::TooMany);
+    }
+    let mut index = HashMap::with_capacity(n);
+    for (i, c) in champions.iter().enumerate() {
+        let idx = ChampionIdx(u8::try_from(i).expect("capped at MAX_CHAMPIONS"));
+        if index.insert(c.id.clone(), idx).is_some() {
+            return Err(UniverseError::DuplicateChampion(c.id.clone()));
+        }
+    }
+    Ok(index)
 }
 
 impl Universe {
+    /// A fixture's entry lists (Tier A). Unknown ids, self-pairs and duplicate entries are
+    /// rejected here; the dense checks are `from_tables`'.
     pub fn new(spec: UniverseSpec) -> Result<Self, UniverseError> {
         let n = spec.champions.len();
-        if n > MAX_CHAMPIONS {
-            return Err(UniverseError::TooMany);
-        }
-        let mut index = HashMap::with_capacity(n);
-        for (i, c) in spec.champions.iter().enumerate() {
-            if !c.linear.is_finite() {
-                return Err(UniverseError::NonFinite(c.id.clone()));
-            }
-            if c.positions.is_empty() {
-                return Err(UniverseError::NoPositions(c.id.clone()));
-            }
-            if index.insert(c.id.clone(), ChampionIdx(i as u8)).is_some() {
-                return Err(UniverseError::DuplicateChampion(c.id.clone()));
-            }
-        }
+        let index = intern(&spec.champions)?;
         let lookup = |id: &str| -> Result<usize, UniverseError> {
             index
                 .get(id)
-                .map(|c| c.0 as usize)
+                .map(|c| usize::from(c.0))
                 .ok_or_else(|| UniverseError::UnknownChampion(id.to_string()))
         };
 
@@ -193,18 +333,98 @@ impl Universe {
             counter[over][of] = -e.value;
         }
 
-        let mut loss = 1.0;
-        for c in &spec.champions {
-            loss += c.linear.abs();
+        Self::from_tables(spec.champions, &synergy, &counter)
+    }
+
+    /// Dense form (U2). Only the upper triangle (`a < b`) of each table is read: the lower
+    /// triangle is written as `synergy[a][b]` and `-counter[a][b]`, so symmetry and antisymmetry
+    /// hold by construction. Diagonals are ignored. Checks, in order: the cap, each champion's
+    /// linear term finite and positions non-empty, duplicate ids, table shape, each read entry
+    /// finite, and a finite `L`.
+    pub fn from_tables(
+        champions: Vec<Champion>,
+        synergy: &[Vec<f64>],
+        counter: &[Vec<f64>],
+    ) -> Result<Self, UniverseError> {
+        let n = champions.len();
+        if n > MAX_CHAMPIONS {
+            return Err(UniverseError::TooMany);
+        }
+        for c in &champions {
+            if !c.linear.is_finite() {
+                return Err(UniverseError::NonFinite(c.id.clone()));
+            }
+            if c.positions.is_empty() {
+                return Err(UniverseError::NoPositions(c.id.clone()));
+            }
+            if !c.playable.is_empty() && c.positions.iter().any(|p| !c.playable.contains(p)) {
+                return Err(UniverseError::Playable(c.id.clone()));
+            }
+        }
+        let grades = champions
+            .iter()
+            .map(grades_of)
+            .collect::<Result<Vec<_>, _>>()?;
+        let index = intern(&champions)?;
+        if synergy.len() != n || synergy.iter().any(|row| row.len() != n) {
+            return Err(UniverseError::Shape("synergy", n));
+        }
+        if counter.len() != n || counter.iter().any(|row| row.len() != n) {
+            return Err(UniverseError::Shape("counter", n));
+        }
+
+        let mut syn = vec![vec![0.0; n]; n];
+        let mut ctr = vec![vec![0.0; n]; n];
+        let mut magnitude = 0.0;
+        for c in &champions {
+            magnitude += c.linear.abs();
         }
         for a in 0..n {
             for b in (a + 1)..n {
-                loss += synergy[a][b].abs() + counter[a][b].abs();
+                let s = synergy[a][b];
+                if !s.is_finite() {
+                    return Err(UniverseError::NonFinite(format!(
+                        "syn({}, {})",
+                        champions[a].id, champions[b].id
+                    )));
+                }
+                let k = counter[a][b];
+                if !k.is_finite() {
+                    return Err(UniverseError::NonFinite(format!(
+                        "ctr({} over {})",
+                        champions[a].id, champions[b].id
+                    )));
+                }
+                syn[a][b] = s;
+                syn[b][a] = s;
+                ctr[a][b] = k;
+                ctr[b][a] = -k;
+                magnitude += s.abs() + k.abs();
             }
         }
+        // R1: with the board added to a broken side's ±L, separating "feasible" from "this side infeasible"
+        // needs L larger than the largest GAP between two boards (≤ 2·max|U|), not the largest board.
+        let loss = 1.0 + 2.0 * magnitude;
+        // Individual entries were checked finite above; their SUM can still overflow (e.g. two champions
+        // each with a finite-but-huge `linear`). A non-finite L makes a both-infeasible leaf's board ± L
+        // ± L evaluate to NaN downstream (search.rs, the oracle) — reject it here instead.
+        if !loss.is_finite() {
+            return Err(UniverseError::NonFinite("L".to_string()));
+        }
+        // U10: the flat off-pool cost P = L (the user's choice; `off_pool_cost`'s doc), and the live
+        // rule's infeasibility band L' = L + 10·P, computed FROM P so the band follows the cost if P
+        // ever moves, and written as that sum so `live_loss == loss + 10·off_pool_cost` holds bit for
+        // bit for every L (11·L can differ from L + 10·L by an ulp). A finite L' is not enough on its
+        // own: the largest live leaf is |board| + 5P + L' (a side broken alone with off-pool picks
+        // made), so that bound must be finite too, or a leaf could reach +∞ and break the objective's
+        // finite contract.
+        let off_pool_cost = loss;
+        let live_loss = loss + 10.0 * off_pool_cost;
+        if !live_loss.is_finite() || !(magnitude + 5.0 * off_pool_cost + live_loss).is_finite() {
+            return Err(UniverseError::NonFinite("L'".to_string()));
+        }
 
-        let meta = spec
-            .champions
+        let meta: HashMap<String, ChampionMeta> = champions
             .iter()
             .map(|c| {
                 (
@@ -217,14 +437,28 @@ impl Universe {
                 )
             })
             .collect();
+        let playable_masks = champions
+            .iter()
+            .map(|c| {
+                roles_mask(if c.playable.is_empty() {
+                    &c.positions
+                } else {
+                    &c.playable
+                })
+            })
+            .collect();
 
         Ok(Self {
-            champions: spec.champions,
+            champions,
             index,
-            synergy,
-            counter,
+            synergy: syn,
+            counter: ctr,
             loss,
+            off_pool_cost,
+            live_loss,
             meta,
+            playable_masks,
+            grades,
         })
     }
 
@@ -241,37 +475,119 @@ impl Universe {
     }
 
     pub fn id(&self, c: ChampionIdx) -> &str {
-        &self.champions[c.0 as usize].id
+        &self.champions[usize::from(c.0)].id
     }
 
     pub fn linear(&self, c: ChampionIdx) -> f64 {
-        self.champions[c.0 as usize].linear
+        self.champions[usize::from(c.0)].linear
     }
 
     pub fn synergy(&self, a: ChampionIdx, b: ChampionIdx) -> f64 {
-        self.synergy[a.0 as usize][b.0 as usize]
+        self.synergy[usize::from(a.0)][usize::from(b.0)]
     }
 
     /// `ctr(blue, red)`: positive when the Blue champion counters the Red one.
     pub fn counter(&self, blue: ChampionIdx, red: ChampionIdx) -> f64 {
-        self.counter[blue.0 as usize][red.0 as usize]
+        self.counter[usize::from(blue.0)][usize::from(red.0)]
     }
 
-    /// `L` (D3 ii): strictly larger than any reachable |U| in this universe.
+    /// `L` (R1): strictly larger than the gap between any two reachable board values in this universe.
     pub fn loss(&self) -> f64 {
         self.loss
     }
 
+    /// `pool_or_roster`'s off-pool cost P (slice-5 U10, the user's flat choice): `P = L > 2Σ`, so one
+    /// off-pool pick outweighs any board difference and that rule is LEXICOGRAPHIC — the engine never
+    /// prefers an off-pool pick while the pool can finish, however strong the champion; breaking
+    /// one's own pool never pays; forcing the opponent off-pool is worth P per pick. A board-comparable
+    /// P is NOT a constant change to that rule: legality stays gated while the pool can finish, so a
+    /// lower P only makes breaking one's own pool the way to a strong roster champion (round 5
+    /// measured it: at P = 0.1·L "ban your own support" is the top action and denial inverts). The
+    /// board-comparable rule is `FeasibilityRule::Roster` (B-proper): always-widened legality with a
+    /// P the caller passes per search (`OracleInput::off_pool_cost`, `DEFAULT_OFF_POOL_COST`).
+    pub fn off_pool_cost(&self) -> f64 {
+        self.off_pool_cost
+    }
+
+    /// `L'` (slice-5 U10): the infeasibility band under the live rules, `L + 10·L` — strictly larger
+    /// than the gap between any two feasible live leaves, off-pool and grade terms included, for every
+    /// P + Q ≤ L (`objective.rs`, `live_leaf_value`; feasible live leaves span `board ± 5(P + Q) ⊂
+    /// board ± 5L`; `oracle::resolve_off_role_cost` refuses P + Q > L);
+    /// `from_tables` also guarantees that the largest live leaf, `Σ + 5L + L'`, is finite. Tier A's
+    /// `loss` is unchanged.
+    pub fn live_loss(&self) -> f64 {
+        self.live_loss
+    }
+
     pub fn all(&self) -> ChampionSet {
         (0..self.champions.len())
-            .map(|i| ChampionIdx(i as u8))
+            .map(|i| ChampionIdx(u8::try_from(i).expect("capped at MAX_CHAMPIONS")))
             .collect()
     }
 
-    /// Positions only; every other `ChampionMeta` field is `Default`. `role_solver::solve` is never
-    /// called on this map — only `feasibility::can_complete_roles` reads it.
+    /// Positions only — `playable` is NOT carried here (U2); every other `ChampionMeta` field is
+    /// `Default`. The string predicates' input: `can_complete_roles`, `max_role_matching` and
+    /// `max_role_assignment` on list-form sides and every `tags_for` = `None` context
+    /// (`reference::feasibility::{locked_matchable, can_complete_from, role_rank, critical_pool}`).
+    /// `role_solver::solve` is never called on this map.
     pub fn champion_meta(&self) -> &HashMap<String, ChampionMeta> {
         &self.meta
+    }
+
+    /// The roles a role-tagged side may seat `c` in (champion-role-shares design § 4.1): its
+    /// `playable`, or its positions when the meta has none — bit `i` = `ROLES[i]`.
+    pub(crate) fn playable_mask(&self, c: ChampionIdx) -> RoleMask {
+        self.playable_masks[usize::from(c.0)]
+    }
+
+    /// `playable_mask` read for one role.
+    pub fn is_playable(&self, c: ChampionIdx, role: Role) -> bool {
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        (self.playable_mask(c) >> bit) & 1 == 1
+    }
+
+    /// `c`'s grade in `role` (engine-role-grade design G1, `Universe::grades`): 0 at the primary and
+    /// whenever the shares are unknown, 100 at a role never played.
+    pub fn grade(&self, c: ChampionIdx, role: Role) -> u8 {
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        self.grades[usize::from(c.0)][bit]
+    }
+
+    /// `c`'s grades, bit `i` = `ROLES[i]` — the solver's form (`reference::feasibility::Profile`).
+    pub(crate) fn grades(&self, c: ChampionIdx) -> [u8; 5] {
+        self.grades[usize::from(c.0)]
+    }
+
+    /// `c`'s Master+ play share in `role` (`Champion::shares`, keyed by role): `None` when the shares
+    /// are unknown; 0 for a role never played. The report prints `r = share(role) / max_share` beside
+    /// a graded placement.
+    pub fn share(&self, c: ChampionIdx, role: Role) -> Option<f64> {
+        let shares = &self.champions[usize::from(c.0)].shares;
+        if shares.len() != ROLES.len() {
+            return None;
+        }
+        ROLES.iter().position(|r| *r == role).map(|i| shares[i])
+    }
+
+    /// `c`'s largest share — the grade's denominator; `None` when the shares are unknown.
+    pub fn max_share(&self, c: ChampionIdx) -> Option<f64> {
+        let shares = &self.champions[usize::from(c.0)].shares;
+        if shares.len() != ROLES.len() {
+            return None;
+        }
+        shares.iter().copied().reduce(f64::max)
+    }
+
+    /// `c`'s `positions[0]`: the writer's argmax convention, NOT a weight's denominator — an override
+    /// may reorder the positions (champion-role-shares design § 4.1); divide by `max_share` instead.
+    pub fn primary(&self, c: ChampionIdx) -> Role {
+        self.champions[usize::from(c.0)].positions[0]
     }
 
     pub fn names(&self, champions: &[ChampionIdx]) -> Vec<String> {

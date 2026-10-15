@@ -26,7 +26,7 @@ use std::time::Instant;
 use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, DraftState, Phase, Side};
 use engine_core::evaluator::{score_pick, EvalContext, MetaData, PhaseWeightTable, PhaseWeights};
-use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
+use engine_core::pools::{scored_role, Penalties, Role, RolePoolMap, TeamPool};
 use engine_core::role_solver::ChampionMeta;
 use engine_core::search::{search_with_stats, SearchParams};
 
@@ -113,10 +113,10 @@ fn candidate_comp_strength(
 ) -> f64 {
     let side = if slot < 5 { Side::Blue } else { Side::Red };
     let side_ctx = ctx.for_perspective(side, state, Phase::Pick2);
-    let role = champion_meta
-        .get(candidate)
-        .and_then(|m| m.positions.first().copied())
-        .unwrap_or(Role::Top);
+    // The search's own rule (pools::scored_role): the bucket the side's pool files the candidate
+    // under, else its first listed position — the EMPTY production pool here files nothing, so this
+    // reads positions[0]; the role reaches nothing in compStrength either way.
+    let role = scored_role(candidate, &side_ctx.our_pool, champion_meta).unwrap_or(Role::Top);
     score_pick(candidate, role, state, &side_ctx, ActionType::Pick).compStrength
 }
 

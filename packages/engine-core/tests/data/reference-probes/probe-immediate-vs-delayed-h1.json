@@ -232,6 +232,7 @@
     "A2"
   ],
   "epsilon": 1e-09,
+  "top_line_denies": false,
   "dry_run": {
     "value": -7.0,
     "leaves": 4,

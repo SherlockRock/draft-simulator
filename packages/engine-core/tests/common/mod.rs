@@ -10,6 +10,7 @@
 //! allowance.
 #![allow(dead_code)]
 
+use engine_core::coverage::ROLES;
 use engine_core::draft_state::{DraftState, Side};
 use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeights, SynergyRule};
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
@@ -18,7 +19,7 @@ use engine_core::role_solver::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
 // Production data. engine-node owns `data_loader::load_engine_data` but that
@@ -38,6 +39,12 @@ struct ChampionMetaFile {
 struct ChampionMetaEntry {
     id: String,
     positions: Vec<String>,
+    /// `positionShares` (engine-role-grade design § 1): absent on a file from before the shares.
+    #[serde(default)]
+    position_shares: HashMap<String, f64>,
+    /// `playable` (champion-role-shares design § 4.1): absent on a file from before the field.
+    #[serde(default)]
+    playable: Vec<String>,
     damage_profile: DamageProfileFile,
     scaling_profile: ScalingProfileFile,
     cc_profile: CcProfileFile,
@@ -111,13 +118,64 @@ pub fn parse_role(s: &str) -> Role {
     }
 }
 
+/// `positionShares` as FIVE values aligned with `ROLES` (champion-role-shares design § 4.1): the
+/// five-key map the refresh writes, or the legacy listed-key map of the 2026-09-05 frozen table (an
+/// absent role is 0); empty when the file has none. A key outside the vocabulary, a value outside
+/// [0, 1] and an all-zero map are loading mistakes, named. The same rule as engine-node's
+/// `data_loader::aligned_shares`.
+pub fn aligned_shares(id: &str, shares: &HashMap<String, f64>) -> Result<Vec<f64>, String> {
+    if shares.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut keys: Vec<&String> = shares.keys().collect();
+    keys.sort();
+    let mut aligned = vec![0.0; ROLES.len()];
+    for key in keys {
+        let role = match key.as_str() {
+            "TOP" => Role::Top,
+            "JUNGLE" => Role::Jungle,
+            "MIDDLE" => Role::Middle,
+            "ADC" | "BOTTOM" => Role::Adc,
+            "SUPPORT" => Role::Support,
+            _ => {
+                return Err(format!(
+                    "{id}: positionShares names {key}, which is not a role"
+                ))
+            }
+        };
+        let value = shares[key];
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err(format!(
+                "{id}: positionShares.{key} = {value} is not a finite number in [0, 1]"
+            ));
+        }
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        aligned[bit] = value;
+    }
+    if aligned.iter().all(|s| *s <= 0.0) {
+        return Err(format!("{id}: positionShares are all zero"));
+    }
+    Ok(aligned)
+}
+
 pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
+    load_production_data_from(&repo_root().join("data/compiled/champion-meta.json"))
+}
+
+/// The same loader on the champion-meta file at `meta_path` — a FROZEN table under `tests/data/`
+/// for a test that pins values measured on one table, so a positions refresh moves no pin
+/// (memory: tests that encode a data table must pin a frozen copy). The matchup data is always
+/// the live file.
+pub fn load_production_data_from(meta_path: &Path) -> (MetaData, HashMap<String, ChampionMeta>) {
     let root = repo_root();
     let champion_file: ChampionMetaFile = serde_json::from_str(
-        &std::fs::read_to_string(root.join("data/compiled/champion-meta.json"))
-            .expect("data/compiled/champion-meta.json"),
+        &std::fs::read_to_string(meta_path)
+            .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display())),
     )
-    .expect("champion-meta.json parses");
+    .unwrap_or_else(|e| panic!("{}: {e}", meta_path.display()));
     let matchup_file: MatchupDataFile = serde_json::from_str(
         &std::fs::read_to_string(root.join("data/compiled/matchup-data.json"))
             .expect("data/compiled/matchup-data.json"),
@@ -131,6 +189,21 @@ pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
         champion_meta.insert(
             id,
             ChampionMeta {
+                position_shares: aligned_shares(&entry.id, &entry.position_shares)
+                    .unwrap_or_else(|e| panic!("champion-meta.json: {e}")),
+                playable: {
+                    let playable: Vec<Role> =
+                        entry.playable.iter().map(|s| parse_role(s)).collect();
+                    for p in &entry.positions {
+                        if !playable.is_empty() && !playable.contains(&parse_role(p)) {
+                            panic!(
+                                "champion-meta.json: {}: playable lacks the listed position {p}",
+                                entry.id
+                            );
+                        }
+                    }
+                    playable
+                },
                 id: entry.id,
                 positions: entry.positions.iter().map(|s| parse_role(s)).collect(),
                 damage_profile: DamageProfile {

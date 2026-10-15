@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "fs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { META_POSITIONS } from "./champion-positions/invariants.mjs";
+import { META_POSITIONS, positionSharesProblems, playableProblems } from "./champion-positions/invariants.mjs";
 import { formatPositionsSource } from "./champion-positions/derive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -110,6 +110,12 @@ function main() {
       }
     }
 
+    // positionShares, when present: the five roles (or the legacy listed keys), values in [0, 1],
+    // the largest > 0, NO ordering rule; playable, when present: vocabulary, unique, non-empty,
+    // positions ⊆ playable (champion-role-shares design § 4.1 — a narrowing override is caught here).
+    for (const problem of positionSharesProblems(champ, id)) fail(problem);
+    for (const problem of playableProblems(champ, id)) fail(problem);
+
     // Damage profile sums to ~1.0
     const dp = champ.damageProfile;
     if (dp) {
@@ -184,9 +190,15 @@ function main() {
 
   // 3b. Compiled positions vs champions.json — overrides apply last in the
   //     compile and would otherwise win over the refresh with no visible diff
-  //     (design § 5). Order matters: positions[0] is the primary.
+  //     (design § 5). positions: ORDERED equality (order drives the UI's role
+  //     priority); playable: SET equality (the engine reads it as a mask);
+  //     positionShares: every key and rounded value (an override cannot touch it,
+  //     so a difference here is a stale compile).
   const canonicalById = new Map(canonical.champions.map((c) => [c.id, c]));
+  const roleSet = (roles) => JSON.stringify([...(roles ?? [])].sort());
   let differ = 0;
+  let sharesDiffer = 0;
+  let playableDiffer = 0;
   for (const [id, champ] of Object.entries(meta.champions)) {
     const source = canonicalById.get(id);
     if (!source) continue;
@@ -194,8 +206,18 @@ function main() {
       differ += 1;
       warn(`positions differ from champions.json: ${id} compiled [${champ.positions.join(",")}] vs json [${source.positions.join(",")}] (override?)`);
     }
+    if (JSON.stringify(champ.positionShares ?? null) !== JSON.stringify(source.positionShares ?? null)) {
+      sharesDiffer += 1;
+      warn(`positionShares differ from champions.json: ${id} compiled ${JSON.stringify(champ.positionShares ?? null)} vs json ${JSON.stringify(source.positionShares ?? null)} (stale compile?)`);
+    }
+    if ((champ.playable === undefined) !== (source.playable === undefined) || roleSet(champ.playable) !== roleSet(source.playable)) {
+      playableDiffer += 1;
+      warn(`playable differs from champions.json: ${id} compiled ${JSON.stringify(champ.playable ?? null)} vs json ${JSON.stringify(source.playable ?? null)} (override?)`);
+    }
   }
   console.log(`  Positions identical to champions.json: ${metaIds.size - differ}/${metaIds.size}`);
+  console.log(`  Position shares identical to champions.json: ${metaIds.size - sharesDiffer}/${metaIds.size}`);
+  console.log(`  Playable identical to champions.json (as sets): ${metaIds.size - playableDiffer}/${metaIds.size}`);
 
   // 4. Matchup data
   if (existsSync(MATCHUP_PATH)) {

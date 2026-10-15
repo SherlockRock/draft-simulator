@@ -13,11 +13,18 @@
     "decidingPatch": "16.19",
     "decidingGames": 277103,
     "fallback": {},
+    "playableRule": {
+      "minPickRate": 0.001,
+      "minPicks": 50,
+      "decidingPatch": "16.19",
+      "decidingGames": 277103
+    },
     "threshold": 0.1,
-    "generatedAt": "2026-10-07T03:45:26.730Z",
+    "generatedAt": "2026-10-10T04:36:25.172Z",
     "feasibility": {
       "sets": 102100,
-      "bothSides": 0.738
+      "bothSides": 0.976,
+      "field": "playable"
     }
   },
   "champions": [
@@ -27,6 +34,18 @@
       "positions": [
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.836,
+        "JUNGLE": 0.135,
+        "MIDDLE": 0.022,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.006
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -34,6 +53,18 @@
       "id": "Ahri",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.041,
+        "JUNGLE": 0,
+        "MIDDLE": 0.938,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.012
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -42,6 +73,17 @@
       "positions": [
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.312,
+        "JUNGLE": 0,
+        "MIDDLE": 0.683,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -49,12 +91,34 @@
       "id": "Akshan",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.099,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.831,
+        "BOTTOM": 0.052,
+        "SUPPORT": 0.017
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Alistar",
       "id": "Alistar",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
+        "SUPPORT": 0.989
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -64,12 +128,35 @@
       "positions": [
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.755,
+        "JUNGLE": 0.167,
+        "MIDDLE": 0.073,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Amumu",
       "id": "Amumu",
       "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.007,
+        "JUNGLE": 0.583,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.407
+      },
+      "playable": [
         "JUNGLE",
         "SUPPORT"
       ]
@@ -81,6 +168,19 @@
         "MIDDLE",
         "TOP",
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.254,
+        "JUNGLE": 0,
+        "MIDDLE": 0.601,
+        "BOTTOM": 0.027,
+        "SUPPORT": 0.117
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -88,12 +188,34 @@
       "id": "Annie",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.064,
+        "JUNGLE": 0,
+        "MIDDLE": 0.815,
+        "BOTTOM": 0.023,
+        "SUPPORT": 0.097
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Aphelios",
       "id": "Aphelios",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0,
+        "MIDDLE": 0.004,
+        "BOTTOM": 0.99,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -102,12 +224,36 @@
       "id": "Ashe",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.009,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.926,
+        "SUPPORT": 0.057
+      },
+      "playable": [
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Aurelion Sol",
       "id": "AurelionSol",
       "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.068,
+        "JUNGLE": 0.04,
+        "MIDDLE": 0.558,
+        "BOTTOM": 0.324,
+        "SUPPORT": 0.01
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
         "MIDDLE",
         "BOTTOM"
       ]
@@ -118,6 +264,18 @@
       "positions": [
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.173,
+        "JUNGLE": 0,
+        "MIDDLE": 0.794,
+        "BOTTOM": 0.026,
+        "SUPPORT": 0.008
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -126,12 +284,33 @@
       "positions": [
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.124,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.855,
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Bard",
       "id": "Bard",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
+        "SUPPORT": 0.998
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -140,12 +319,32 @@
       "id": "Belveth",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.01,
+        "JUNGLE": 0.985,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "JUNGLE"
       ]
     },
     {
       "name": "Blitzcrank",
       "id": "Blitzcrank",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
+        "SUPPORT": 0.998
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -156,12 +355,36 @@
         "SUPPORT",
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.087,
+        "JUNGLE": 0.083,
+        "MIDDLE": 0.17,
+        "BOTTOM": 0.231,
+        "SUPPORT": 0.429
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Braum",
       "id": "Braum",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0.999
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -170,12 +393,34 @@
       "id": "Briar",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.057,
+        "JUNGLE": 0.879,
+        "MIDDLE": 0.052,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.007
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Caitlyn",
       "id": "Caitlyn",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.004,
+        "JUNGLE": 0,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.988,
+        "SUPPORT": 0.001
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -184,6 +429,18 @@
       "id": "Camille",
       "positions": [
         "TOP",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.708,
+        "JUNGLE": 0.012,
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.263
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
         "SUPPORT"
       ]
     },
@@ -194,6 +451,18 @@
         "MIDDLE",
         "TOP",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.262,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.573,
+        "BOTTOM": 0.157,
+        "SUPPORT": 0.007
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -202,6 +471,18 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.296,
+        "JUNGLE": 0.619,
+        "MIDDLE": 0.068,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.011
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -211,12 +492,35 @@
         "BOTTOM",
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.163,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.137,
+        "BOTTOM": 0.693,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Darius",
       "id": "Darius",
       "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.872,
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.012,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.013
+      },
+      "playable": [
         "TOP",
         "JUNGLE"
       ]
@@ -227,12 +531,35 @@
       "positions": [
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.026,
+        "JUNGLE": 0.437,
+        "MIDDLE": 0.533,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Dr. Mundo",
       "id": "DrMundo",
       "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.859,
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.012
+      },
+      "playable": [
         "TOP",
         "JUNGLE"
       ]
@@ -242,6 +569,17 @@
       "id": "Draven",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.042,
+        "JUNGLE": 0.005,
+        "MIDDLE": 0.017,
+        "BOTTOM": 0.935,
+        "SUPPORT": 0
+      },
+      "playable": [
+        "TOP",
+        "BOTTOM"
       ]
     },
     {
@@ -250,12 +588,37 @@
       "positions": [
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.037,
+        "JUNGLE": 0.449,
+        "MIDDLE": 0.494,
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.007
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Elise",
       "id": "Elise",
       "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.034,
+        "JUNGLE": 0.756,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0,
+        "SUPPORT": 0.202
+      },
+      "playable": [
+        "TOP",
         "JUNGLE",
         "SUPPORT"
       ]
@@ -265,6 +628,16 @@
       "id": "Evelynn",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.015,
+        "JUNGLE": 0.96,
+        "MIDDLE": 0.013,
+        "BOTTOM": 0,
+        "SUPPORT": 0.011
+      },
+      "playable": [
+        "JUNGLE"
       ]
     },
     {
@@ -272,6 +645,18 @@
       "id": "Ezreal",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.953,
+        "SUPPORT": 0.017
+      },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -281,6 +666,19 @@
         "JUNGLE",
         "SUPPORT",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.119,
+        "JUNGLE": 0.662,
+        "MIDDLE": 0.037,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.181
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -288,6 +686,17 @@
       "id": "Fiora",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.954,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.021,
+        "BOTTOM": 0.015,
+        "SUPPORT": 0.009
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -296,12 +705,36 @@
       "positions": [
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.038,
+        "JUNGLE": 0.159,
+        "MIDDLE": 0.778,
+        "BOTTOM": 0.014,
+        "SUPPORT": 0.011
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Galio",
       "id": "Galio",
       "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.068,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.789,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.139
+      },
+      "playable": [
+        "TOP",
         "MIDDLE",
         "SUPPORT"
       ]
@@ -311,6 +744,17 @@
       "id": "Gangplank",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.919,
+        "JUNGLE": 0,
+        "MIDDLE": 0.078,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -318,12 +762,33 @@
       "id": "Garen",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.893,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.097,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Gnar",
       "id": "Gnar",
       "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.985,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.003
+      },
+      "playable": [
         "TOP"
       ]
     },
@@ -334,12 +799,35 @@
         "TOP",
         "JUNGLE",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.668,
+        "JUNGLE": 0.144,
+        "MIDDLE": 0.118,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.066
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Graves",
       "id": "Graves",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.012,
+        "JUNGLE": 0.981,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.001
+      },
+      "playable": [
         "JUNGLE"
       ]
     },
@@ -350,6 +838,18 @@
         "TOP",
         "JUNGLE",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.646,
+        "JUNGLE": 0.22,
+        "MIDDLE": 0.122,
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -357,12 +857,35 @@
       "id": "Hecarim",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0.997,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0
+      },
+      "playable": [
+        "JUNGLE"
       ]
     },
     {
       "name": "Heimerdinger",
       "id": "Heimerdinger",
       "positions": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.581,
+        "JUNGLE": 0.023,
+        "MIDDLE": 0.15,
+        "BOTTOM": 0.124,
+        "SUPPORT": 0.122
+      },
+      "playable": [
         "TOP",
         "MIDDLE",
         "BOTTOM",
@@ -375,12 +898,35 @@
       "positions": [
         "MIDDLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.026,
+        "JUNGLE": 0,
+        "MIDDLE": 0.658,
+        "BOTTOM": 0.23,
+        "SUPPORT": 0.086
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Illaoi",
       "id": "Illaoi",
       "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.945,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.047,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.005
+      },
+      "playable": [
         "TOP"
       ]
     },
@@ -390,6 +936,18 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.622,
+        "JUNGLE": 0,
+        "MIDDLE": 0.36,
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -397,12 +955,34 @@
       "id": "Ivern",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.083,
+        "JUNGLE": 0.814,
+        "MIDDLE": 0.018,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.085
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Janna",
       "id": "Janna",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.007,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
+        "SUPPORT": 0.99
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -411,6 +991,17 @@
       "id": "JarvanIV",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.009,
+        "JUNGLE": 0.937,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.048
+      },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -418,12 +1009,37 @@
       "id": "Jax",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.876,
+        "JUNGLE": 0.085,
+        "MIDDLE": 0.015,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.021
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Jayce",
       "id": "Jayce",
       "positions": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.66,
+        "JUNGLE": 0.217,
+        "MIDDLE": 0.112,
+        "BOTTOM": 0.007,
+        "SUPPORT": 0.004
+      },
+      "playable": [
         "TOP",
         "JUNGLE",
         "MIDDLE"
@@ -434,12 +1050,34 @@
       "id": "Jhin",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.01,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.973,
+        "SUPPORT": 0.004
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Jinx",
       "id": "Jinx",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.998,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -448,12 +1086,36 @@
       "id": "KSante",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.949,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.033,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.016
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Kai'Sa",
       "id": "Kaisa",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.019,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.017,
+        "BOTTOM": 0.957,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
         "BOTTOM"
       ]
     },
@@ -462,12 +1124,36 @@
       "id": "Kalista",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.072,
+        "JUNGLE": 0,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.9,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Karma",
       "id": "Karma",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.028,
+        "JUNGLE": 0,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.944
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
         "SUPPORT"
       ]
     },
@@ -477,6 +1163,19 @@
       "positions": [
         "JUNGLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.047,
+        "JUNGLE": 0.581,
+        "MIDDLE": 0.078,
+        "BOTTOM": 0.279,
+        "SUPPORT": 0.015
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -484,12 +1183,35 @@
       "id": "Kassadin",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.068,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.927,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Katarina",
       "id": "Katarina",
       "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.025,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.839,
+        "BOTTOM": 0.127,
+        "SUPPORT": 0.008
+      },
+      "playable": [
+        "TOP",
         "MIDDLE",
         "BOTTOM"
       ]
@@ -500,12 +1222,34 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.682,
+        "JUNGLE": 0.012,
+        "MIDDLE": 0.288,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.009
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Kayn",
       "id": "Kayn",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.046,
+        "JUNGLE": 0.943,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
         "JUNGLE"
       ]
     },
@@ -515,12 +1259,34 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.792,
+        "JUNGLE": 0,
+        "MIDDLE": 0.153,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.046
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Kha'Zix",
       "id": "Khazix",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.004,
+        "JUNGLE": 0.991,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.001
+      },
+      "playable": [
         "JUNGLE"
       ]
     },
@@ -529,6 +1295,16 @@
       "id": "Kindred",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0.964,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.019,
+        "SUPPORT": 0.004
+      },
+      "playable": [
+        "JUNGLE"
       ]
     },
     {
@@ -536,6 +1312,17 @@
       "id": "Kled",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.911,
+        "JUNGLE": 0.003,
+        "MIDDLE": 0.066,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.014
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -544,12 +1331,36 @@
       "positions": [
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.084,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.272,
+        "BOTTOM": 0.626,
+        "SUPPORT": 0.012
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "LeBlanc",
       "id": "Leblanc",
       "positions": [
+        "MIDDLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.036,
+        "JUNGLE": 0,
+        "MIDDLE": 0.833,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.127
+      },
+      "playable": [
+        "TOP",
         "MIDDLE",
         "SUPPORT"
       ]
@@ -559,6 +1370,19 @@
       "id": "LeeSin",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.014,
+        "JUNGLE": 0.97,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.009
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -566,12 +1390,32 @@
       "id": "Leona",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0.998
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
       "name": "Lillia",
       "id": "Lillia",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.009,
+        "JUNGLE": 0.989,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0
+      },
+      "playable": [
         "JUNGLE"
       ]
     },
@@ -581,6 +1425,18 @@
       "positions": [
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.115,
+        "JUNGLE": 0,
+        "MIDDLE": 0.836,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.043
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -588,6 +1444,19 @@
       "id": "Locke",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.035,
+        "JUNGLE": 0.09,
+        "MIDDLE": 0.841,
+        "BOTTOM": 0.023,
+        "SUPPORT": 0.01
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -596,12 +1465,34 @@
       "positions": [
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.033,
+        "JUNGLE": 0,
+        "MIDDLE": 0.121,
+        "BOTTOM": 0.846,
+        "SUPPORT": 0
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Lulu",
       "id": "Lulu",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
+        "SUPPORT": 0.992
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -612,6 +1503,18 @@
         "SUPPORT",
         "MIDDLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.343,
+        "BOTTOM": 0.111,
+        "SUPPORT": 0.537
+      },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -619,6 +1522,19 @@
       "id": "Malphite",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.821,
+        "JUNGLE": 0.068,
+        "MIDDLE": 0.089,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.018
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -626,6 +1542,18 @@
       "id": "Malzahar",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.099,
+        "JUNGLE": 0.002,
+        "MIDDLE": 0.852,
+        "BOTTOM": 0.036,
+        "SUPPORT": 0.01
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -635,6 +1563,18 @@
         "SUPPORT",
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.152,
+        "JUNGLE": 0.235,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.605
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -642,12 +1582,37 @@
       "id": "MasterYi",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.094,
+        "JUNGLE": 0.846,
+        "MIDDLE": 0.027,
+        "BOTTOM": 0.028,
+        "SUPPORT": 0.006
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Mel",
       "id": "Mel",
       "positions": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.009,
+        "JUNGLE": 0,
+        "MIDDLE": 0.572,
+        "BOTTOM": 0.292,
+        "SUPPORT": 0.127
+      },
+      "playable": [
         "MIDDLE",
         "BOTTOM",
         "SUPPORT"
@@ -658,12 +1623,32 @@
       "id": "Milio",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0.999
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
       "name": "Miss Fortune",
       "id": "MissFortune",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.968,
+        "SUPPORT": 0.021
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -672,6 +1657,17 @@
       "id": "Mordekaiser",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.92,
+        "JUNGLE": 0.046,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.007
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -680,12 +1676,37 @@
       "positions": [
         "SUPPORT",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.034,
+        "JUNGLE": 0.089,
+        "MIDDLE": 0.104,
+        "BOTTOM": 0.012,
+        "SUPPORT": 0.761
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Naafiri",
       "id": "Naafiri",
       "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.079,
+        "JUNGLE": 0.768,
+        "MIDDLE": 0.138,
+        "BOTTOM": 0.01,
+        "SUPPORT": 0.006
+      },
+      "playable": [
+        "TOP",
         "JUNGLE",
         "MIDDLE"
       ]
@@ -695,6 +1716,16 @@
       "id": "Nami",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 1
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
@@ -703,12 +1734,34 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.709,
+        "JUNGLE": 0.019,
+        "MIDDLE": 0.261,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.008
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Nautilus",
       "id": "Nautilus",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.006,
+        "JUNGLE": 0.005,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
+        "SUPPORT": 0.986
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -718,6 +1771,19 @@
       "positions": [
         "SUPPORT",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.075,
+        "JUNGLE": 0.046,
+        "MIDDLE": 0.168,
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.693
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -725,6 +1791,18 @@
       "id": "Nidalee",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.027,
+        "JUNGLE": 0.895,
+        "MIDDLE": 0.012,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.064
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -732,12 +1810,33 @@
       "id": "Nilah",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.006,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.004,
+        "BOTTOM": 0.988,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "BOTTOM"
       ]
     },
     {
       "name": "Nocturne",
       "id": "Nocturne",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.032,
+        "JUNGLE": 0.944,
+        "MIDDLE": 0.022,
+        "BOTTOM": 0,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
         "JUNGLE"
       ]
     },
@@ -747,12 +1846,35 @@
       "positions": [
         "JUNGLE",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.012,
+        "JUNGLE": 0.772,
+        "MIDDLE": 0.18,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.034
+      },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Olaf",
       "id": "Olaf",
       "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.853,
+        "JUNGLE": 0.104,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.002
+      },
+      "playable": [
         "TOP",
         "JUNGLE"
       ]
@@ -762,6 +1884,16 @@
       "id": "Orianna",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.011,
+        "JUNGLE": 0,
+        "MIDDLE": 0.961,
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.017
+      },
+      "playable": [
+        "MIDDLE"
       ]
     },
     {
@@ -769,6 +1901,17 @@
       "id": "Ornn",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.954,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.013
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -779,6 +1922,19 @@
         "SUPPORT",
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.392,
+        "JUNGLE": 0.108,
+        "MIDDLE": 0.112,
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.376
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -788,12 +1944,34 @@
         "SUPPORT",
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.312,
+        "JUNGLE": 0.129,
+        "MIDDLE": 0.01,
+        "BOTTOM": 0,
+        "SUPPORT": 0.549
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Pyke",
       "id": "Pyke",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.99
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -803,6 +1981,19 @@
       "positions": [
         "JUNGLE",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.027,
+        "JUNGLE": 0.72,
+        "MIDDLE": 0.237,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.011
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -812,12 +2003,34 @@
         "JUNGLE",
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.389,
+        "JUNGLE": 0.437,
+        "MIDDLE": 0.134,
+        "BOTTOM": 0.019,
+        "SUPPORT": 0.021
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Rakan",
       "id": "Rakan",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
+        "SUPPORT": 0.996
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -826,12 +2039,34 @@
       "id": "Rammus",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.059,
+        "JUNGLE": 0.842,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.092
+      },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Rek'Sai",
       "id": "RekSai",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.074,
+        "JUNGLE": 0.911,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
+        "SUPPORT": 0.012
+      },
+      "playable": [
+        "TOP",
         "JUNGLE"
       ]
     },
@@ -840,12 +2075,32 @@
       "id": "Rell",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
+        "SUPPORT": 0.997
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
       "name": "Renata Glasc",
       "id": "Renata",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.993
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -854,6 +2109,17 @@
       "id": "Renekton",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.941,
+        "JUNGLE": 0,
+        "MIDDLE": 0.056,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
@@ -861,6 +2127,18 @@
       "id": "Rengar",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.074,
+        "JUNGLE": 0.881,
+        "MIDDLE": 0,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.039
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -869,6 +2147,18 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.732,
+        "JUNGLE": 0.048,
+        "MIDDLE": 0.197,
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.005
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -876,6 +2166,18 @@
       "id": "Rumble",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.816,
+        "JUNGLE": 0.078,
+        "MIDDLE": 0.087,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.018
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -884,12 +2186,33 @@
       "positions": [
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.209,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.778,
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE"
       ]
     },
     {
       "name": "Samira",
       "id": "Samira",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.004,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.987,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -899,12 +2222,34 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.173,
+        "JUNGLE": 0.78,
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.026
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Senna",
       "id": "Senna",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.007,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0.064,
+        "SUPPORT": 0.926
+      },
+      "playable": [
+        "BOTTOM",
         "SUPPORT"
       ]
     },
@@ -914,6 +2259,18 @@
       "positions": [
         "SUPPORT",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.029,
+        "BOTTOM": 0.131,
+        "SUPPORT": 0.839
+      },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -921,12 +2278,35 @@
       "id": "Sett",
       "positions": [
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.914,
+        "JUNGLE": 0.009,
+        "MIDDLE": 0.039,
+        "BOTTOM": 0.01,
+        "SUPPORT": 0.028
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Shaco",
       "id": "Shaco",
       "positions": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.015,
+        "JUNGLE": 0.778,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.201
+      },
+      "playable": [
         "JUNGLE",
         "SUPPORT"
       ]
@@ -937,12 +2317,35 @@
       "positions": [
         "TOP",
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.751,
+        "JUNGLE": 0.048,
+        "MIDDLE": 0.019,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.181
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Shyvana",
       "id": "Shyvana",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.064,
+        "JUNGLE": 0.929,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
         "JUNGLE"
       ]
     },
@@ -952,6 +2355,18 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.821,
+        "JUNGLE": 0.018,
+        "MIDDLE": 0.114,
+        "BOTTOM": 0.014,
+        "SUPPORT": 0.034
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -960,12 +2375,35 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.764,
+        "JUNGLE": 0.043,
+        "MIDDLE": 0.137,
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.043
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
       "name": "Sivir",
       "id": "Sivir",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.989,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -976,6 +2414,18 @@
         "JUNGLE",
         "SUPPORT",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.128,
+        "JUNGLE": 0.688,
+        "MIDDLE": 0.004,
+        "BOTTOM": 0,
+        "SUPPORT": 0.18
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -984,6 +2434,18 @@
       "positions": [
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.077,
+        "JUNGLE": 0,
+        "MIDDLE": 0.143,
+        "BOTTOM": 0.779,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -991,12 +2453,32 @@
       "id": "Sona",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.995
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
       "name": "Soraka",
       "id": "Soraka",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.016,
+        "JUNGLE": 0,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.975
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -1008,6 +2490,19 @@
         "BOTTOM",
         "MIDDLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.151,
+        "JUNGLE": 0,
+        "MIDDLE": 0.163,
+        "BOTTOM": 0.28,
+        "SUPPORT": 0.406
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1016,6 +2511,19 @@
       "positions": [
         "JUNGLE",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.067,
+        "JUNGLE": 0.455,
+        "MIDDLE": 0.407,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.066
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -1024,6 +2532,19 @@
       "positions": [
         "MIDDLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.016,
+        "JUNGLE": 0,
+        "MIDDLE": 0.832,
+        "BOTTOM": 0.134,
+        "SUPPORT": 0.018
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1032,6 +2553,18 @@
       "positions": [
         "SUPPORT",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.357,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.069,
+        "SUPPORT": 0.55
+      },
+      "playable": [
+        "TOP",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1040,12 +2573,36 @@
       "positions": [
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.021,
+        "JUNGLE": 0.361,
+        "MIDDLE": 0.523,
+        "BOTTOM": 0.049,
+        "SUPPORT": 0.046
+      },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Talon",
       "id": "Talon",
       "positions": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0.774,
+        "MIDDLE": 0.216,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.001
+      },
+      "playable": [
         "JUNGLE",
         "MIDDLE"
       ]
@@ -1055,6 +2612,16 @@
       "id": "Taric",
       "positions": [
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.01,
+        "JUNGLE": 0.025,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.955
+      },
+      "playable": [
+        "SUPPORT"
       ]
     },
     {
@@ -1063,12 +2630,36 @@
       "positions": [
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.779,
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.031,
+        "BOTTOM": 0.027,
+        "SUPPORT": 0.062
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Thresh",
       "id": "Thresh",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
+        "SUPPORT": 0.998
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -1078,6 +2669,18 @@
       "positions": [
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.02,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.101,
+        "BOTTOM": 0.879,
+        "SUPPORT": 0
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1086,6 +2689,18 @@
       "positions": [
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.559,
+        "JUNGLE": 0.366,
+        "MIDDLE": 0.01,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.061
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
       ]
     },
     {
@@ -1094,6 +2709,18 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.833,
+        "JUNGLE": 0.03,
+        "MIDDLE": 0.129,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -1101,6 +2728,19 @@
       "id": "TwistedFate",
       "positions": [
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.056,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.883,
+        "BOTTOM": 0.025,
+        "SUPPORT": 0.035
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1108,6 +2748,19 @@
       "id": "Twitch",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0.026,
+        "MIDDLE": 0.036,
+        "BOTTOM": 0.882,
+        "SUPPORT": 0.052
+      },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1116,12 +2769,33 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.249,
+        "JUNGLE": 0.728,
+        "MIDDLE": 0.015,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Urgot",
       "id": "Urgot",
       "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.942,
+        "JUNGLE": 0.015,
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.02
+      },
+      "playable": [
         "TOP"
       ]
     },
@@ -1131,6 +2805,18 @@
       "positions": [
         "BOTTOM",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.339,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.048,
+        "BOTTOM": 0.605,
+        "SUPPORT": 0.005
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1139,6 +2825,18 @@
       "positions": [
         "BOTTOM",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.465,
+        "JUNGLE": 0.02,
+        "MIDDLE": 0.036,
+        "BOTTOM": 0.476,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1147,6 +2845,19 @@
       "positions": [
         "MIDDLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.048,
+        "JUNGLE": 0,
+        "MIDDLE": 0.57,
+        "BOTTOM": 0.312,
+        "SUPPORT": 0.07
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
@@ -1156,12 +2867,35 @@
         "SUPPORT",
         "MIDDLE",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.045,
+        "JUNGLE": 0,
+        "MIDDLE": 0.248,
+        "BOTTOM": 0.19,
+        "SUPPORT": 0.517
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Vex",
       "id": "Vex",
       "positions": [
+        "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.033,
+        "JUNGLE": 0,
+        "MIDDLE": 0.925,
+        "BOTTOM": 0.016,
+        "SUPPORT": 0.025
+      },
+      "playable": [
         "MIDDLE"
       ]
     },
@@ -1170,6 +2904,16 @@
       "id": "Vi",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.017,
+        "JUNGLE": 0.954,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.02
+      },
+      "playable": [
+        "JUNGLE"
       ]
     },
     {
@@ -1177,12 +2921,36 @@
       "id": "Viego",
       "positions": [
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.015,
+        "JUNGLE": 0.945,
+        "MIDDLE": 0.028,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
       "name": "Viktor",
       "id": "Viktor",
       "positions": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.034,
+        "JUNGLE": 0,
+        "MIDDLE": 0.743,
+        "BOTTOM": 0.221,
+        "SUPPORT": 0.002
+      },
+      "playable": [
+        "TOP",
         "MIDDLE",
         "BOTTOM"
       ]
@@ -1194,12 +2962,35 @@
         "MIDDLE",
         "TOP",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.265,
+        "JUNGLE": 0,
+        "MIDDLE": 0.606,
+        "BOTTOM": 0.128,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Volibear",
       "id": "Volibear",
       "positions": [
+        "TOP",
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.743,
+        "JUNGLE": 0.236,
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.004
+      },
+      "playable": [
         "TOP",
         "JUNGLE"
       ]
@@ -1210,6 +3001,17 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.43,
+        "JUNGLE": 0.549,
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
@@ -1218,12 +3020,33 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.125,
+        "JUNGLE": 0.853,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.012
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE"
       ]
     },
     {
       "name": "Xayah",
       "id": "Xayah",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.003,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.993,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -1234,12 +3057,35 @@
         "MIDDLE",
         "SUPPORT",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0,
+        "MIDDLE": 0.565,
+        "BOTTOM": 0.153,
+        "SUPPORT": 0.277
+      },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
       ]
     },
     {
       "name": "Xin Zhao",
       "id": "XinZhao",
       "positions": [
+        "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.081,
+        "JUNGLE": 0.877,
+        "MIDDLE": 0.03,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.008
+      },
+      "playable": [
+        "TOP",
         "JUNGLE"
       ]
     },
@@ -1250,6 +3096,18 @@
         "MIDDLE",
         "TOP",
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.23,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.57,
+        "BOTTOM": 0.196,
+        "SUPPORT": 0.003
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
@@ -1258,12 +3116,35 @@
       "positions": [
         "TOP",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.505,
+        "JUNGLE": 0.007,
+        "MIDDLE": 0.467,
+        "BOTTOM": 0.02,
+        "SUPPORT": 0.001
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Yorick",
       "id": "Yorick",
       "positions": [
+        "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.942,
+        "JUNGLE": 0.014,
+        "MIDDLE": 0.041,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.002
+      },
+      "playable": [
         "TOP"
       ]
     },
@@ -1272,12 +3153,32 @@
       "id": "Yunara",
       "positions": [
         "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.995,
+        "SUPPORT": 0
+      },
+      "playable": [
+        "BOTTOM"
       ]
     },
     {
       "name": "Yuumi",
       "id": "Yuumi",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0.999
+      },
+      "playable": [
         "SUPPORT"
       ]
     },
@@ -1287,6 +3188,18 @@
       "positions": [
         "TOP",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.833,
+        "JUNGLE": 0.133,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.007
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
       ]
     },
     {
@@ -1295,6 +3208,19 @@
       "positions": [
         "JUNGLE",
         "TOP"
+      ],
+      "positionShares": {
+        "TOP": 0.158,
+        "JUNGLE": 0.718,
+        "MIDDLE": 0.041,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.08
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -1303,12 +3229,35 @@
       "positions": [
         "MIDDLE",
         "JUNGLE"
+      ],
+      "positionShares": {
+        "TOP": 0.086,
+        "JUNGLE": 0.202,
+        "MIDDLE": 0.686,
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.008
+      },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Zeri",
       "id": "Zeri",
       "positions": [
+        "BOTTOM"
+      ],
+      "positionShares": {
+        "TOP": 0.011,
+        "JUNGLE": 0.011,
+        "MIDDLE": 0.013,
+        "BOTTOM": 0.965,
+        "SUPPORT": 0
+      },
+      "playable": [
         "BOTTOM"
       ]
     },
@@ -1318,12 +3267,35 @@
       "positions": [
         "BOTTOM",
         "MIDDLE"
+      ],
+      "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0,
+        "MIDDLE": 0.238,
+        "BOTTOM": 0.734,
+        "SUPPORT": 0.019
+      },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM"
       ]
     },
     {
       "name": "Zilean",
       "id": "Zilean",
       "positions": [
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.069,
+        "JUNGLE": 0,
+        "MIDDLE": 0.097,
+        "BOTTOM": 0.008,
+        "SUPPORT": 0.826
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
         "SUPPORT"
       ]
     },
@@ -1333,6 +3305,18 @@
       "positions": [
         "MIDDLE",
         "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.05,
+        "JUNGLE": 0,
+        "MIDDLE": 0.719,
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.218
+      },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
       ]
     },
     {
@@ -1340,6 +3324,19 @@
       "id": "Zyra",
       "positions": [
         "JUNGLE",
+        "SUPPORT"
+      ],
+      "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0.468,
+        "MIDDLE": 0.027,
+        "BOTTOM": 0.063,
+        "SUPPORT": 0.437
+      },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
         "SUPPORT"
       ]
     }

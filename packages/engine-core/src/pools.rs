@@ -1,4 +1,6 @@
+use crate::role_solver::ChampionMeta;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Role {
@@ -63,6 +65,43 @@ pub fn pool_multiplier(
     } else {
         (1.0 - penalties.out_of_pool, PoolTier::OutOfPool)
     }
+}
+
+/// The first display bucket, in `Role` order, `pool` files `champion_id` under; `None` when no
+/// bucket holds it. Any bucket will do: the role the search hands `score_pick` reaches nothing but
+/// [`pool_multiplier`], where every bucket the champion sits in is `InPoolInRole`.
+pub fn bucket_role(champion_id: &str, pool: &TeamPool) -> Option<Role> {
+    [
+        Role::Top,
+        Role::Jungle,
+        Role::Middle,
+        Role::Adc,
+        Role::Support,
+    ]
+    .into_iter()
+    .find(|role| {
+        pool.display
+            .for_role(*role)
+            .iter()
+            .any(|c| c == champion_id)
+    })
+}
+
+/// The role the search scores `champion_id` at (champion-role-shares design § 6): the bucket the
+/// mover's pool files it under, else its first listed position — the writer's argmax, a category
+/// only here, where it covers a pick outside the pool and a side with an empty pool (the session
+/// default) — else `None` for the caller's own default. Before slice B every site read
+/// `positions[0]`, so a champion filed under a bucket that was not its primary (Vayne under ADC on
+/// a patch that lists TOP first) was scored `InPoolOutOfRole` at ×0.75 by the pool the user wrote.
+pub fn scored_role(
+    champion_id: &str,
+    pool: &TeamPool,
+    meta: &HashMap<String, ChampionMeta>,
+) -> Option<Role> {
+    bucket_role(champion_id, pool).or_else(|| {
+        meta.get(champion_id)
+            .and_then(|m| m.positions.first().copied())
+    })
 }
 
 /// Bans don't use pool penalties — ban scoring is opponent-strategy-space-reduction.
