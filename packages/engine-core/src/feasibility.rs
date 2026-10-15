@@ -5,7 +5,7 @@
 //! correctly count as occupying one role, not multiple.
 
 use crate::pools::Role;
-use crate::role_solver::{position_factor, ChampionMeta};
+use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
 
 /// Bit `i` of a [`RoleMask`] is `ROLES[i]`.
@@ -17,27 +17,19 @@ pub(crate) const ROLES: [Role; 5] = [
     Role::Support,
 ];
 
-/// Threshold for "champion can play role" — must have at least secondary
-/// fit (position_factor >= 0.4). Non-listed (0.01) does NOT count.
-/// Matches the soft `missing_roles(0.4)` threshold used elsewhere.
-const ROLE_PLAYABLE_THRESHOLD: f64 = 0.4;
-
 /// The roles a champion can fill, one bit per entry of [`ROLES`].
 pub(crate) type RoleMask = u8;
 
-/// The meta's mask for `champion`: every role at or above `ROLE_PLAYABLE_THRESHOLD`; 0 for a champion
-/// the meta does not know.
+/// The meta's mask for `champion`: its `playable` set — the listed roles plus every role above the
+/// refresh's pick-count floor (champion-role-shares design § 4.1, § 5.1) — or the positions when the
+/// meta carries no `playable` (`ChampionMeta::playable_roles`); 0 for a champion the meta does not
+/// know. Legality is this set, not a weight: the solver's factors and the coverage score read the
+/// positions and the shares, never this mask.
 pub(crate) fn champion_role_mask(champion: &str, meta: &HashMap<String, ChampionMeta>) -> RoleMask {
     let Some(m) = meta.get(champion) else {
         return 0;
     };
-    let mut mask: RoleMask = 0;
-    for (idx, role) in ROLES.iter().enumerate() {
-        if position_factor(*role, &m.positions) >= ROLE_PLAYABLE_THRESHOLD {
-            mask |= 1 << idx;
-        }
-    }
-    mask
+    roles_mask(m.playable_roles())
 }
 
 /// The mask of `roles`: one bit per entry of [`ROLES`] that the list names.

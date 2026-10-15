@@ -308,8 +308,9 @@ pub fn spec_to_pools(
 /// every meta role: a sunk fact, never off-role, never charged. A pick with no meta role would have
 /// none to be added under and the root would then be refused as outside the pool (review minor F6) —
 /// unreachable: both universe constructors refuse a champion with no positions (`NoPositions`), the
-/// live loader drops one, and every listed position is playable (`position_factor` never puts a
-/// listed role below `ROLE_PLAYABLE_THRESHOLD`), so a champion in a universe always has a role.
+/// live loader drops one, and every listed position is playable (`playable_roles` falls back to the
+/// positions and the refresh writes `positions ⊆ playable`), so a champion in a universe always has
+/// a role.
 pub fn with_board_picks(tags: RoleSets, board: ChampionSet, universe: &Universe) -> RoleSets {
     let listed = tags.union();
     board
