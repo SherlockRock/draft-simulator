@@ -106,13 +106,22 @@ fn synthesise_from(doc: &serde_json::Value, meta: &mut HashMap<String, ChampionM
             continue;
         }
         let shares = &entry["meta_roles"];
+        // The five shares aligned with ROLES, as the loader aligns champion-meta's `positionShares`
+        // (champion-role-shares § 4.2 hop 7): the factor reads these; `positions` is the ≥ 0.10
+        // listing in descending order, the writer's convention, and `playable` the same listing —
+        // the refresh's pick-count floor needs the deciding patch's train games, which this
+        // synthesis has no business reconstructing (no champion takes this path today).
+        let five: Vec<f64> = META_ROLE_NAMES
+            .iter()
+            .map(|name| shares[*name].as_f64().unwrap_or(0.0))
+            .collect();
         let mut ranked: Vec<(Role, f64)> = ROLES
             .iter()
-            .zip(META_ROLE_NAMES)
-            .map(|(r, name)| (*r, shares[name].as_f64().unwrap_or(0.0)))
+            .zip(&five)
+            .map(|(r, share)| (*r, *share))
             .filter(|(_, share)| *share >= SYNTH_ROLE_THRESHOLD)
             .collect();
-        // Primary first — `position_factor` treats positions[0] specially.
+        // Descending by share: positions[0] is the argmax by the writer's convention.
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         if ranked.is_empty() {
             // A champion spread under the threshold in every role still needs a
@@ -132,11 +141,18 @@ fn synthesise_from(doc: &serde_json::Value, meta: &mut HashMap<String, ChampionM
                 .unwrap();
             ranked.push((best, 0.0));
         }
+        let positions: Vec<Role> = ranked.iter().map(|(r, _)| *r).collect();
         meta.insert(
             alias.clone(),
             ChampionMeta {
                 id: alias.clone(),
-                positions: ranked.iter().map(|(r, _)| *r).collect(),
+                playable: positions.clone(),
+                positions,
+                position_shares: if five.iter().any(|s| *s > 0.0) {
+                    five
+                } else {
+                    Vec::new()
+                },
                 ..Default::default()
             },
         );
@@ -148,8 +164,9 @@ fn synthesise_from(doc: &serde_json::Value, meta: &mut HashMap<String, ChampionM
 
 /// A champion in the vocab that neither champion-meta nor the train prior knows
 /// (a ban-only or val/test-only pick). `solve` panics on an unknown id by
-/// contract, so give it an empty position list: every role scores
-/// NON_LISTED_FACTOR and its posterior is uniform — no preference, like UNKNOWN.
+/// contract, so give it an empty position list and no shares: every role reads
+/// the category factor 0.01 and its posterior is uniform — no preference, like
+/// UNKNOWN.
 fn ensure_known(meta: &mut HashMap<String, ChampionMeta>, champs: &[&str]) -> usize {
     let mut added = 0;
     for c in champs {
@@ -173,6 +190,14 @@ fn synthesised_meta_credits_the_adc_role_from_the_bottom_share() {
     let mut meta = HashMap::new();
     synthesise_from(&doc, &mut meta);
     assert_eq!(meta["NewMarksman"].positions, vec![Role::Adc]);
+    // The five shares ride along, aligned with ROLES (BOTTOM → Adc), and playable = the listing.
+    assert_eq!(
+        meta["NewMarksman"].position_shares,
+        vec![0.0, 0.0, 0.05, 0.95, 0.0]
+    );
+    assert_eq!(meta["NewMarksman"].playable, vec![Role::Adc]);
+    assert_eq!(meta["NewMarksman"].share_of(Role::Middle), Some(0.05));
+    assert_eq!(meta["NewMarksman"].max_share(), Some(0.95));
 }
 
 #[test]
@@ -186,6 +211,11 @@ fn synthesis_lists_a_role_at_exactly_the_threshold_as_a_secondary() {
     let mut meta = HashMap::new();
     synthesise_from(&doc, &mut meta);
     assert_eq!(meta["FlexMarksman"].positions, vec![Role::Adc, Role::Middle]);
+    assert_eq!(meta["FlexMarksman"].playable, vec![Role::Adc, Role::Middle]);
+    assert_eq!(
+        meta["FlexMarksman"].position_shares,
+        vec![0.0, 0.0, 0.10, 0.90, 0.0]
+    );
 }
 
 #[test]
@@ -393,6 +423,8 @@ fn locke_is_in_champion_meta_and_solve_does_not_panic() {
     );
     let locke = &meta["Locke"];
     assert_eq!(locke.positions.first(), Some(&Role::Middle), "Locke's primary is MIDDLE (0.74 at Master+)");
+    // The shipped table carries his five shares; the largest is MIDDLE's (the factor's denominator).
+    assert_eq!(locke.max_share(), locke.share_of(Role::Middle));
 
     let team = ["Locke", "Ahri", "Sejuani", "Jinx", "Thresh"];
     let roles = team_roles(&team, &meta);
@@ -445,19 +477,25 @@ fn solve_handles_a_partial_team_the_way_a_masked_state_needs() {
 }
 
 #[test]
-fn a_champion_with_one_listed_position_concentrates_its_posterior_there() {
+fn a_champion_concentrates_its_posterior_in_its_largest_share_role() {
     // Guards the direction of the whole thing: if the posterior were uniform,
-    // gate 4's "posterior arm" would be testing nothing.
+    // gate 4's "posterior arm" would be testing nothing. The role is the one with
+    // the LARGEST SHARE (the factor's 1.0; champion-role-shares slice B) —
+    // positions[0] only when the table carries no shares.
     let (meta, _) = load_meta_with_synthesis();
     let team = ["Gnar", "Sejuani", "Ahri", "Jinx", "Thresh"];
     let roles = team_roles(&team, &meta);
     for (champ, probs) in &roles.posterior {
-        let primary = meta[champ].positions.first().copied();
-        if let Some(p) = primary {
+        let m = &meta[champ];
+        let best = match m.max_share() {
+            Some(max) => ROLES.iter().copied().find(|r| m.share_of(*r) == Some(max)),
+            None => m.positions.first().copied(),
+        };
+        if let Some(p) = best {
             let i = ROLES.iter().position(|r| *r == p).unwrap();
             assert!(
                 probs[i] > 0.5,
-                "{champ} primary {:?} carries only {:.3} of the posterior",
+                "{champ} largest-share role {:?} carries only {:.3} of the posterior",
                 p,
                 probs[i]
             );
