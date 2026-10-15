@@ -841,12 +841,11 @@ fn render_report(
                 }
                 placements(&mut arm_memo, root.side, &position, &fx.root.pools, u, *a)
             };
+            // `r` = the placed role's share over the champion's LARGEST share — never `positions[0]`'s
+            // (an override may reorder the positions; champion-role-shares design § 4.1).
             let share_ratio = |pl: &Placement| -> String {
-                match (
-                    u.share(pl.champion, pl.role),
-                    u.share(pl.champion, u.primary(pl.champion)),
-                ) {
-                    (Some(s), Some(primary)) if primary > 0.0 => format!("{:.2}", s / primary),
+                match (u.share(pl.champion, pl.role), u.max_share(pl.champion)) {
+                    (Some(s), Some(max)) if max > 0.0 => format!("{:.2}", s / max),
                     _ => "?".to_string(),
                 }
             };

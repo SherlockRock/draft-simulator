@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use engine_core::coverage::ROLES;
 use engine_core::evaluator::{MetaData, SynergyRule};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
@@ -160,15 +161,13 @@ where
     })
 }
 
-/// `positionShares` aligned with `positions` (engine-role-grade design § 1): empty when the file has
-/// none, else one share per listed role in the positions' order. A key for a role outside `positions`,
-/// or a listed role the map lacks, is a load error — the engine would otherwise grade a role by
-/// another role's share.
-fn aligned_shares(
-    id: &str,
-    positions: &[String],
-    shares: &HashMap<String, f64>,
-) -> Result<Vec<f64>, EngineLoadError> {
+/// `positionShares` as FIVE values aligned with `ROLES` (champion-role-shares design § 4.1): the
+/// five-key map the refresh writes, or the legacy listed-key map of the 2026-09-05 tables (an absent
+/// role is 0); empty when the file has none. A key outside the vocabulary, a value outside [0, 1] and
+/// an all-zero map are load errors naming the champion — a present all-zero row would divide the
+/// factor and the grade by zero. NO ordering rule: the largest share may sit at any role (an override
+/// may reorder `positions`); every consumer divides by `ChampionMeta::max_share`.
+fn aligned_shares(id: &str, shares: &HashMap<String, f64>) -> Result<Vec<f64>, EngineLoadError> {
     if shares.is_empty() {
         return Ok(Vec::new());
     }
@@ -178,20 +177,26 @@ fn aligned_shares(
     };
     let mut keys: Vec<&String> = shares.keys().collect();
     keys.sort();
-    if let Some(extra) = keys.iter().find(|k| !positions.contains(k)) {
-        return Err(invalid(format!(
-            "positionShares names {extra}, which positions does not list"
-        )));
+    let mut aligned = vec![0.0; ROLES.len()];
+    for key in keys {
+        let role = parse_role(key)
+            .map_err(|_| invalid(format!("positionShares names {key}, which is not a role")))?;
+        let value = shares[key];
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err(invalid(format!(
+                "positionShares.{key} = {value} is not a finite number in [0, 1]"
+            )));
+        }
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        aligned[bit] = value;
     }
-    positions
-        .iter()
-        .map(|p| {
-            shares
-                .get(p)
-                .copied()
-                .ok_or_else(|| invalid(format!("positionShares lacks the listed role {p}")))
-        })
-        .collect()
+    if aligned.iter().all(|s| *s <= 0.0) {
+        return Err(invalid("positionShares are all zero".to_string()));
+    }
+    Ok(aligned)
 }
 
 fn convert_entry(entry: ChampionMetaEntry) -> Result<ChampionMeta, EngineLoadError> {
@@ -200,7 +205,7 @@ fn convert_entry(entry: ChampionMetaEntry) -> Result<ChampionMeta, EngineLoadErr
         .iter()
         .map(|s| parse_role(s))
         .collect::<Result<Vec<_>, _>>()?;
-    let position_shares = aligned_shares(&entry.id, &entry.positions, &entry.position_shares)?;
+    let position_shares = aligned_shares(&entry.id, &entry.position_shares)?;
     let playable = entry
         .playable
         .iter()
@@ -314,10 +319,13 @@ mod tests {
         assert_eq!(meta.win_rates["Ahri"], 0.52);
     }
 
-    /// engine-role-grade design § 1, test 10: `positionShares` parses into a vector aligned with
-    /// `positions` whatever order the map's keys come in; a key outside `positions` fails; absent → empty.
+    /// champion-role-shares design § 4.1 / § 4.2 hop 6: `positionShares` parses into FIVE values aligned
+    /// with `ROLES` (Top, Jungle, Middle, Adc, Support) whatever order the map's keys come in; a legacy
+    /// listed-key map (the 2026-09-05 frozen tables) loads with 0 for every absent role; absent → empty
+    /// (`share_of` is then `None`); a key outside the vocabulary, a value outside [0, 1] and an all-zero
+    /// map are load errors naming the champion. No ordering rule: the largest share may sit anywhere.
     #[test]
-    fn position_shares_parse_aligned_with_positions() {
+    fn position_shares_parse_aligned_with_the_five_roles() {
         let matchup_path = write_tmp(
             "matchup-shares.json",
             r#"{"counters":{},"synergyRules":[]}"#,
@@ -330,43 +338,69 @@ mod tests {
         };
         let meta_path = write_tmp(
             "meta-shares.json",
-            &with(r#","positionShares":{"BOTTOM":0.3,"MIDDLE":0.6}"#),
+            &with(
+                r#","positionShares":{"BOTTOM":0.3,"MIDDLE":0.6,"SUPPORT":0,"TOP":0.1,"JUNGLE":0}"#,
+            ),
         );
         let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
         assert_eq!(
             meta["Ahri"].position_shares,
-            vec![0.6, 0.3],
-            "aligned with positions, not the map's order"
+            vec![0.1, 0.0, 0.6, 0.3, 0.0],
+            "aligned with ROLES, not the map's order"
         );
         assert_eq!(meta["Ahri"].share_of(Role::Adc), Some(0.3));
-        assert_eq!(meta["Ahri"].share_of(Role::Top), None);
+        assert_eq!(
+            meta["Ahri"].share_of(Role::Top),
+            Some(0.1),
+            "an unlisted role's share is read"
+        );
+        assert_eq!(meta["Ahri"].max_share(), Some(0.6));
+        // The legacy listed-key shape: absent roles are 0.
+        let meta_path = write_tmp(
+            "meta-legacy-shares.json",
+            &with(r#","positionShares":{"BOTTOM":0.3,"MIDDLE":0.6}"#),
+        );
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta["Ahri"].position_shares, vec![0.0, 0.0, 0.6, 0.3, 0.0]);
+        assert_eq!(meta["Ahri"].share_of(Role::Top), Some(0.0));
+        // A reordered-primary override: accepted, the maximum is wherever it is.
+        let meta_path = write_tmp(
+            "meta-reordered-shares.json",
+            &with(r#","positionShares":{"MIDDLE":0.3,"BOTTOM":0.6}"#),
+        );
+        let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
+        assert_eq!(meta["Ahri"].max_share(), Some(0.6));
         let meta_path = write_tmp("meta-noshares.json", &with(""));
         let (_, meta) = load_engine_data(&meta_path, &matchup_path).unwrap();
         assert_eq!(meta["Ahri"].position_shares, Vec::<f64>::new());
         assert_eq!(meta["Ahri"].share_of(Role::Middle), None);
-        let meta_path = write_tmp(
-            "meta-extra.json",
-            &with(r#","positionShares":{"MIDDLE":0.6,"BOTTOM":0.3,"TOP":0.1}"#),
-        );
-        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
-            panic!("a key outside positions must fail");
+        assert_eq!(meta["Ahri"].max_share(), None);
+        let refused = |name: &str, shares: &str, needle: &str| {
+            let meta_path = write_tmp(name, &with(shares));
+            let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
+                panic!("{shares} must fail");
+            };
+            assert!(err.to_string().contains(needle), "{shares}: {err}");
         };
-        assert!(
-            err.to_string()
-                .contains("positionShares names TOP, which positions does not list"),
-            "{err}"
+        refused(
+            "meta-shares-utility.json",
+            r#","positionShares":{"MIDDLE":0.6,"BOTTOM":0.3,"UTILITY":0.1}"#,
+            "positionShares names UTILITY, which is not a role",
         );
-        let meta_path = write_tmp(
-            "meta-missing.json",
-            &with(r#","positionShares":{"MIDDLE":0.6}"#),
+        refused(
+            "meta-shares-over.json",
+            r#","positionShares":{"MIDDLE":1.6,"BOTTOM":0.3}"#,
+            "positionShares.MIDDLE = 1.6 is not a finite number in [0, 1]",
         );
-        let Err(err) = load_engine_data(&meta_path, &matchup_path) else {
-            panic!("a listed role without a share must fail");
-        };
-        assert!(
-            err.to_string()
-                .contains("positionShares lacks the listed role BOTTOM"),
-            "{err}"
+        refused(
+            "meta-shares-negative.json",
+            r#","positionShares":{"MIDDLE":-0.1,"BOTTOM":0.3}"#,
+            "positionShares.MIDDLE = -0.1 is not a finite number in [0, 1]",
+        );
+        refused(
+            "meta-shares-zero.json",
+            r#","positionShares":{"MIDDLE":0,"BOTTOM":0}"#,
+            "positionShares are all zero",
         );
     }
 

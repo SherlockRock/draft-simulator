@@ -140,11 +140,11 @@ pub struct Champion {
     pub id: String,
     pub positions: Vec<Role>,
     pub linear: f64,
-    /// The Master+ play share of each listed role, aligned with `positions`, or empty = unknown
-    /// (engine-role-grade design § 1, G10). Tier A fixtures omit it; the live universe copies
-    /// `ChampionMeta::position_shares`. `from_tables` validates it (one finite share in (0, 1] per
-    /// position, the maximum first — `positions[0]` is the primary by construction) and precomputes
-    /// each role's grade from it.
+    /// All five roles' Master+ play shares aligned with `ROLES`, or empty = unknown (champion-role-
+    /// shares design § 4.1). Tier A fixtures omit it; the live universe copies
+    /// `ChampionMeta::position_shares`. `from_tables` validates it (five finite values in [0, 1] with
+    /// a positive largest — NO ordering rule, an override may reorder `positions`) and precomputes
+    /// each role's grade from it against the LARGEST share.
     #[serde(default)]
     pub shares: Vec<f64>,
     /// The engine's legality set (champion-meta.json's `playable`, champion-role-shares design
@@ -197,9 +197,9 @@ pub enum UniverseError {
     /// `from_tables`: a table is not `n × n` for the `n` champions given.
     #[error("{0} table is not {1}×{1}")]
     Shape(&'static str, usize),
-    /// `Champion::shares` is neither empty nor one finite share in (0, 1] per listed position with the
-    /// maximum first (engine-role-grade design § 1).
-    #[error("{0:?}: shares must be empty or one finite share in (0, 1] per listed position, the maximum first")]
+    /// `Champion::shares` is neither empty nor five finite values in [0, 1] with a positive largest
+    /// (champion-role-shares design § 4.1).
+    #[error("{0:?}: shares must be empty or five finite values in [0, 1] aligned with ROLES, the largest positive")]
     Shares(String),
     /// `Champion::playable` is non-empty and lacks a listed position (the fallback assumes
     /// `positions ⊆ playable`; champion-role-shares design § 4.1).
@@ -223,10 +223,11 @@ pub struct Universe {
     /// Each champion's legality mask, by index: its `playable`, or its positions when the meta has
     /// none (champion-role-shares design § 4.1, U2) — what a role-tagged side is read against.
     playable_masks: Vec<RoleMask>,
-    /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1): 0 at the
-    /// primary, `round(100 · (1 − share(role) / share(primary)))` at another listed role, 100 at a role
-    /// never played; all 0 when the shares are unknown. Read only for a placement outside the side's
-    /// pool entries in a meta role (`reference::feasibility`).
+    /// Each champion's grade per role, bit `i` = `ROLES[i]` (engine-role-grade design G1 over the five
+    /// shares, champion-role-shares § 4.2 hop 8): `round(100 · (1 − share(role) / max(shares)))` — 0 at
+    /// the largest share, 100 at a role with none, a real grade at a playable but unlisted role; all 0
+    /// when the shares are unknown. Read only for a placement outside the side's pool entries
+    /// (`reference::feasibility`).
     grades: Vec<[u8; 5]>,
 }
 
@@ -237,26 +238,26 @@ fn grade_unit(x: f64) -> u8 {
         .expect("a rounded, clamped grade is an integer in 0..=100")
 }
 
-/// G1 for one champion: the grade of every role from its shares. `f64::round` — half away from zero:
-/// shares `[0.8, 0.1]` grade the second role 88, not 87 (`1 − 0.125 = 0.875`, exactly representable).
+/// G1 for one champion over the five shares (champion-role-shares § 4.2 hop 8): every role's grade is
+/// `round(100 · (1 − share / max))` against the champion's LARGEST share — 0 at the maximum, 100 at a
+/// role with no share, a real grade at a playable but unlisted role (Kai'Sa top: 98). `f64::round` —
+/// half away from zero: shares 0.1 / 0.8 grade 88, not 87 (`1 − 0.125 = 0.875`, exactly representable).
 fn grades_of(c: &Champion) -> Result<[u8; 5], UniverseError> {
     if c.shares.is_empty() {
         return Ok([0; 5]);
     }
-    let primary = c.shares[0];
-    let well_formed = c.shares.len() == c.positions.len()
+    let well_formed = c.shares.len() == ROLES.len()
         && c.shares
             .iter()
-            .all(|s| s.is_finite() && *s > 0.0 && *s <= 1.0 && *s <= primary);
-    if !well_formed {
+            .all(|s| s.is_finite() && *s >= 0.0 && *s <= 1.0);
+    let max = c.shares.iter().copied().fold(0.0_f64, f64::max);
+    if !well_formed || max <= 0.0 {
         return Err(UniverseError::Shares(c.id.clone()));
     }
     let mut grades = [100u8; 5];
-    for (bit, role) in ROLES.iter().enumerate() {
-        if let Some(i) = c.positions.iter().position(|r| r == role) {
-            let shortfall = (100.0 * (1.0 - c.shares[i] / primary)).round();
-            grades[bit] = grade_unit(shortfall.clamp(0.0, 100.0));
-        }
+    for (bit, share) in c.shares.iter().enumerate() {
+        let shortfall = (100.0 * (1.0 - share / max)).round();
+        grades[bit] = grade_unit(shortfall.clamp(0.0, 100.0));
     }
     Ok(grades)
 }
@@ -575,22 +576,28 @@ impl Universe {
         self.grades[usize::from(c.0)]
     }
 
-    /// `c`'s Master+ play share in `role` (`Champion::shares`): `None` when the shares are unknown or
-    /// the role is not listed. The report prints `r = share(role) / share(primary)` beside a graded
-    /// placement.
+    /// `c`'s Master+ play share in `role` (`Champion::shares`, keyed by role): `None` when the shares
+    /// are unknown; 0 for a role never played. The report prints `r = share(role) / max_share` beside
+    /// a graded placement.
     pub fn share(&self, c: ChampionIdx, role: Role) -> Option<f64> {
-        let champion = &self.champions[usize::from(c.0)];
-        if champion.shares.len() != champion.positions.len() {
+        let shares = &self.champions[usize::from(c.0)].shares;
+        if shares.len() != ROLES.len() {
             return None;
         }
-        champion
-            .positions
-            .iter()
-            .position(|r| *r == role)
-            .map(|i| champion.shares[i])
+        ROLES.iter().position(|r| *r == role).map(|i| shares[i])
     }
 
-    /// `c`'s primary role: `positions[0]`, the argmax share by construction (positions refresh slice 1).
+    /// `c`'s largest share — the grade's denominator; `None` when the shares are unknown.
+    pub fn max_share(&self, c: ChampionIdx) -> Option<f64> {
+        let shares = &self.champions[usize::from(c.0)].shares;
+        if shares.len() != ROLES.len() {
+            return None;
+        }
+        shares.iter().copied().reduce(f64::max)
+    }
+
+    /// `c`'s `positions[0]`: the writer's argmax convention, NOT a weight's denominator — an override
+    /// may reorder the positions (champion-role-shares design § 4.1); divide by `max_share` instead.
     pub fn primary(&self, c: ChampionIdx) -> Role {
         self.champions[usize::from(c.0)].positions[0]
     }

@@ -10,6 +10,7 @@
 //! allowance.
 #![allow(dead_code)]
 
+use engine_core::coverage::ROLES;
 use engine_core::draft_state::{DraftState, Side};
 use engine_core::evaluator::{EvalContext, MetaData, PhaseWeightTable, PhaseWeights, SynergyRule};
 use engine_core::pools::{Penalties, Role, RolePoolMap, TeamPool};
@@ -117,33 +118,47 @@ pub fn parse_role(s: &str) -> Role {
     }
 }
 
-/// `positionShares` aligned with `positions` (engine-role-grade design § 1): empty when the file has
-/// none, else one share per listed role in the positions' order. A key for a role outside `positions`,
-/// or a listed role the map lacks, is a loading mistake, named.
-pub fn aligned_shares(
-    id: &str,
-    positions: &[String],
-    shares: &HashMap<String, f64>,
-) -> Result<Vec<f64>, String> {
+/// `positionShares` as FIVE values aligned with `ROLES` (champion-role-shares design § 4.1): the
+/// five-key map the refresh writes, or the legacy listed-key map of the 2026-09-05 frozen table (an
+/// absent role is 0); empty when the file has none. A key outside the vocabulary, a value outside
+/// [0, 1] and an all-zero map are loading mistakes, named. The same rule as engine-node's
+/// `data_loader::aligned_shares`.
+pub fn aligned_shares(id: &str, shares: &HashMap<String, f64>) -> Result<Vec<f64>, String> {
     if shares.is_empty() {
         return Ok(Vec::new());
     }
     let mut keys: Vec<&String> = shares.keys().collect();
     keys.sort();
-    if let Some(extra) = keys.iter().find(|k| !positions.contains(k)) {
-        return Err(format!(
-            "{id}: positionShares names {extra}, which positions does not list"
-        ));
+    let mut aligned = vec![0.0; ROLES.len()];
+    for key in keys {
+        let role = match key.as_str() {
+            "TOP" => Role::Top,
+            "JUNGLE" => Role::Jungle,
+            "MIDDLE" => Role::Middle,
+            "ADC" | "BOTTOM" => Role::Adc,
+            "SUPPORT" => Role::Support,
+            _ => {
+                return Err(format!(
+                    "{id}: positionShares names {key}, which is not a role"
+                ))
+            }
+        };
+        let value = shares[key];
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err(format!(
+                "{id}: positionShares.{key} = {value} is not a finite number in [0, 1]"
+            ));
+        }
+        let bit = ROLES
+            .iter()
+            .position(|r| *r == role)
+            .expect("ROLES holds every Role");
+        aligned[bit] = value;
     }
-    positions
-        .iter()
-        .map(|p| {
-            shares
-                .get(p)
-                .copied()
-                .ok_or_else(|| format!("{id}: positionShares lacks the listed role {p}"))
-        })
-        .collect()
+    if aligned.iter().all(|s| *s <= 0.0) {
+        return Err(format!("{id}: positionShares are all zero"));
+    }
+    Ok(aligned)
 }
 
 pub fn load_production_data() -> (MetaData, HashMap<String, ChampionMeta>) {
@@ -174,12 +189,8 @@ pub fn load_production_data_from(meta_path: &Path) -> (MetaData, HashMap<String,
         champion_meta.insert(
             id,
             ChampionMeta {
-                position_shares: aligned_shares(
-                    &entry.id,
-                    &entry.positions,
-                    &entry.position_shares,
-                )
-                .unwrap_or_else(|e| panic!("champion-meta.json: {e}")),
+                position_shares: aligned_shares(&entry.id, &entry.position_shares)
+                    .unwrap_or_else(|e| panic!("champion-meta.json: {e}")),
                 playable: {
                     let playable: Vec<Role> =
                         entry.playable.iter().map(|s| parse_role(s)).collect();

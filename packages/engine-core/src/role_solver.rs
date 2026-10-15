@@ -33,10 +33,13 @@ pub struct ChampionTags {
 pub struct ChampionMeta {
     pub id: String,
     pub positions: Vec<Role>,
-    /// The Master+ play share of each listed role, aligned with `positions` (champion-meta.json's
-    /// `positionShares`; engine-role-grade design § 1, G10). Empty = unknown: a hand-entered champion,
-    /// or a file from before the shares were shipped. Nothing in the incumbent reads it; the reference
-    /// universe grades an off-role pick by `share(role) / share(primary)`.
+    /// All five roles' Master+ play shares, aligned with `ROLES` (Top, Jungle, Middle, Adc, Support) —
+    /// champion-meta.json's `positionShares` (champion-role-shares design § 4.1; a legacy listed-key
+    /// map loads with 0 for its absent roles). Empty = unknown: a hand-entered champion, or a file from
+    /// before the shares. NO ordering rule: the largest share may sit at any role (an override may
+    /// reorder `positions`), so every weight and grade divides by [`ChampionMeta::max_share`], never by
+    /// `positions[0]`'s share. Nothing in the incumbent reads it yet (slice B); the reference universe
+    /// grades every role by it.
     pub position_shares: Vec<f64>,
     /// The engine's legality set (champion-meta.json's `playable`; champion-role-shares design § 4.1):
     /// the listed roles plus every role above the refresh's pick-count floor. Empty = unknown — a file
@@ -60,16 +63,24 @@ impl ChampionMeta {
         }
     }
 
-    /// `role`'s share: `None` when the shares are unknown (empty, or not aligned with `positions`) or
-    /// the role is not listed.
+    /// `role`'s share: `None` when the shares are unknown (not five values); 0 for a role never played.
     pub fn share_of(&self, role: Role) -> Option<f64> {
-        if self.position_shares.len() != self.positions.len() {
+        if self.position_shares.len() != ROLES.len() {
             return None;
         }
-        self.positions
+        ROLES
             .iter()
             .position(|r| *r == role)
             .map(|i| self.position_shares[i])
+    }
+
+    /// The largest share — the denominator of every weight and grade; `None` when the shares are
+    /// unknown.
+    pub fn max_share(&self) -> Option<f64> {
+        if self.position_shares.len() != ROLES.len() {
+            return None;
+        }
+        self.position_shares.iter().copied().reduce(f64::max)
     }
 }
 

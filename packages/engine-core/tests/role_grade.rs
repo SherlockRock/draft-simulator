@@ -70,14 +70,17 @@ fn grades(u: &Universe) -> Vec<u8> {
     ROLE_ORDER.iter().map(|r| u.grade(c, *r)).collect()
 }
 
-/// Design § 7 test 5: `from_tables` grades each listed role by its shortfall against the primary
-/// (`[0.6, 0.3, 0.12]` → 0 / 50 / 80), a role never played 100, every role 0 when the shares are empty;
-/// `f64::round` is the convention (half away from zero: `[0.8, 0.1]` → 87.5 → 88); ties are allowed.
+/// Role-grade design § 7 test 5, as champion-role-shares § 4.2 hop 8 restates it: `from_tables` grades
+/// EVERY role by its shortfall against the champion's LARGEST share — the five shares are aligned with
+/// `ROLES` (`[0.6, 0, 0.3, 0.12, 0]` → 0 / 100 / 50 / 80 / 100), a share of 0 grades 100, a playable but
+/// unlisted role gets a real grade (Kai'Sa top 0.019 / 0.957 → 98), every role 0 when the shares are
+/// empty; `f64::round` is the convention (half away from zero: 0.1 / 0.8 → 87.5 → 88); ties grade 0;
+/// the denominator is the maximum wherever it sits — an override may reorder `positions`.
 #[test]
-fn grades_follow_the_shortfall_against_the_primary() {
+fn grades_follow_the_shortfall_against_the_largest_share() {
     let u = one(
         r#""Top", "Middle", "Adc""#,
-        r#", "shares": [0.6, 0.3, 0.12]"#,
+        r#", "shares": [0.6, 0, 0.3, 0.12, 0]"#,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let g = grades(&u);
@@ -89,32 +92,53 @@ fn grades_follow_the_shortfall_against_the_primary() {
     let u = one(r#""Top", "Middle""#, r#", "shares": []"#).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(grades(&u), vec![0; 5], "an explicit empty list is the same");
 
-    let u = one(r#""Jungle", "Support""#, r#", "shares": [0.8, 0.1]"#)
-        .unwrap_or_else(|e| panic!("{e}"));
+    let u = one(
+        r#""Jungle", "Support""#,
+        r#", "shares": [0, 0.8, 0, 0, 0.1]"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     let g = grades(&u);
-    println!("the exact-.5 pair [0.8, 0.1]: {g:?}");
+    println!("the exact-.5 pair 0.1 / 0.8: {g:?}");
     assert_eq!(g[4], 88, "87.5 rounds half away from zero");
 
-    let u =
-        one(r#""Middle", "Top""#, r#", "shares": [0.5, 0.5]"#).unwrap_or_else(|e| panic!("{e}"));
+    let u = one(r#""Middle", "Top""#, r#", "shares": [0.5, 0, 0.5, 0, 0]"#)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
         grades(&u),
         vec![0, 100, 0, 100, 100],
-        "a tie with the primary grades 0"
+        "a tie with the maximum grades 0"
     );
+
+    // Kai'Sa-shaped (the 16.19 table): BOTTOM-only listed, playable TOP by the pick-count floor — the
+    // grade reads the five shares, so TOP is 98 and not "illegal"; a role with no share stays 100.
+    let u = one(
+        r#""Adc""#,
+        r#", "shares": [0.019, 0.006, 0.017, 0.957, 0], "playable": ["Top", "Adc"]"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let g = grades(&u);
+    println!("Kai'Sa-shaped grades {g:?}");
+    assert_eq!(g, vec![98, 99, 98, 0, 100]);
+
+    // The denominator is max(shares), not positions[0]'s share: an override that reordered the
+    // positions leaves every grade where the data puts it.
+    let u = one(r#""Middle", "Top""#, r#", "shares": [0.56, 0, 0.44, 0, 0]"#)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(grades(&u), vec![0, 100, 21, 100, 100]);
 }
 
-/// Design § 7 test 5: a share list of the wrong length, a non-maximal first share, a zero, a share
-/// above 1 and a non-finite one are each `UniverseError::Shares` naming the champion.
+/// A share list that is neither empty nor five values, a value outside [0, 1], a non-finite one and an
+/// all-zero list are each `UniverseError::Shares` naming the champion; a non-maximal first value is NOT
+/// malformed any more (no ordering invariant on a stored row — judge I2).
 #[test]
 fn malformed_shares_are_refused_by_name() {
     for shares in [
         r#", "shares": [0.6]"#,
-        r#", "shares": [0.6, 0.3, 0.1]"#,
-        r#", "shares": [0.3, 0.6]"#,
-        r#", "shares": [0.6, 0.0]"#,
-        r#", "shares": [0.6, -0.1]"#,
-        r#", "shares": [1.5, 0.6]"#,
+        r#", "shares": [0.6, 0.3]"#,
+        r#", "shares": [0.6, 0, 0.3, 0, 0, 0]"#,
+        r#", "shares": [0.6, 0, -0.1, 0, 0]"#,
+        r#", "shares": [1.5, 0, 0.6, 0, 0]"#,
+        r#", "shares": [0, 0, 0, 0, 0]"#,
     ] {
         let got = one(r#""Top", "Middle""#, shares);
         assert!(
@@ -122,11 +146,15 @@ fn malformed_shares_are_refused_by_name() {
             "{shares}: {got:?}"
         );
     }
+    assert!(
+        one(r#""Top", "Middle""#, r#", "shares": [0.3, 0, 0.6, 0, 0]"#).is_ok(),
+        "the largest share may sit at any role"
+    );
     let nan = vec![Champion {
         id: "C".into(),
         positions: vec![Role::Top, Role::Middle],
         linear: 0.0,
-        shares: vec![0.6, f64::NAN],
+        shares: vec![0.6, 0.0, f64::NAN, 0.0, 0.0],
         playable: Vec::new(),
     }];
     let zero = vec![vec![0.0; 1]; 1];
@@ -136,67 +164,77 @@ fn malformed_shares_are_refused_by_name() {
     );
 }
 
-/// Design § 7 test 10: the shipped `positionShares` load into a vector aligned with `positions` in
-/// both loaders' order of keys, absent is empty, a mismatched key set is named, and the shares reach
-/// the universe's grade. The exact chain is pinned on the FROZEN table
-/// (`tests/data/champion-meta-2026-09-05-positions.json`, `becf58d`'s meta): fact 6's Zyra,
-/// shares 0.448 / 0.380 / 0.130 → grades 0 / 15 / 71. The LIVE table gets a shape check — every
-/// champion's shares aligned with its positions, the primary graded 0, grades non-decreasing along
-/// the positions' order (shares descend), every unlisted role 100, at least one graded pair — so a
-/// positions refresh moves no pin here (the 2026-10-07 recency merge dropped Zyra's BOTTOM).
+/// Role-grade design § 7 test 10, restated for the five-aligned shares (champion-role-shares § 4.1,
+/// § 4.2 hop 6): the shipped `positionShares` load into FIVE values aligned with `ROLES` whatever the
+/// map's key set or order — the legacy listed-key shape of the FROZEN table
+/// (`tests/data/champion-meta-2026-09-05-positions.json`, `becf58d`'s meta) gives every absent role 0;
+/// absent is empty; a key outside the vocabulary is named; and the shares reach the universe's grade:
+/// fact 6's Zyra, shares 0.448 / 0.380 / 0.130 → grades 0 / 15 / 71 (unchanged — the maximum IS the
+/// primary there). The LIVE table gets a shape check that holds on either share shape and whatever the
+/// positions' order: every champion has five shares with a positive maximum, and every role's grade is
+/// `round(100 · (1 − share / max))` — so a refresh moves no pin here.
 #[test]
-fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() {
+fn the_shipped_shares_load_aligned_with_the_five_roles_and_reach_the_live_universe() {
     let frozen_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/data/champion-meta-2026-09-05-positions.json");
     let (_, meta) = load_production_data_from(&frozen_path);
     for m in meta.values() {
-        assert_eq!(m.position_shares.len(), m.positions.len(), "{}", m.id);
+        assert_eq!(m.position_shares.len(), 5, "{}", m.id);
     }
     let zyra = &meta["Zyra"];
     println!("Zyra {:?} {:?}", zyra.positions, zyra.position_shares);
     assert_eq!(zyra.positions, vec![Role::Jungle, Role::Support, Role::Adc]);
-    assert_eq!(zyra.position_shares, vec![0.448, 0.38, 0.13]);
+    assert_eq!(zyra.position_shares, vec![0.0, 0.448, 0.0, 0.13, 0.38]);
     assert_eq!(zyra.share_of(Role::Adc), Some(0.13));
-    assert_eq!(zyra.share_of(Role::Top), None);
+    assert_eq!(
+        zyra.share_of(Role::Top),
+        Some(0.0),
+        "a legacy map's absent role is 0"
+    );
+    assert_eq!(zyra.max_share(), Some(0.448));
 
-    let positions: Vec<String> = ["JUNGLE", "SUPPORT", "BOTTOM"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
     let map = |pairs: &[(&str, f64)]| -> HashMap<String, f64> {
         pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
     };
     assert_eq!(
         aligned_shares(
             "Zyra",
-            &positions,
             &map(&[("BOTTOM", 0.13), ("JUNGLE", 0.448), ("SUPPORT", 0.38)])
         ),
-        Ok(vec![0.448, 0.38, 0.13]),
-        "aligned by positions, whatever order the map's keys come in"
+        Ok(vec![0.0, 0.448, 0.0, 0.13, 0.38]),
+        "aligned with ROLES, whatever order the map's keys come in; absent = 0"
     );
     assert_eq!(
-        aligned_shares("Zyra", &positions, &map(&[])),
-        Ok(Vec::new())
+        aligned_shares(
+            "Zyra",
+            &map(&[
+                ("TOP", 0.001),
+                ("JUNGLE", 0.448),
+                ("MIDDLE", 0.002),
+                ("BOTTOM", 0.13),
+                ("SUPPORT", 0.38),
+            ])
+        ),
+        Ok(vec![0.001, 0.448, 0.002, 0.13, 0.38]),
+        "the five-key shape"
     );
-    let extra = aligned_shares(
-        "Zyra",
-        &positions,
-        &map(&[
-            ("BOTTOM", 0.13),
-            ("JUNGLE", 0.448),
-            ("SUPPORT", 0.38),
-            ("TOP", 0.1),
-        ]),
+    assert_eq!(aligned_shares("Zyra", &map(&[])), Ok(Vec::new()));
+    assert_eq!(
+        aligned_shares("Zyra", &map(&[("JUNGLE", 0.448)])),
+        Ok(vec![0.0, 0.448, 0.0, 0.0, 0.0]),
+        "a listed role the map lacks is 0, not an error"
     );
     assert_eq!(
-        extra,
-        Err("Zyra: positionShares names TOP, which positions does not list".into())
+        aligned_shares("Zyra", &map(&[("JUNGLE", 0.448), ("UTILITY", 0.38)])),
+        Err("Zyra: positionShares names UTILITY, which is not a role".into())
     );
-    let missing = aligned_shares("Zyra", &positions, &map(&[("JUNGLE", 0.448)]));
     assert_eq!(
-        missing,
-        Err("Zyra: positionShares lacks the listed role SUPPORT".into())
+        aligned_shares("Zyra", &map(&[("JUNGLE", 0.0), ("SUPPORT", 0.0)])),
+        Err("Zyra: positionShares are all zero".into())
+    );
+    assert_eq!(
+        aligned_shares("Zyra", &map(&[("JUNGLE", 1.2)])),
+        Err("Zyra: positionShares.JUNGLE = 1.2 is not a finite number in [0, 1]".into())
     );
 
     let frozen = live_from(&frozen_path);
@@ -210,42 +248,35 @@ fn the_shipped_shares_load_aligned_with_positions_and_reach_the_live_universe() 
     );
     println!("Zyra grades jungle / support / adc / top (frozen table): {g:?}");
     assert_eq!(g, (0, 15, 71, 100));
+    assert_eq!(u.share(z, Role::Adc), Some(0.13));
+    assert_eq!(u.share(z, Role::Top), Some(0.0), "share() is keyed by role");
+    assert_eq!(u.max_share(z), Some(0.448));
 
     // The LIVE table: shape only, no pinned value.
     let (_, live_meta) = load_production_data();
     let live = live();
     let u = &live.universe;
-    let every_role = [
-        Role::Top,
-        Role::Jungle,
-        Role::Middle,
-        Role::Adc,
-        Role::Support,
-    ];
     let mut graded = 0usize;
     for m in live_meta.values() {
-        assert_eq!(m.position_shares.len(), m.positions.len(), "{}", m.id);
+        assert_eq!(m.position_shares.len(), 5, "{}", m.id);
+        let max = m.max_share().unwrap_or_else(|| panic!("{}: shares", m.id));
+        assert!(max > 0.0, "{}: a positive largest share", m.id);
         let c = u
             .index(&m.id)
             .unwrap_or_else(|| panic!("{} is not in the live universe", m.id));
-        let grades: Vec<u8> = m.positions.iter().map(|r| u.grade(c, *r)).collect();
-        assert_eq!(
-            grades.first().copied(),
-            Some(0),
-            "{}: the primary is graded 0",
-            m.id
-        );
-        assert!(
-            grades.windows(2).all(|w| w[0] <= w[1]),
-            "{}: grades follow the positions' order {grades:?}",
-            m.id
-        );
-        for role in every_role.iter().filter(|r| !m.positions.contains(r)) {
-            assert_eq!(u.grade(c, *role), 100, "{}: unlisted {role:?}", m.id);
+        for (bit, role) in ROLE_ORDER.iter().enumerate() {
+            let share = m.position_shares[bit];
+            let expected = (100.0 * (1.0 - share / max)).round();
+            assert_eq!(
+                f64::from(u.grade(c, *role)),
+                expected,
+                "{}: {role:?} share {share} / max {max}",
+                m.id
+            );
+            graded += usize::from(u.grade(c, *role) > 0 && u.grade(c, *role) < 100);
         }
-        graded += grades.iter().filter(|g| **g > 0).count();
     }
-    println!("live table: {graded} graded (champion, secondary role) pairs");
+    println!("live table: {graded} graded (champion, role) pairs strictly between 0 and 100");
     assert!(
         graded > 0,
         "the shipped shares reach the live universe's grade"
@@ -393,13 +424,33 @@ use engine_core::reference::search::static_order;
 use engine_core::reference::state::{Action, Entry, RoleSets};
 use engine_core::reference::universe::ChampionIdx;
 
-/// A universe from `(id, positions, shares, linear)` rows, no tables; shares empty = ungraded.
+/// A universe from `(id, positions, shares, linear)` rows, no tables; shares empty = ungraded. A row
+/// gives its shares in the POSITIONS' order (a test convenience); the universe takes five values aligned
+/// with `ROLES`, so the row's shares are spread to their roles here and every other role is 0.
 fn graded(rows: &[(&str, &[&str], &[f64], f64)]) -> Universe {
     let list: Vec<String> = rows
         .iter()
         .map(|(id, positions, shares, linear)| {
+            assert!(
+                shares.is_empty() || shares.len() == positions.len(),
+                "{id}: a row's shares are one per position"
+            );
+            let five: Vec<String> = if shares.is_empty() {
+                Vec::new()
+            } else {
+                ROLE_ORDER
+                    .iter()
+                    .map(|role| {
+                        positions
+                            .iter()
+                            .position(|p| *p == format!("{role:?}"))
+                            .map_or(0.0, |i| shares[i])
+                            .to_string()
+                    })
+                    .collect()
+            };
             let positions: Vec<String> = positions.iter().map(|p| format!("\"{p}\"")).collect();
-            let shares: Vec<String> = shares.iter().map(|s| s.to_string()).collect();
+            let shares = five;
             format!(
                 r#"{{"id": "{id}", "positions": [{}], "linear": {linear}, "shares": [{}]}}"#,
                 positions.join(","),
