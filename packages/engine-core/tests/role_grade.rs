@@ -283,6 +283,66 @@ fn the_shipped_shares_load_aligned_with_the_five_roles_and_reach_the_live_univer
     );
 }
 
+/// champion-role-shares § 7: the regenerated table — the 2026-10-10 frozen copy, and the live file it
+/// was copied from — carries five-key shares and `playable` on every champion with `positions ⊆
+/// playable`, and both reach the live universe: Kai'Sa (BOTTOM-only listed, 1.9% top on 16.19) is
+/// playable TOP with grade 98 (0.019 / 0.957), ADC 0, SUPPORT 100 (0.001 / 0.957 rounds to 100). On
+/// the 2026-09-05 copy she is not playable TOP (no field → the positions) and TOP grades 100 (listed-key
+/// shares → no share). The pair count is pinned on the FROZEN copy alone; the live file gets the shape.
+#[test]
+fn the_regenerated_tables_five_key_shares_and_playable_reach_the_live_universe() {
+    let old = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data/champion-meta-2026-09-05-positions.json");
+    let new = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data/champion-meta-2026-10-10-shares.json");
+    let live_file = repo_root().join("data/compiled/champion-meta.json");
+    for path in [&new, &live_file] {
+        let (_, meta) = load_production_data_from(path);
+        assert_eq!(meta.len(), 173, "{}", path.display());
+        for m in meta.values() {
+            assert_eq!(m.position_shares.len(), 5, "{}: {}", path.display(), m.id);
+            assert!(!m.playable.is_empty(), "{}: {}", path.display(), m.id);
+            assert!(
+                m.positions.iter().all(|p| m.playable.contains(p)),
+                "{}: {}: positions ⊆ playable",
+                path.display(),
+                m.id
+            );
+        }
+        let pairs: usize = meta.values().map(|m| m.playable.len()).sum();
+        println!("{}: {pairs} playable pairs", path.display());
+        if path == &new {
+            assert_eq!(pairs, 433);
+        }
+        let k = &meta["Kaisa"];
+        println!(
+            "Kaisa {:?} playable {:?} shares {:?}",
+            k.positions, k.playable, k.position_shares
+        );
+        assert_eq!(k.positions, vec![Role::Adc]);
+        assert!(k.playable.contains(&Role::Top));
+        let live = live_from(path);
+        let u = &live.universe;
+        let c = u.index("Kaisa").expect("Kaisa");
+        println!(
+            "Kaisa top grade {} playable {}",
+            u.grade(c, Role::Top),
+            u.is_playable(c, Role::Top)
+        );
+        assert!(u.is_playable(c, Role::Top));
+        assert_eq!(u.grade(c, Role::Top), 98);
+        assert_eq!(u.grade(c, Role::Adc), 0);
+        assert_eq!(u.grade(c, Role::Support), 100);
+    }
+    let frozen = live_from(&old);
+    let c = frozen.universe.index("Kaisa").expect("Kaisa");
+    assert!(
+        !frozen.universe.is_playable(c, Role::Top),
+        "the 2026-09-05 copy has no playable: the positions"
+    );
+    assert_eq!(frozen.universe.grade(c, Role::Top), 100);
+}
+
 /// Two single-role champions per role, no tables: ten champions, so the oracle's bound holds.
 fn band() -> Universe {
     let ids = ["T1", "T2", "J1", "J2", "M1", "M2", "A1", "A2", "S1", "S2"];

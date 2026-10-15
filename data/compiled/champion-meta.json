@@ -1,7 +1,7 @@
 {
   "version": "16.13.1",
   "patch": "16.13.1",
-  "compiledAt": "2026-10-07T16:34:06.414Z",
+  "compiledAt": "2026-10-10T04:36:25.240Z",
   "sources": {
     "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
     "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
@@ -17,11 +17,18 @@
       "decidingPatch": "16.19",
       "decidingGames": 277103,
       "fallback": {},
+      "playableRule": {
+        "minPickRate": 0.001,
+        "minPicks": 50,
+        "decidingPatch": "16.19",
+        "decidingGames": 277103
+      },
       "threshold": 0.1,
-      "generatedAt": "2026-10-07T16:33:51.716Z",
+      "generatedAt": "2026-10-10T04:36:25.172Z",
       "feasibility": {
         "sets": 102100,
-        "bothSides": 0.738
+        "bothSides": 0.976,
+        "field": "playable"
       }
     }
   },
@@ -35,8 +42,16 @@
       ],
       "positionShares": {
         "TOP": 0.836,
-        "JUNGLE": 0.135
+        "JUNGLE": 0.135,
+        "MIDDLE": 0.022,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.006
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -81,8 +96,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.938
+        "TOP": 0.041,
+        "JUNGLE": 0,
+        "MIDDLE": 0.938,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.012
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -125,9 +149,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.312,
+        "JUNGLE": 0,
         "MIDDLE": 0.683,
-        "TOP": 0.312
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -162,8 +193,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.831
+        "TOP": 0.099,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.831,
+        "BOTTOM": 0.052,
+        "SUPPORT": 0.017
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -199,8 +239,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
         "SUPPORT": 0.989
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -248,8 +295,16 @@
       ],
       "positionShares": {
         "TOP": 0.755,
-        "JUNGLE": 0.167
+        "JUNGLE": 0.167,
+        "MIDDLE": 0.073,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -288,9 +343,16 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.007,
         "JUNGLE": 0.583,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0.001,
         "SUPPORT": 0.407
       },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -337,10 +399,18 @@
         "SUPPORT"
       ],
       "positionShares": {
-        "MIDDLE": 0.601,
         "TOP": 0.254,
+        "JUNGLE": 0,
+        "MIDDLE": 0.601,
+        "BOTTOM": 0.027,
         "SUPPORT": 0.117
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -381,8 +451,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.815
+        "TOP": 0.064,
+        "JUNGLE": 0,
+        "MIDDLE": 0.815,
+        "BOTTOM": 0.023,
+        "SUPPORT": 0.097
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -424,8 +503,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.99
+        "TOP": 0.005,
+        "JUNGLE": 0,
+        "MIDDLE": 0.004,
+        "BOTTOM": 0.99,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -460,8 +546,16 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.926
+        "TOP": 0.009,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.926,
+        "SUPPORT": 0.057
       },
+      "playable": [
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -505,9 +599,18 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.068,
+        "JUNGLE": 0.04,
         "MIDDLE": 0.558,
-        "BOTTOM": 0.324
+        "BOTTOM": 0.324,
+        "SUPPORT": 0.01
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -544,9 +647,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.173,
+        "JUNGLE": 0,
         "MIDDLE": 0.794,
-        "TOP": 0.173
+        "BOTTOM": 0.026,
+        "SUPPORT": 0.008
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -584,9 +695,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.124,
+        "JUNGLE": 0.001,
         "MIDDLE": 0.855,
-        "TOP": 0.124
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -623,8 +741,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
         "SUPPORT": 0.998
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -665,8 +790,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.985
+        "TOP": 0.01,
+        "JUNGLE": 0.985,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -702,8 +834,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
         "SUPPORT": 0.998
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -750,10 +889,19 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "SUPPORT": 0.429,
+        "TOP": 0.087,
+        "JUNGLE": 0.083,
+        "MIDDLE": 0.17,
         "BOTTOM": 0.231,
-        "MIDDLE": 0.17
+        "SUPPORT": 0.429
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -792,8 +940,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
         "SUPPORT": 0.999
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -839,8 +994,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.879
+        "TOP": 0.057,
+        "JUNGLE": 0.879,
+        "MIDDLE": 0.052,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.007
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -878,8 +1042,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.988
+        "TOP": 0.004,
+        "JUNGLE": 0,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.988,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -919,8 +1090,16 @@
       ],
       "positionShares": {
         "TOP": 0.708,
+        "JUNGLE": 0.012,
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.001,
         "SUPPORT": 0.263
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -966,10 +1145,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "MIDDLE": 0.573,
         "TOP": 0.262,
-        "BOTTOM": 0.157
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.573,
+        "BOTTOM": 0.157,
+        "SUPPORT": 0.007
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1011,9 +1197,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.296,
         "JUNGLE": 0.619,
-        "TOP": 0.296
+        "MIDDLE": 0.068,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.011
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1053,10 +1247,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "BOTTOM": 0.693,
         "TOP": 0.163,
-        "MIDDLE": 0.137
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.137,
+        "BOTTOM": 0.693,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.15,
         "magic": 0.8,
@@ -1094,8 +1295,15 @@
       ],
       "positionShares": {
         "TOP": 0.872,
-        "JUNGLE": 0.102
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.012,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.013
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1140,9 +1348,17 @@
         "JUNGLE"
       ],
       "positionShares": {
+        "TOP": 0.026,
+        "JUNGLE": 0.437,
         "MIDDLE": 0.533,
-        "JUNGLE": 0.437
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1187,8 +1403,15 @@
       ],
       "positionShares": {
         "TOP": 0.859,
-        "JUNGLE": 0.102
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.012
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -1228,8 +1451,16 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.935
+        "TOP": 0.042,
+        "JUNGLE": 0.005,
+        "MIDDLE": 0.017,
+        "BOTTOM": 0.935,
+        "SUPPORT": 0
       },
+      "playable": [
+        "TOP",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1269,9 +1500,18 @@
         "JUNGLE"
       ],
       "positionShares": {
+        "TOP": 0.037,
+        "JUNGLE": 0.449,
         "MIDDLE": 0.494,
-        "JUNGLE": 0.449
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.007
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1308,9 +1548,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.034,
         "JUNGLE": 0.756,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0,
         "SUPPORT": 0.202
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1349,8 +1597,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.96
+        "TOP": 0.015,
+        "JUNGLE": 0.96,
+        "MIDDLE": 0.013,
+        "BOTTOM": 0,
+        "SUPPORT": 0.011
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1389,8 +1644,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.953
+        "TOP": 0.008,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.953,
+        "SUPPORT": 0.017
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -1431,10 +1695,18 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.119,
         "JUNGLE": 0.662,
-        "SUPPORT": 0.181,
-        "TOP": 0.119
+        "MIDDLE": 0.037,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.181
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1472,8 +1744,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.954
+        "TOP": 0.954,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.021,
+        "BOTTOM": 0.015,
+        "SUPPORT": 0.009
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -1514,9 +1794,17 @@
         "JUNGLE"
       ],
       "positionShares": {
+        "TOP": 0.038,
+        "JUNGLE": 0.159,
         "MIDDLE": 0.778,
-        "JUNGLE": 0.159
+        "BOTTOM": 0.014,
+        "SUPPORT": 0.011
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1553,9 +1841,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.068,
+        "JUNGLE": 0.001,
         "MIDDLE": 0.789,
+        "BOTTOM": 0.002,
         "SUPPORT": 0.139
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1600,8 +1896,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.919
+        "TOP": 0.919,
+        "JUNGLE": 0,
+        "MIDDLE": 0.078,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -1637,8 +1941,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.893
+        "TOP": 0.893,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.097,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -1679,8 +1991,15 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.985
+        "TOP": 0.985,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -1725,8 +2044,16 @@
       "positionShares": {
         "TOP": 0.668,
         "JUNGLE": 0.144,
-        "MIDDLE": 0.118
+        "MIDDLE": 0.118,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.066
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1771,8 +2098,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.981
+        "TOP": 0.012,
+        "JUNGLE": 0.981,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -1812,8 +2146,15 @@
       "positionShares": {
         "TOP": 0.646,
         "JUNGLE": 0.22,
-        "MIDDLE": 0.122
+        "MIDDLE": 0.122,
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1851,8 +2192,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.997
+        "TOP": 0.002,
+        "JUNGLE": 0.997,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
+        "SUPPORT": 0
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -1899,10 +2247,17 @@
       ],
       "positionShares": {
         "TOP": 0.581,
+        "JUNGLE": 0.023,
         "MIDDLE": 0.15,
         "BOTTOM": 0.124,
         "SUPPORT": 0.122
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1941,9 +2296,18 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.026,
+        "JUNGLE": 0,
         "MIDDLE": 0.658,
-        "BOTTOM": 0.23
+        "BOTTOM": 0.23,
+        "SUPPORT": 0.086
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -1980,8 +2344,15 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.945
+        "TOP": 0.945,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.047,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.005
       },
+      "playable": [
+        "TOP"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -2021,8 +2392,16 @@
       ],
       "positionShares": {
         "TOP": 0.622,
-        "MIDDLE": 0.36
+        "JUNGLE": 0,
+        "MIDDLE": 0.36,
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -2065,8 +2444,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.814
+        "TOP": 0.083,
+        "JUNGLE": 0.814,
+        "MIDDLE": 0.018,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.085
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -2103,8 +2491,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.007,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
         "SUPPORT": 0.99
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2141,8 +2536,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.937
+        "TOP": 0.009,
+        "JUNGLE": 0.937,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.048
       },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2186,8 +2589,18 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.876
+        "TOP": 0.876,
+        "JUNGLE": 0.085,
+        "MIDDLE": 0.015,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.021
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -2234,8 +2647,15 @@
       "positionShares": {
         "TOP": 0.66,
         "JUNGLE": 0.217,
-        "MIDDLE": 0.112
+        "MIDDLE": 0.112,
+        "BOTTOM": 0.007,
+        "SUPPORT": 0.004
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -2272,8 +2692,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.973
+        "TOP": 0.01,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.973,
+        "SUPPORT": 0.004
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -2317,8 +2746,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.998
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.998,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2359,8 +2795,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.949
+        "TOP": 0.949,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.033,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.016
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -2404,8 +2848,18 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.957
+        "TOP": 0.019,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.017,
+        "BOTTOM": 0.957,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.1,
         "magic": 0.8,
@@ -2441,8 +2895,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.9
+        "TOP": 0.072,
+        "JUNGLE": 0,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.9,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2477,8 +2940,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.028,
+        "JUNGLE": 0,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
         "SUPPORT": 0.944
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2522,9 +2994,18 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.047,
         "JUNGLE": 0.581,
-        "BOTTOM": 0.279
+        "MIDDLE": 0.078,
+        "BOTTOM": 0.279,
+        "SUPPORT": 0.015
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2561,8 +3042,16 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.927
+        "TOP": 0.068,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.927,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2599,9 +3088,17 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.025,
+        "JUNGLE": 0.001,
         "MIDDLE": 0.839,
-        "BOTTOM": 0.127
+        "BOTTOM": 0.127,
+        "SUPPORT": 0.008
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2639,8 +3136,15 @@
       ],
       "positionShares": {
         "TOP": 0.682,
-        "MIDDLE": 0.288
+        "JUNGLE": 0.012,
+        "MIDDLE": 0.288,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.009
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -2677,8 +3181,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.943
+        "TOP": 0.046,
+        "JUNGLE": 0.943,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -2717,8 +3229,16 @@
       ],
       "positionShares": {
         "TOP": 0.792,
-        "MIDDLE": 0.153
+        "JUNGLE": 0,
+        "MIDDLE": 0.153,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.046
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2760,8 +3280,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.991
+        "TOP": 0.004,
+        "JUNGLE": 0.991,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2796,8 +3323,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.964
+        "TOP": 0.005,
+        "JUNGLE": 0.964,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.019,
+        "SUPPORT": 0.004
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2832,8 +3366,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.911
+        "TOP": 0.911,
+        "JUNGLE": 0.003,
+        "MIDDLE": 0.066,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.014
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -2871,9 +3413,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.084,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.272,
         "BOTTOM": 0.626,
-        "MIDDLE": 0.272
+        "SUPPORT": 0.012
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -2910,9 +3460,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.036,
+        "JUNGLE": 0,
         "MIDDLE": 0.833,
+        "BOTTOM": 0.004,
         "SUPPORT": 0.127
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -2949,8 +3507,18 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.97
+        "TOP": 0.014,
+        "JUNGLE": 0.97,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.009
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -2993,8 +3561,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
         "SUPPORT": 0.998
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -3039,8 +3614,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.989
+        "TOP": 0.009,
+        "JUNGLE": 0.989,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3078,9 +3660,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.115,
+        "JUNGLE": 0,
         "MIDDLE": 0.836,
-        "TOP": 0.115
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.043
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3121,8 +3711,18 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.841
+        "TOP": 0.035,
+        "JUNGLE": 0.09,
+        "MIDDLE": 0.841,
+        "BOTTOM": 0.023,
+        "SUPPORT": 0.01
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.5,
         "magic": 0.4,
@@ -3156,9 +3756,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.033,
+        "JUNGLE": 0,
+        "MIDDLE": 0.121,
         "BOTTOM": 0.846,
-        "MIDDLE": 0.121
+        "SUPPORT": 0
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -3194,8 +3802,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
         "SUPPORT": 0.992
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3241,10 +3856,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "SUPPORT": 0.537,
+        "TOP": 0.008,
+        "JUNGLE": 0.001,
         "MIDDLE": 0.343,
-        "BOTTOM": 0.111
+        "BOTTOM": 0.111,
+        "SUPPORT": 0.537
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3285,8 +3907,18 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.821
+        "TOP": 0.821,
+        "JUNGLE": 0.068,
+        "MIDDLE": 0.089,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.018
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -3330,8 +3962,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.852
+        "TOP": 0.099,
+        "JUNGLE": 0.002,
+        "MIDDLE": 0.852,
+        "BOTTOM": 0.036,
+        "SUPPORT": 0.01
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3370,10 +4011,17 @@
         "TOP"
       ],
       "positionShares": {
-        "SUPPORT": 0.605,
+        "TOP": 0.152,
         "JUNGLE": 0.235,
-        "TOP": 0.152
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.605
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3419,8 +4067,18 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.846
+        "TOP": 0.094,
+        "JUNGLE": 0.846,
+        "MIDDLE": 0.027,
+        "BOTTOM": 0.028,
+        "SUPPORT": 0.006
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3459,10 +4117,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.009,
+        "JUNGLE": 0,
         "MIDDLE": 0.572,
         "BOTTOM": 0.292,
         "SUPPORT": 0.127
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3499,8 +4164,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
         "SUPPORT": 0.999
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3536,8 +4208,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.968
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.968,
+        "SUPPORT": 0.021
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -3573,8 +4252,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.92
+        "TOP": 0.92,
+        "JUNGLE": 0.046,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.007
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3613,9 +4300,18 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "SUPPORT": 0.761,
-        "MIDDLE": 0.104
+        "TOP": 0.034,
+        "JUNGLE": 0.089,
+        "MIDDLE": 0.104,
+        "BOTTOM": 0.012,
+        "SUPPORT": 0.761
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3657,9 +4353,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.079,
         "JUNGLE": 0.768,
-        "MIDDLE": 0.138
+        "MIDDLE": 0.138,
+        "BOTTOM": 0.01,
+        "SUPPORT": 0.006
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3695,8 +4399,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
         "SUPPORT": 1
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3742,8 +4453,16 @@
       ],
       "positionShares": {
         "TOP": 0.709,
-        "MIDDLE": 0.261
+        "JUNGLE": 0.019,
+        "MIDDLE": 0.261,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.008
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -3780,8 +4499,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.006,
+        "JUNGLE": 0.005,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
         "SUPPORT": 0.986
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -3830,9 +4556,18 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "SUPPORT": 0.693,
-        "MIDDLE": 0.168
+        "TOP": 0.075,
+        "JUNGLE": 0.046,
+        "MIDDLE": 0.168,
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.693
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3873,8 +4608,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.895
+        "TOP": 0.027,
+        "JUNGLE": 0.895,
+        "MIDDLE": 0.012,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.064
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -3911,8 +4655,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.988
+        "TOP": 0.006,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.004,
+        "BOTTOM": 0.988,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -3949,8 +4700,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.944
+        "TOP": 0.032,
+        "JUNGLE": 0.944,
+        "MIDDLE": 0.022,
+        "BOTTOM": 0,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -3987,9 +4746,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.012,
         "JUNGLE": 0.772,
-        "MIDDLE": 0.18
+        "MIDDLE": 0.18,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.034
       },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.08,
         "magic": 0.83,
@@ -4028,8 +4795,15 @@
       ],
       "positionShares": {
         "TOP": 0.853,
-        "JUNGLE": 0.104
+        "JUNGLE": 0.104,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4067,8 +4841,15 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.961
+        "TOP": 0.011,
+        "JUNGLE": 0,
+        "MIDDLE": 0.961,
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.017
       },
+      "playable": [
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4112,8 +4893,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.954
+        "TOP": 0.954,
+        "JUNGLE": 0.006,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.013
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -4162,10 +4951,17 @@
       ],
       "positionShares": {
         "TOP": 0.392,
-        "SUPPORT": 0.376,
+        "JUNGLE": 0.108,
         "MIDDLE": 0.112,
-        "JUNGLE": 0.108
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.376
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4204,10 +5000,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "SUPPORT": 0.549,
         "TOP": 0.312,
-        "JUNGLE": 0.129
+        "JUNGLE": 0.129,
+        "MIDDLE": 0.01,
+        "BOTTOM": 0,
+        "SUPPORT": 0.549
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -4249,8 +5052,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.004,
         "SUPPORT": 0.99
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4288,9 +5098,18 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.027,
         "JUNGLE": 0.72,
-        "MIDDLE": 0.237
+        "MIDDLE": 0.237,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.011
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -4328,10 +5147,17 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.437,
         "TOP": 0.389,
-        "MIDDLE": 0.134
+        "JUNGLE": 0.437,
+        "MIDDLE": 0.134,
+        "BOTTOM": 0.019,
+        "SUPPORT": 0.021
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4368,8 +5194,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0,
         "SUPPORT": 0.996
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4413,8 +5246,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.842
+        "TOP": 0.059,
+        "JUNGLE": 0.842,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.092
       },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -4452,8 +5293,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.911
+        "TOP": 0.074,
+        "JUNGLE": 0.911,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0,
+        "SUPPORT": 0.012
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4490,8 +5339,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
         "SUPPORT": 0.997
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4537,8 +5393,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0.006,
         "SUPPORT": 0.993
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4578,8 +5441,16 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.941
+        "TOP": 0.941,
+        "JUNGLE": 0,
+        "MIDDLE": 0.056,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -4619,8 +5490,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.881
+        "TOP": 0.074,
+        "JUNGLE": 0.881,
+        "MIDDLE": 0,
+        "BOTTOM": 0.006,
+        "SUPPORT": 0.039
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -4659,8 +5539,16 @@
       ],
       "positionShares": {
         "TOP": 0.732,
-        "MIDDLE": 0.197
+        "JUNGLE": 0.048,
+        "MIDDLE": 0.197,
+        "BOTTOM": 0.017,
+        "SUPPORT": 0.005
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4700,8 +5588,17 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.816
+        "TOP": 0.816,
+        "JUNGLE": 0.078,
+        "MIDDLE": 0.087,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.018
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4739,9 +5636,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.209,
+        "JUNGLE": 0.001,
         "MIDDLE": 0.778,
-        "TOP": 0.209
+        "BOTTOM": 0.011,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4779,8 +5683,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.987
+        "TOP": 0.004,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.987,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -4817,9 +5728,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.173,
         "JUNGLE": 0.78,
-        "TOP": 0.173
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.026
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.06,
         "magic": 0.84,
@@ -4865,8 +5783,16 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.007,
+        "JUNGLE": 0,
+        "MIDDLE": 0.002,
+        "BOTTOM": 0.064,
         "SUPPORT": 0.926
       },
+      "playable": [
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4906,9 +5832,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "SUPPORT": 0.839,
-        "BOTTOM": 0.131
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.029,
+        "BOTTOM": 0.131,
+        "SUPPORT": 0.839
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -4945,8 +5879,17 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.914
+        "TOP": 0.914,
+        "JUNGLE": 0.009,
+        "MIDDLE": 0.039,
+        "BOTTOM": 0.01,
+        "SUPPORT": 0.028
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -4993,9 +5936,16 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.015,
         "JUNGLE": 0.778,
+        "MIDDLE": 0.005,
+        "BOTTOM": 0.001,
         "SUPPORT": 0.201
       },
+      "playable": [
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.72,
         "magic": 0.18,
@@ -5032,8 +5982,16 @@
       ],
       "positionShares": {
         "TOP": 0.751,
+        "JUNGLE": 0.048,
+        "MIDDLE": 0.019,
+        "BOTTOM": 0.002,
         "SUPPORT": 0.181
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -5075,8 +6033,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.929
+        "TOP": 0.064,
+        "JUNGLE": 0.929,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -5115,8 +6081,16 @@
       ],
       "positionShares": {
         "TOP": 0.821,
-        "MIDDLE": 0.114
+        "JUNGLE": 0.018,
+        "MIDDLE": 0.114,
+        "BOTTOM": 0.014,
+        "SUPPORT": 0.034
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5155,8 +6129,17 @@
       ],
       "positionShares": {
         "TOP": 0.764,
-        "MIDDLE": 0.137
+        "JUNGLE": 0.043,
+        "MIDDLE": 0.137,
+        "BOTTOM": 0.013,
+        "SUPPORT": 0.043
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -5194,8 +6177,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.989
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.009,
+        "BOTTOM": 0.989,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5232,10 +6222,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.128,
         "JUNGLE": 0.688,
-        "SUPPORT": 0.18,
-        "TOP": 0.128
+        "MIDDLE": 0.004,
+        "BOTTOM": 0,
+        "SUPPORT": 0.18
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -5275,9 +6272,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.077,
+        "JUNGLE": 0,
+        "MIDDLE": 0.143,
         "BOTTOM": 0.779,
-        "MIDDLE": 0.143
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -5313,8 +6318,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0.003,
         "SUPPORT": 0.995
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5357,8 +6369,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.016,
+        "JUNGLE": 0,
+        "MIDDLE": 0.007,
+        "BOTTOM": 0.002,
         "SUPPORT": 0.975
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5398,11 +6417,18 @@
         "TOP"
       ],
       "positionShares": {
-        "SUPPORT": 0.406,
-        "BOTTOM": 0.28,
+        "TOP": 0.151,
+        "JUNGLE": 0,
         "MIDDLE": 0.163,
-        "TOP": 0.151
+        "BOTTOM": 0.28,
+        "SUPPORT": 0.406
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5445,9 +6471,18 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.067,
         "JUNGLE": 0.455,
-        "MIDDLE": 0.407
+        "MIDDLE": 0.407,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.066
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5486,9 +6521,18 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.016,
+        "JUNGLE": 0,
         "MIDDLE": 0.832,
-        "BOTTOM": 0.134
+        "BOTTOM": 0.134,
+        "SUPPORT": 0.018
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5529,9 +6573,17 @@
         "TOP"
       ],
       "positionShares": {
-        "SUPPORT": 0.55,
-        "TOP": 0.357
+        "TOP": 0.357,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.023,
+        "BOTTOM": 0.069,
+        "SUPPORT": 0.55
       },
+      "playable": [
+        "TOP",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5574,9 +6626,18 @@
         "JUNGLE"
       ],
       "positionShares": {
+        "TOP": 0.021,
+        "JUNGLE": 0.361,
         "MIDDLE": 0.523,
-        "JUNGLE": 0.361
+        "BOTTOM": 0.049,
+        "SUPPORT": 0.046
       },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5615,9 +6676,16 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.008,
         "JUNGLE": 0.774,
-        "MIDDLE": 0.216
+        "MIDDLE": 0.216,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5652,8 +6720,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.01,
+        "JUNGLE": 0.025,
+        "MIDDLE": 0.006,
+        "BOTTOM": 0.004,
         "SUPPORT": 0.955
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5694,8 +6769,18 @@
       ],
       "positionShares": {
         "TOP": 0.779,
-        "JUNGLE": 0.102
+        "JUNGLE": 0.102,
+        "MIDDLE": 0.031,
+        "BOTTOM": 0.027,
+        "SUPPORT": 0.062
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5732,8 +6817,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.001,
+        "JUNGLE": 0,
+        "MIDDLE": 0.001,
+        "BOTTOM": 0,
         "SUPPORT": 0.998
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -5780,9 +6872,17 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.02,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.101,
         "BOTTOM": 0.879,
-        "MIDDLE": 0.101
+        "SUPPORT": 0
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -5826,8 +6926,16 @@
       ],
       "positionShares": {
         "TOP": 0.559,
-        "JUNGLE": 0.366
+        "JUNGLE": 0.366,
+        "MIDDLE": 0.01,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.061
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -5867,8 +6975,16 @@
       ],
       "positionShares": {
         "TOP": 0.833,
-        "MIDDLE": 0.129
+        "JUNGLE": 0.03,
+        "MIDDLE": 0.129,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5905,8 +7021,18 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.883
+        "TOP": 0.056,
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.883,
+        "BOTTOM": 0.025,
+        "SUPPORT": 0.035
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -5943,8 +7069,18 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.882
+        "TOP": 0.005,
+        "JUNGLE": 0.026,
+        "MIDDLE": 0.036,
+        "BOTTOM": 0.882,
+        "SUPPORT": 0.052
       },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -5981,9 +7117,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.249,
         "JUNGLE": 0.728,
-        "TOP": 0.249
+        "MIDDLE": 0.015,
+        "BOTTOM": 0.005,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -6020,8 +7163,15 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.942
+        "TOP": 0.942,
+        "JUNGLE": 0.015,
+        "MIDDLE": 0.02,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.02
       },
+      "playable": [
+        "TOP"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6060,9 +7210,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.339,
+        "JUNGLE": 0.004,
+        "MIDDLE": 0.048,
         "BOTTOM": 0.605,
-        "TOP": 0.339
+        "SUPPORT": 0.005
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.68,
         "magic": 0.22,
@@ -6102,9 +7260,17 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.465,
+        "JUNGLE": 0.02,
+        "MIDDLE": 0.036,
         "BOTTOM": 0.476,
-        "TOP": 0.465
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6141,9 +7307,18 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.048,
+        "JUNGLE": 0,
         "MIDDLE": 0.57,
-        "BOTTOM": 0.312
+        "BOTTOM": 0.312,
+        "SUPPORT": 0.07
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6183,10 +7358,18 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "SUPPORT": 0.517,
+        "TOP": 0.045,
+        "JUNGLE": 0,
         "MIDDLE": 0.248,
-        "BOTTOM": 0.19
+        "BOTTOM": 0.19,
+        "SUPPORT": 0.517
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6223,8 +7406,15 @@
         "MIDDLE"
       ],
       "positionShares": {
-        "MIDDLE": 0.925
+        "TOP": 0.033,
+        "JUNGLE": 0,
+        "MIDDLE": 0.925,
+        "BOTTOM": 0.016,
+        "SUPPORT": 0.025
       },
+      "playable": [
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6261,8 +7451,15 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.954
+        "TOP": 0.017,
+        "JUNGLE": 0.954,
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.02
       },
+      "playable": [
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6305,8 +7502,17 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.945
+        "TOP": 0.015,
+        "JUNGLE": 0.945,
+        "MIDDLE": 0.028,
+        "BOTTOM": 0.009,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -6344,9 +7550,17 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.034,
+        "JUNGLE": 0,
         "MIDDLE": 0.743,
-        "BOTTOM": 0.221
+        "BOTTOM": 0.221,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6385,10 +7599,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "MIDDLE": 0.606,
         "TOP": 0.265,
-        "BOTTOM": 0.128
+        "JUNGLE": 0,
+        "MIDDLE": 0.606,
+        "BOTTOM": 0.128,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6428,8 +7649,15 @@
       ],
       "positionShares": {
         "TOP": 0.743,
-        "JUNGLE": 0.236
+        "JUNGLE": 0.236,
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.004
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.78,
         "magic": 0.12,
@@ -6473,9 +7701,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.43,
         "JUNGLE": 0.549,
-        "TOP": 0.43
+        "MIDDLE": 0.016,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -6514,9 +7749,16 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.125,
         "JUNGLE": 0.853,
-        "TOP": 0.125
+        "MIDDLE": 0.008,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.012
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -6553,8 +7795,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.993
+        "TOP": 0.003,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.993,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6591,10 +7840,17 @@
         "BOTTOM"
       ],
       "positionShares": {
+        "TOP": 0.005,
+        "JUNGLE": 0,
         "MIDDLE": 0.565,
-        "SUPPORT": 0.277,
-        "BOTTOM": 0.153
+        "BOTTOM": 0.153,
+        "SUPPORT": 0.277
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6631,8 +7887,16 @@
         "JUNGLE"
       ],
       "positionShares": {
-        "JUNGLE": 0.877
+        "TOP": 0.081,
+        "JUNGLE": 0.877,
+        "MIDDLE": 0.03,
+        "BOTTOM": 0.004,
+        "SUPPORT": 0.008
       },
+      "playable": [
+        "TOP",
+        "JUNGLE"
+      ],
       "damageProfile": {
         "physical": 0.84,
         "magic": 0.06,
@@ -6671,10 +7935,17 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "MIDDLE": 0.57,
         "TOP": 0.23,
-        "BOTTOM": 0.196
+        "JUNGLE": 0.001,
+        "MIDDLE": 0.57,
+        "BOTTOM": 0.196,
+        "SUPPORT": 0.003
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.8,
         "magic": 0.1,
@@ -6719,8 +7990,17 @@
       ],
       "positionShares": {
         "TOP": 0.505,
-        "MIDDLE": 0.467
+        "JUNGLE": 0.007,
+        "MIDDLE": 0.467,
+        "BOTTOM": 0.02,
+        "SUPPORT": 0.001
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.9,
         "magic": 0,
@@ -6763,8 +8043,15 @@
         "TOP"
       ],
       "positionShares": {
-        "TOP": 0.942
+        "TOP": 0.942,
+        "JUNGLE": 0.014,
+        "MIDDLE": 0.041,
+        "BOTTOM": 0.001,
+        "SUPPORT": 0.002
       },
+      "playable": [
+        "TOP"
+      ],
       "damageProfile": {
         "physical": 0.75,
         "magic": 0.15,
@@ -6801,8 +8088,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.995
+        "TOP": 0.002,
+        "JUNGLE": 0,
+        "MIDDLE": 0.003,
+        "BOTTOM": 0.995,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.6,
         "magic": 0.3,
@@ -6838,8 +8132,15 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0,
+        "JUNGLE": 0,
+        "MIDDLE": 0,
+        "BOTTOM": 0,
         "SUPPORT": 0.999
       },
+      "playable": [
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6877,8 +8178,16 @@
       ],
       "positionShares": {
         "TOP": 0.833,
-        "JUNGLE": 0.133
+        "JUNGLE": 0.133,
+        "MIDDLE": 0.026,
+        "BOTTOM": 0.002,
+        "SUPPORT": 0.007
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE"
+      ],
       "damageProfile": {
         "physical": 0.5,
         "magic": 0.4,
@@ -6912,9 +8221,18 @@
         "TOP"
       ],
       "positionShares": {
+        "TOP": 0.158,
         "JUNGLE": 0.718,
-        "TOP": 0.158
+        "MIDDLE": 0.041,
+        "BOTTOM": 0.003,
+        "SUPPORT": 0.08
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -6960,9 +8278,18 @@
         "JUNGLE"
       ],
       "positionShares": {
+        "TOP": 0.086,
+        "JUNGLE": 0.202,
         "MIDDLE": 0.686,
-        "JUNGLE": 0.202
+        "BOTTOM": 0.018,
+        "SUPPORT": 0.008
       },
+      "playable": [
+        "TOP",
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.83,
         "magic": 0.08,
@@ -6997,8 +8324,15 @@
         "BOTTOM"
       ],
       "positionShares": {
-        "BOTTOM": 0.965
+        "TOP": 0.011,
+        "JUNGLE": 0.011,
+        "MIDDLE": 0.013,
+        "BOTTOM": 0.965,
+        "SUPPORT": 0
       },
+      "playable": [
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0.7,
         "magic": 0.2,
@@ -7034,9 +8368,16 @@
         "MIDDLE"
       ],
       "positionShares": {
+        "TOP": 0.008,
+        "JUNGLE": 0,
+        "MIDDLE": 0.238,
         "BOTTOM": 0.734,
-        "MIDDLE": 0.238
+        "SUPPORT": 0.019
       },
+      "playable": [
+        "MIDDLE",
+        "BOTTOM"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -7072,8 +8413,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.069,
+        "JUNGLE": 0,
+        "MIDDLE": 0.097,
+        "BOTTOM": 0.008,
         "SUPPORT": 0.826
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -7112,9 +8462,17 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.05,
+        "JUNGLE": 0,
         "MIDDLE": 0.719,
+        "BOTTOM": 0.013,
         "SUPPORT": 0.218
       },
+      "playable": [
+        "TOP",
+        "MIDDLE",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
@@ -7152,9 +8510,18 @@
         "SUPPORT"
       ],
       "positionShares": {
+        "TOP": 0.005,
         "JUNGLE": 0.468,
+        "MIDDLE": 0.027,
+        "BOTTOM": 0.063,
         "SUPPORT": 0.437
       },
+      "playable": [
+        "JUNGLE",
+        "MIDDLE",
+        "BOTTOM",
+        "SUPPORT"
+      ],
       "damageProfile": {
         "physical": 0,
         "magic": 0.9,
