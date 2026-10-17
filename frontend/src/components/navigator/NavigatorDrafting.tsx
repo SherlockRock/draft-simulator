@@ -52,11 +52,7 @@ import {
     rebucketDisplay,
     staleBucketSummary
 } from "../../utils/navigatorPool";
-import {
-    ROLE_SHORT_LABELS,
-    emptyFanReason,
-    roleLineForPick
-} from "../../utils/navigatorRoles";
+import { ROLE_SHORT_LABELS, emptyFanReason } from "../../utils/navigatorRoles";
 import { ROLES } from "../../utils/championRoles";
 import { EMPTY_ROLE_POOL_MAP } from "@draft-sim/shared-types";
 import type { RolePoolMap, TeamPool } from "@draft-sim/shared-types";
@@ -79,7 +75,7 @@ import { BetweenGamesPanel } from "./BetweenGamesPanel";
 import { DraftOrderTicks } from "./DraftOrderTicks";
 import { EngineStatusPill } from "./EngineStatusPill";
 import { NavigatorColumns, type SeatRowInput } from "./NavigatorColumns";
-import { NavigatorCommandPalette, type PaletteTurn } from "./NavigatorCommandPalette";
+import { NavigatorCommandPalette } from "./NavigatorCommandPalette";
 import { NavigatorPoolPanel } from "./NavigatorPoolPanel";
 import { NavigatorTeamColumn } from "./NavigatorTeamColumn";
 import { PoolEditModal } from "./PoolEditModal";
@@ -359,22 +355,6 @@ const NavigatorDrafting: Component = () => {
             slashCandidate: false
         };
     };
-    const rankedRoleLine = (championId: string): string => {
-        const node = fan().find((n) => n.championIds.includes(championId));
-        if (!node || node.actionType === "ban" || node.side === null) return "";
-        const line = roleLineForPick(
-            sidePicksBefore(turns(), [], node.side),
-            node.championIds,
-            node.assignmentDistribution,
-            node.confirmedChampionIds ?? []
-        );
-        const roles = line.roles.map((r) => (r ? ROLE_SHORT_LABELS[r] : "?")).join(" · ");
-        const shift = line.shift
-            ? `${nameOf(line.shift.championId)} → ${ROLE_SHORT_LABELS[line.shift.to]}`
-            : null;
-        return [roles, shift].filter((s) => s).join(" · ");
-    };
-
     // ---- commits (slot = confirmed event count, as the old picker column did) ----
     const commitChampions = (championIds: string[]) => {
         const draftId = activeDraft()?.id;
@@ -422,7 +402,7 @@ const NavigatorDrafting: Component = () => {
     } | null>(null);
 
     // ---- palette (design § 6): centred only — the anchored mode is retired (U2) ----
-    const [palette, setPalette] = createSignal<{ anchor: null } | null>(null);
+    const [palette, setPalette] = createSignal(false);
     // The next slot exists whenever the turn is open; the palette (and type-anywhere) may
     // additionally not act while a modal (swap/branch picker, pool editor) is up — those are
     // z-50 window-keydown consumers too.
@@ -434,13 +414,13 @@ const NavigatorDrafting: Component = () => {
         !poolEditOpen();
     const openPalette = () => {
         if (!canOpenPalette()) return;
-        setPalette({ anchor: null });
+        setPalette(true);
     };
     const blurToPage = () => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     };
     const closePalette = () => {
-        setPalette(null);
+        setPalette(false);
         blurToPage();
     };
 
@@ -507,7 +487,7 @@ const NavigatorDrafting: Component = () => {
     const onPageKey = (e: KeyboardEvent) => {
         if (isTextTarget(e.target) || isTextTarget(document.activeElement)) return;
         if (e.key === "/") {
-            if (palette() === null && canOpenPalette()) {
+            if (!palette() && canOpenPalette()) {
                 e.preventDefault();
                 openPalette();
             }
@@ -521,7 +501,7 @@ const NavigatorDrafting: Component = () => {
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (!TYPEABLE.test(e.key)) return;
         if (e.key === " " && poolQuery() === "") return; // Space on a focused button activates it; never seed a query with a space
-        if (palette() !== null || menu() !== null || !canOpenPalette()) return;
+        if (palette() || menu() !== null || !canOpenPalette()) return;
         e.preventDefault();
         setPoolQuery((q) => q + e.key);
         requestPoolFocus();
@@ -529,15 +509,6 @@ const NavigatorDrafting: Component = () => {
     onMount(() => {
         window.addEventListener("keydown", onPageKey);
         onCleanup(() => window.removeEventListener("keydown", onPageKey));
-    });
-    const paletteTurn = createMemo<PaletteTurn | null>(() => {
-        const slot = nextSlot();
-        const turn = nextTurn();
-        if (slot === null || !turn) return null;
-        const last = turns()[turns().length - 1];
-        const partnerOf =
-            last?.pairState === "pair-pending" ? (last.championIds[0] ?? null) : null;
-        return { slot, type: turn.type, collect: turn.pairStart ? 2 : 1, partnerOf };
     });
     const paletteHeading = createMemo(() => {
         const slot = nextSlot();
@@ -547,9 +518,11 @@ const NavigatorDrafting: Component = () => {
     });
     const commands = createMemo(() =>
         buildPaletteCommands({
-            turn: paletteTurn()
-                ? { slot: paletteTurn()?.slot ?? 0, type: paletteTurn()?.type ?? "pick" }
-                : null,
+            turn: (() => {
+                const slot = nextSlot();
+                const t = nextTurn();
+                return slot !== null && t ? { slot, type: t.type } : null;
+            })(),
             slotLabel: paletteHeading(),
             isOurTurn: nextTurn()?.side === ourSide(),
             hasFan: fan().length > 0,
@@ -562,17 +535,6 @@ const NavigatorDrafting: Component = () => {
             stale: stale()
         })
     );
-    const coloring = (championId: string): ChampionColorState => {
-        const s = session();
-        if (!s) return "neutral";
-        return getPickerState(
-            championId,
-            nextTurn()?.side ?? null,
-            s.blue_pool,
-            s.red_pool,
-            usedChampionIdSet()
-        );
-    };
     // Re-bucketing is the one irreversible pool write in this PR, so it is never
     // applied blind: the pool editor opens PRE-FILLED with the migration and its
     // Save is the confirmation (the user can un-widen a bucket first).
@@ -604,6 +566,11 @@ const NavigatorDrafting: Component = () => {
         else if (id === "clear") setSelectedPath([]);
         else if (id === "pools") setPoolEditOpen(true);
         else if (id === "rebucket") openRebucketReview();
+        else if (id === "pick") {
+            closePalette();
+            requestPoolFocus();
+            return;
+        }
         closePalette();
     };
     const explore = (championId: string) => {
@@ -641,11 +608,10 @@ const NavigatorDrafting: Component = () => {
             return selectedNodes().length > 0
                 ? ["Projected:", ...describeLine(selectedNodes(), nameOf)]
                 : ["Select a line first"];
-        // Reached only when the command is disabled — when enabled the ranked
-        // rows render instead.
-        if (id === "explore")
-            return ["Choose a candidate to open its line without committing it"];
-        if (id === "pick") return ["Choose a champion for this turn"];
+        if (id === "pick")
+            return [
+                "Type a champion name — the pool search takes the keys; Enter picks, Shift+Enter explores"
+            ];
         return [];
     };
 
@@ -657,7 +623,7 @@ const NavigatorDrafting: Component = () => {
     const canvasListQuery = useQuery(() => ({
         queryKey: ["canvasList"],
         queryFn: fetchCanvasList,
-        enabled: palette() !== null && selectedPath().length > 0,
+        enabled: palette() && selectedPath().length > 0,
         staleTime: 60_000
     }));
     const exportLine = async (canvasId: string) => {
@@ -1072,24 +1038,15 @@ const NavigatorDrafting: Component = () => {
                 </div>
 
                 <NavigatorCommandPalette
-                    open={palette() !== null}
-                    anchor={palette()?.anchor ?? null}
+                    open={palette()}
                     heading={paletteHeading()}
                     commands={commands()}
-                    turn={paletteTurn()}
-                    fan={fan()}
-                    unavailable={unavailable()}
-                    unavailableReason={unavailableReason}
-                    coloring={coloring}
-                    rankedRoleLine={rankedRoleLine}
                     preview={preview}
                     canvases={canvasListQuery.data ?? []}
                     canvasesLoading={
                         canvasListQuery.isPending && canvasListQuery.isFetching
                     }
                     defaultCanvasId={rememberedCanvasId()}
-                    onCommit={commitChampions}
-                    onExplore={explore}
                     onRun={runCommand}
                     onExport={(id) => {
                         if (selectedNodes().length === 0) {

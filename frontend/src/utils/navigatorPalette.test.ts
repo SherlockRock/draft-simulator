@@ -25,7 +25,6 @@ describe("buildPaletteCommands (design § 6 table)", () => {
         const cmds = buildPaletteCommands(ctx);
         expect(ids(cmds)).toEqual([
             "pick",
-            "explore",
             "top-line",
             "undo",
             "clear",
@@ -35,15 +34,15 @@ describe("buildPaletteCommands (design § 6 table)", () => {
         expect(cmds[0]).toMatchObject({
             label: "Pick for Red Pick 4",
             hint: "our turn",
-            opensPane: "champions",
+            opensPane: null,
             disabledReason: null
         });
-        expect(cmds[3]).toMatchObject({ label: "Undo last", hint: "Lissandra" });
-        expect(cmds[5]).toMatchObject({
+        expect(cmds[2]).toMatchObject({ label: "Undo last", hint: "Lissandra" });
+        expect(cmds[4]).toMatchObject({
             label: "Edit pools",
             disabledReason: "between games"
         });
-        expect(cmds[6]).toMatchObject({
+        expect(cmds[5]).toMatchObject({
             label: "Export selected line to canvas",
             opensPane: "canvas",
             disabledReason: null
@@ -80,9 +79,6 @@ describe("buildPaletteCommands (design § 6 table)", () => {
         expect(cmds.find((c) => c.id === "clear")?.disabledReason).toBe(
             "nothing selected"
         );
-        expect(cmds.find((c) => c.id === "explore")?.disabledReason).toBe(
-            "no candidates"
-        );
         expect(cmds.find((c) => c.id === "top-line")?.disabledReason).toBe(
             "no candidates"
         );
@@ -104,13 +100,9 @@ describe("buildPaletteCommands (design § 6 table)", () => {
 describe("filterPaletteCommands / cycleIndex", () => {
     test("case-insensitive label match; empty query keeps all", () => {
         const cmds = buildPaletteCommands(ctx);
-        expect(filterPaletteCommands(cmds, "")).toHaveLength(7);
+        expect(filterPaletteCommands(cmds, "")).toHaveLength(6);
         expect(ids(filterPaletteCommands(cmds, "POOL"))).toEqual(["pools"]);
-        expect(ids(filterPaletteCommands(cmds, "line"))).toEqual([
-            "explore",
-            "top-line",
-            "export"
-        ]);
+        expect(ids(filterPaletteCommands(cmds, "line"))).toEqual(["top-line", "export"]);
     });
     test("cycleIndex wraps both ways and tolerates empty lists", () => {
         expect(cycleIndex(0, 1, 3)).toBe(1);

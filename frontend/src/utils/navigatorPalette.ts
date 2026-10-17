@@ -2,7 +2,6 @@ import type { NavigatorTreeNode } from "../contexts/NavigatorContext";
 
 export type PaletteCommandId =
     | "pick"
-    | "explore"
     | "top-line"
     | "undo"
     | "clear"
@@ -15,7 +14,7 @@ export interface PaletteCommand {
     label: string;
     hint: string | null;
     /** `›` commands: which right-pane stage Enter opens. */
-    opensPane: "champions" | "canvas" | null;
+    opensPane: "canvas" | null;
     /** Non-null renders the row disabled with this hint (design § 6). */
     disabledReason: string | null;
 }
@@ -32,7 +31,8 @@ export interface PaletteContext {
     stale: boolean;
 }
 
-/** Design § 6 commands table, in its order. */
+/** Design § 6 commands table, in its order. `pick` closes the palette and
+ *  focuses the pool search (design § 6 — the champion pane is gone). */
 export function buildPaletteCommands(ctx: PaletteContext): PaletteCommand[] {
     const out: PaletteCommand[] = [];
     if (ctx.turn) {
@@ -40,15 +40,8 @@ export function buildPaletteCommands(ctx: PaletteContext): PaletteCommand[] {
             id: "pick",
             label: `${ctx.turn.type === "ban" ? "Ban" : "Pick"} for ${ctx.slotLabel}`,
             hint: ctx.isOurTurn ? "our turn" : "opponent's turn",
-            opensPane: "champions",
+            opensPane: null,
             disabledReason: null
-        });
-        out.push({
-            id: "explore",
-            label: "Explore line for…",
-            hint: "select, don't commit",
-            opensPane: "champions",
-            disabledReason: ctx.hasFan ? null : "no candidates"
         });
         out.push({
             id: "top-line",

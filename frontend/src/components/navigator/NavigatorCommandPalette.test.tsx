@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
-import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { buildPaletteCommands } from "../../utils/navigatorPalette";
 import {
     NavigatorCommandPalette,
@@ -10,42 +9,11 @@ import {
 
 afterEach(cleanup);
 
-const scores = (composite: number) => ({
-    composite,
-    compStrength: 0,
-    informationValue: 0,
-    flexRetention: 0,
-    revealCost: 0
-});
-const single = (id: string, composite: number): NavigatorTreeNode => ({
-    championIds: [id],
-    actionType: "pick",
-    phase: "pick2",
-    scores: scores(composite),
-    assignmentDistribution: [],
-    side: "red",
-    slots: [19],
-    userInjected: false,
-    children: []
-});
-const pair = (a: string, b: string, composite: number): NavigatorTreeNode => ({
-    championIds: [a, b],
-    actionType: "pick",
-    phase: "pick2",
-    scores: scores(composite),
-    assignmentDistribution: [],
-    side: "blue",
-    slots: [17, 18],
-    userInjected: false,
-    children: []
-});
-
 function props(
     overrides: Partial<NavigatorCommandPaletteProps> = {}
 ): NavigatorCommandPaletteProps {
     return {
         open: true,
-        anchor: null,
         heading: "Red Pick 5",
         commands: buildPaletteCommands({
             turn: { slot: 19, type: "pick" },
@@ -57,12 +25,6 @@ function props(
             canEditPools: false,
             stale: false
         }),
-        turn: { slot: 19, type: "pick", collect: 1, partnerOf: null },
-        fan: [single("Pantheon", 3.0), single("Taric", 2.8)],
-        unavailable: new Set(["Shen"]),
-        unavailableReason: (id) => (id === "Shen" ? "picked in Game 1 (fearless)" : null),
-        coloring: () => "neutral",
-        rankedRoleLine: () => "Sup",
         preview: (id) => [`preview ${id}`],
         canvases: [
             { id: "c1", name: "Scrims" },
@@ -70,8 +32,6 @@ function props(
         ],
         canvasesLoading: false,
         defaultCanvasId: "c2",
-        onCommit: () => undefined,
-        onExplore: () => undefined,
         onRun: () => undefined,
         onExport: () => undefined,
         onClose: () => undefined,
@@ -81,21 +41,15 @@ function props(
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
 describe("NavigatorCommandPalette", () => {
-    test("centred vs anchored", () => {
-        const a = render(() => <NavigatorCommandPalette {...props()} />);
+    test("always centred, headed by the turn", () => {
+        const { container } = render(() => <NavigatorCommandPalette {...props()} />);
         expect(
-            a.container.querySelector("[data-palette]")?.getAttribute("data-palette-mode")
+            container.querySelector("[data-palette]")?.getAttribute("data-palette-mode")
         ).toBe("centred");
-        expect(a.container.querySelector("[data-palette-heading]")?.textContent).toBe(
+        expect(container.querySelector("[data-palette-heading]")?.textContent).toBe(
             "Red Pick 5"
         );
-        cleanup();
-        const b = render(() => (
-            <NavigatorCommandPalette {...props({ anchor: { left: 120, top: 80 } })} />
-        ));
-        const root = b.container.querySelector("[data-palette]");
-        expect(root?.getAttribute("data-palette-mode")).toBe("anchored");
-        expect(root instanceof HTMLElement ? root.style.left : "").toBe("120px");
+        expect(container.querySelector("[data-ranked-row]")).toBeNull();
     });
     test("↑↓ move the highlight, Enter runs a plain command and the disabled ones do nothing", () => {
         const onRun = vi.fn();
@@ -107,7 +61,6 @@ describe("NavigatorCommandPalette", () => {
                 .querySelector("[data-palette-command='pick']")
                 ?.getAttribute("data-highlighted")
         ).toBe("true");
-        key("ArrowDown");
         key("ArrowDown");
         key("ArrowDown");
         expect(
@@ -128,139 +81,22 @@ describe("NavigatorCommandPalette", () => {
         key("Enter");
         expect(onRun).toHaveBeenCalledTimes(1);
     });
-    test("typing filters commands; the highlighted pick command shows ranked rows", () => {
-        const onCommit = vi.fn();
-        const { container } = render(() => (
-            <NavigatorCommandPalette {...props({ onCommit })} />
-        ));
-        const rows = container.querySelectorAll("[data-ranked-row]");
-        expect(rows).toHaveLength(2);
-        expect(rows[0].getAttribute("data-ranked-row")).toBe("Pantheon");
-        expect(rows[0].textContent).toContain("3.00");
-        fireEvent.click(rows[0]);
-        expect(onCommit).toHaveBeenCalledWith(["Pantheon"]);
+    test("typing filters commands; the highlighted command shows its preview", () => {
+        const { container } = render(() => <NavigatorCommandPalette {...props()} />);
+        expect(container.textContent).toContain("preview pick");
         const input = container.querySelector("[data-palette-input]");
         if (input) fireEvent.input(input, { target: { value: "expo" } });
         expect(container.querySelectorAll("[data-palette-command]")).toHaveLength(1);
         expect(container.querySelector("[data-palette-command='export']")).not.toBeNull();
     });
-    test("Enter on pick opens the champion pane; a tile commits; Backspace on an empty query returns", () => {
-        const onCommit = vi.fn();
+    test("Enter on pick RUNS it (the parent focuses the pool search); no champion pane exists", () => {
+        const onRun = vi.fn();
         const { container } = render(() => (
-            <NavigatorCommandPalette {...props({ onCommit })} />
+            <NavigatorCommandPalette {...props({ onRun })} />
         ));
         key("Enter");
-        expect(container.querySelector("[data-champion-pane]")).not.toBeNull();
-        expect(
-            container
-                .querySelector("[data-champion-pane] button[data-champion='Pantheon']")
-                ?.getAttribute("data-ranked")
-        ).toBe("true");
-        expect(
-            container
-                .querySelector("[data-champion-pane] button[data-champion='Shen']")
-                ?.hasAttribute("disabled")
-        ).toBe(true);
-        expect(
-            container
-                .querySelector("[data-champion-pane] button[data-champion='Shen']")
-                ?.getAttribute("title")
-        ).toBe("Shen — picked in Game 1 (fearless)");
-        key("Backspace");
+        expect(onRun).toHaveBeenCalledWith("pick");
         expect(container.querySelector("[data-champion-pane]")).toBeNull();
-        key("Enter");
-        const input2 = container.querySelector("[data-palette-input]");
-        if (input2) fireEvent.input(input2, { target: { value: "Taric" } });
-        key("Enter");
-        expect(onCommit).toHaveBeenCalledWith(["Taric"]);
-        expect(onCommit).toHaveBeenCalledTimes(1); // one Enter → one commit: the palette's and the pane's key handlers never both act
-    });
-    test("a pair turn collects two champions and commits both", () => {
-        const onCommit = vi.fn();
-        const fan = [pair("Xayah", "Shen", 2.9), pair("Xayah", "Braum", 2.8)];
-        const { container } = render(() => (
-            <NavigatorCommandPalette
-                {...props({
-                    onCommit,
-                    fan,
-                    unavailable: new Set(),
-                    heading: "Blue Pick 4 + Blue Pick 5",
-                    turn: { slot: 17, type: "pick", collect: 2, partnerOf: null },
-                    commands: buildPaletteCommands({
-                        turn: { slot: 17, type: "pick" },
-                        slotLabel: "Blue Pick 4 + Blue Pick 5",
-                        isOurTurn: false,
-                        hasFan: true,
-                        lastEventChampionName: "Tristana",
-                        hasSelection: false,
-                        canEditPools: false,
-                        stale: false
-                    })
-                })}
-            />
-        ));
-        key("Enter");
-        expect(container.querySelector("[data-palette-heading]")?.textContent).toBe(
-            "Blue Pick 4 + Blue Pick 5 — 1 of 2"
-        );
-        const xayah = container.querySelector(
-            "[data-champion-pane] button[data-champion='Xayah']"
-        );
-        if (xayah) fireEvent.click(xayah);
-        expect(onCommit).not.toHaveBeenCalled();
-        expect(container.querySelector("[data-palette-heading]")?.textContent).toBe(
-            "Blue Pick 4 + Blue Pick 5 — 2 of 2"
-        );
-        expect(
-            container
-                .querySelector("[data-champion-pane] button[data-champion='Braum']")
-                ?.getAttribute("data-ranked")
-        ).toBe("true");
-        expect(
-            container.querySelector("[data-champion-pane] button[data-champion='Xayah']")
-        ).toBeNull();
-        const braum = container.querySelector(
-            "[data-champion-pane] button[data-champion='Braum']"
-        );
-        if (braum) fireEvent.click(braum);
-        expect(onCommit).toHaveBeenCalledWith(["Xayah", "Braum"]);
-    });
-    test("arrow keys cross the ranked/pool boundary by column, not by flat index (execution ruling 2026-09-07)", () => {
-        const { container } = render(() => <NavigatorCommandPalette {...props()} />);
-        key("Enter");
-        const pane = container.querySelector("[data-champion-pane]");
-        expect(
-            pane
-                ?.querySelector("button[data-champion='Pantheon']")
-                ?.getAttribute("data-highlighted")
-        ).toBe("true");
-        key("ArrowDown");
-        // Two ranked tiles occupy columns 0–1; "below" Pantheon is the FIRST pool tile (column 0), not ordered()[6].
-        expect(
-            pane
-                ?.querySelector("button[data-ranked='false']")
-                ?.getAttribute("data-highlighted")
-        ).toBe("true");
-        expect(pane?.querySelectorAll("button[data-highlighted='true']")).toHaveLength(1);
-        key("ArrowUp");
-        expect(
-            pane
-                ?.querySelector("button[data-champion='Pantheon']")
-                ?.getAttribute("data-highlighted")
-        ).toBe("true");
-    });
-    test("explore selects instead of committing", () => {
-        const onExplore = vi.fn();
-        const { container } = render(() => (
-            <NavigatorCommandPalette {...props({ onExplore })} />
-        ));
-        key("ArrowDown");
-        key("Enter");
-        const taric = container.querySelector(
-            "[data-champion-pane] button[data-champion='Taric']"
-        );
-        if (taric) fireEvent.click(taric);
-        expect(onExplore).toHaveBeenCalledWith("Taric");
     });
     test("export opens the canvas chooser with the remembered canvas highlighted; Enter exports", () => {
         const onExport = vi.fn();

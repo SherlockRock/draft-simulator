@@ -371,13 +371,13 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(container.querySelector("[data-palette]")).toBeNull();
         const search = container.querySelector("[data-pool-search]");
         if (search) fireEvent.keyDown(search, { key: "Escape" }); // …Esc returns focus to the page…
-        key("/"); // …and '/' works again
+        key("/"); // …and '/' works again; Enter on "Pick for Red Pick 5" closes the palette and focuses the pool search
         key("Enter");
-        const taric = container.querySelector(
-            "[data-champion-pane] button[data-champion='Taric']"
+        expect(container.querySelector("[data-palette]")).toBeNull();
+        expect(document.activeElement).toBe(
+            container.querySelector("[data-pool-search]")
         );
-        if (taric) fireEvent.click(taric);
-        expect(emitPickStep).toHaveBeenCalledWith("draft-1", ["Taric"], 19);
+        expect(emitPickStep).not.toHaveBeenCalled();
     });
     test("hover Pick on a column-0 card commits that node; selecting opens nothing further at depth 8 leaves", () => {
         const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
