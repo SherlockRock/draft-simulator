@@ -23,6 +23,7 @@ import {
     poolColumns,
     poolSideFor,
     singleMatchLabel,
+    visibleTiles,
     type Highlight,
     type PoolColumnStatus,
     type PoolTurn,
@@ -75,7 +76,9 @@ const statusText = (s: PoolColumnStatus): string =>
 export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) => {
     let inputEl: HTMLInputElement | undefined;
     const [collected, setCollected] = createSignal<string[]>([]);
-    const [moved, setMoved] = createSignal<Highlight | null>(null);
+    const [moved, setMoved] = createSignal<{ col: number; championId: string } | null>(
+        null
+    );
     const [hint, setHint] = createSignal<string | null>(null);
     const [hovered, setHovered] = createSignal<{ id: string; el: HTMLElement } | null>(
         null
@@ -107,7 +110,20 @@ export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) =>
             columns().flatMap((c) => c.tiles)
         )
     );
-    const highlight = () => moved() ?? initialHighlight(columns(), matches());
+    // The arrowed position is stored as a CHAMPION and re-resolved to an index on every read, so an
+    // engine re-rank (tiles reorder) cannot move the highlight onto a different champion; a champion
+    // that is no longer visible in its column falls back to the initial highlight.
+    const highlight = (): Highlight | null => {
+        const m = moved();
+        const column = m ? columns()[m.col] : undefined;
+        if (m && column) {
+            const idx = visibleTiles(column, matches()).findIndex(
+                (t) => t.championId === m.championId
+            );
+            if (idx >= 0) return { col: m.col, idx };
+        }
+        return initialHighlight(columns(), matches());
+    };
     const highlighted = () => highlightedId(columns(), matches(), highlight());
     const noSignal = createMemo(() => banSignalAbsent(props.fan));
     const poolEmpty = () => columns().every((c) => c.tiles.length === 0);
@@ -160,7 +176,9 @@ export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) =>
     // The arrow position survives engine snapshots; it resets on a new query or a new turn.
     // highlightedId returns null if a saved position falls out of range.
     createEffect(
-        on([() => props.query, turnSlot], () => setMoved(null), { defer: true })
+        on([() => props.query, () => props.view, turnSlot], () => setMoved(null), {
+            defer: true
+        })
     );
     createEffect(
         on(
@@ -198,7 +216,10 @@ export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) =>
             Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - 8)
         );
         const top = r.top - height - 8 >= 8 ? r.top - height - 8 : r.bottom + 8;
-        setPreviewPos({ left, top });
+        setPreviewPos({
+            left,
+            top: Math.max(8, Math.min(top, window.innerHeight - height - 8))
+        });
     });
 
     const choose = (championId: string) => {
@@ -255,7 +276,9 @@ export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) =>
                       : null;
         if (dir === null) return;
         e.preventDefault();
-        setMoved(moveHighlight(columns(), matches(), highlight(), dir));
+        const next = moveHighlight(columns(), matches(), highlight(), dir);
+        const championId = highlightedId(columns(), matches(), next);
+        setMoved(next && championId ? { col: next.col, championId } : null);
     };
     const previewInput = createMemo(() => {
         const h = hovered();

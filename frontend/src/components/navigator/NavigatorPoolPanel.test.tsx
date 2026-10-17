@@ -73,6 +73,7 @@ const DEFAULT_TURN: NavigatorPoolPanelProps["turn"] = {
 function mount(overrides: Partial<NavigatorPoolPanelProps> = {}) {
     const [query, setQuery] = createSignal(overrides.query ?? "");
     const [focusRequest, setFocusRequest] = createSignal(0);
+    const [fan, setFan] = createSignal<NavigatorTreeNode[]>(overrides.fan ?? FAN);
     // `turn` is a signal so a test can hand over a NEW object with the same slot (what an engine
     // snapshot does in the real page) or a new slot.
     const [turn, setTurn] = createSignal<NavigatorPoolPanelProps["turn"]>(
@@ -90,7 +91,6 @@ function mount(overrides: Partial<NavigatorPoolPanelProps> = {}) {
             onViewChange={onViewChange}
             pools={{ blue: BLUE, red: RED }}
             picks={{ blue: ["Gragas", "Hecarim", "Akali"], red: ["Jinx", "Ashe"] }}
-            fan={FAN}
             unavailable={USED}
             unavailableReason={(id) => (USED.has(id) ? "already used this game" : null)}
             onCommit={onCommit}
@@ -104,10 +104,12 @@ function mount(overrides: Partial<NavigatorPoolPanelProps> = {}) {
             query={query()}
             onQueryChange={setQuery}
             focusRequest={focusRequest()}
+            fan={fan()}
         />
     ));
     return {
         ...utils,
+        setFan,
         setQuery,
         query,
         setFocusRequest,
@@ -438,6 +440,29 @@ describe("NavigatorPoolPanel (design § 5)", () => {
         expect(b.container.querySelector("[data-pair-chip='Xayah']")).not.toBeNull();
         b.setTurn({ slot: 11, type: "pick", side: "red", collect: 1, partnerOf: null });
         expect(b.container.querySelector("[data-pair-chip='Xayah']")).toBeNull();
+    });
+    test("the arrowed highlight follows the champion when the engine re-ranks the fan", () => {
+        const { container, setFan, onCommit } = mount();
+        key(search(container), "ArrowDown");
+        key(search(container), "ArrowRight");
+        expect(
+            container
+                .querySelector("[data-highlighted='true']")
+                ?.getAttribute("data-tile")
+        ).toBe("Poppy");
+        setFan([
+            pick("Poppy", 2.9),
+            pick("Pantheon", 2.69),
+            pick("Sylas", 2.46),
+            pick("Brand", 2.42)
+        ]);
+        expect(
+            container
+                .querySelector("[data-highlighted='true']")
+                ?.getAttribute("data-tile")
+        ).toBe("Poppy");
+        key(search(container), "Enter");
+        expect(onCommit).toHaveBeenCalledWith(["Poppy"]);
     });
     test("a focus request focuses the search box", () => {
         const { container, setFocusRequest } = mount();

@@ -297,7 +297,7 @@ function mount(
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
 describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)", () => {
-    test("item5: header, ready pill, top-1 Pantheon as Sup at 3.43, role-gap strip", () => {
+    test("item5: header, ready pill, top-1 Pantheon as Sup at 3.43, team columns with seat rings", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree);
         expect(container.querySelector("[data-drafting-header]")?.textContent).toContain(
             "Pick Phase 2 — Red Pick 5"
@@ -350,7 +350,7 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         ).toBe("true");
         expect(container.querySelector("[data-timeline-slot]")).toBeNull();
     });
-    test("'/' opens the palette centred; the next slot FOCUSES THE POOL SEARCH; the palette's pick stage still commits a tile", () => {
+    test("'/' opens the palette centred; the next slot FOCUSES THE POOL SEARCH; a pool tile click commits, not the palette", () => {
         const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
         key("/");
         expect(
@@ -414,7 +414,7 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
             "✕ Engine failed · next pick, ban or undo retries"
         );
     });
-    test("infeasible red side: empty pill with the reason, red strip, the empty-fan card's undo remedy", () => {
+    test("infeasible red side: empty pill with the reason, red roles summary, the empty-fan card's undo remedy", () => {
         const { container, emitUndo } = mount(INFEASIBLE_ORDER, emptyTree);
         const pill = container.querySelector("[data-engine-status]");
         expect(pill?.getAttribute("data-engine-status")).toBe("empty");
@@ -473,7 +473,7 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         key("/");
         expect(container.querySelector("[data-palette]")).toBeNull();
     });
-    test("archive mode: read-only timeline, no pill, no palette, the archive card instead of columns", () => {
+    test("archive mode: read-only team columns, no pool panel, no pill, no palette, the archive card instead of columns", () => {
         const { container, viewGame } = mount([...ITEM5_ORDER, "Pantheon"], emptyTree, {
             archive: true
         });
