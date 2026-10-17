@@ -30,6 +30,12 @@ const VersusRoleSelection = lazy(() => import("./pages/VersusRoleSelection"));
 const VersusDraftView = lazy(() => import("./pages/VersusDraftView"));
 const NavigatorDashboard = lazy(() => import("./pages/NavigatorDashboard"));
 const NavigatorSessionView = lazy(() => import("./pages/NavigatorSessionView"));
+// THROWAWAY prototype route (Navigator UX push plan Task 4; deleted by its Task 12). Vite replaces
+// import.meta.env.DEV with false in production and @solidjs/router skips a `false` child, so the
+// route is unreachable outside dev.
+const NavigatorLobbyPrototype = lazy(
+    () => import("./prototype/navigator-lobby/NavigatorLobbyPrototype")
+);
 
 initAnalytics();
 
@@ -78,6 +84,12 @@ render(
                             <Route path="/" component={NavigatorDashboard} />
                             <Route path="/:sessionId" component={NavigatorSessionView} />
                         </Route>
+                        {import.meta.env.DEV && (
+                            <Route
+                                path="/prototype/navigator-lobby"
+                                component={NavigatorLobbyPrototype}
+                            />
+                        )}
                         <Route path="*" component={HomePage} />
                     </Route>
                 </Router>
