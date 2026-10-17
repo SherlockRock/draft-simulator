@@ -7,7 +7,7 @@ import { champions } from "./constants";
 //
 // This tolerates common variants: "K'Sante" ↔ "Ksante", "Kha'Zix" ↔ "Khazix",
 // "Dr. Mundo" ↔ "DrMundo", "Nunu & Willump" ↔ "NunuWillump".
-function normalizeName(raw: string): string {
+export function normalizeName(raw: string): string {
     return raw
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
