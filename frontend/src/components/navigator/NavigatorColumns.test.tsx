@@ -6,6 +6,12 @@ import type { NavigatorTreeNode } from "../../contexts/NavigatorContext";
 import { deriveColumns } from "../../utils/navigatorColumns";
 import { NavigatorColumns, type NavigatorColumnsProps } from "./NavigatorColumns";
 
+// The seat rows solve on the FROZEN 2026-10-10 share table (plan-level decision 2).
+vi.mock("../../data/champions.json", async () => ({
+    default: (await import("../../utils/__fixtures__/champions-2026-10-10-shares.json"))
+        .default
+}));
+
 afterEach(cleanup);
 
 const scores = (composite: number) => ({
@@ -55,9 +61,14 @@ function props(overrides: Partial<NavigatorColumnsProps> = {}): NavigatorColumns
         emptyReason: null,
         canEditPools: false,
         canUndo: true,
-        roleLineFor: (n) => ({
-            roles: n.championIds.map(() => "Sup"),
-            shift: n.championIds[0] === "Ezreal" ? "Sylas → Sup" : null
+        budgetHit: false,
+        // The test's rule: the node's own champions as the row, all of them candidates.
+        seatRowFor: (n) => ({
+            ids: n.championIds,
+            candidateIds: n.championIds,
+            beforeIds: [],
+            side: n.side ?? "red",
+            slashCandidate: n.actionType === "ban"
         }),
         onSelect: () => undefined,
         onCommit: () => undefined,
@@ -69,21 +80,28 @@ function props(overrides: Partial<NavigatorColumnsProps> = {}): NavigatorColumns
 }
 
 describe("NavigatorColumns", () => {
-    test("column 0 renders rank, name, role line, shift and two-decimal score, in engine order", () => {
+    test("column 0 renders rank, name, the seat row and the two-decimal score, in engine order; 340px columns", () => {
         const { container } = render(() => <NavigatorColumns {...props()} />);
         const cards = container.querySelectorAll("[data-column-node]");
         expect(cards).toHaveLength(2);
         expect(cards[0].getAttribute("data-rank")).toBe("1");
         expect(cards[0].textContent).toContain("Tristana");
         expect(cards[0].querySelector("[data-node-score]")?.textContent).toBe("3.08");
-        expect(cards[0].querySelector("[data-node-role]")?.textContent).toBe("Sup");
-        expect(cards[0].querySelector("[data-node-shift]")).toBeNull();
-        expect(cards[1].querySelector("[data-node-shift]")?.textContent).toContain(
-            "Sylas → Sup"
+        const row = cards[0].querySelector("[data-seat-row]");
+        expect(
+            row?.querySelector("[data-seat='adc']")?.getAttribute("data-occupant")
+        ).toBe("Tristana");
+        expect(row?.querySelector("[data-seat='adc']")?.getAttribute("data-marker")).toBe(
+            "candidate"
         );
+        expect(row?.querySelectorAll("[data-open='true']")).toHaveLength(4);
+        expect(container.querySelector("[data-node-role]")).toBeNull();
+        expect(container.querySelector("[data-node-shift]")).toBeNull();
         expect(
             container.querySelector("[data-column][data-depth='0']")?.textContent
         ).toContain("Red Pick 4 — you");
+        expect(container.querySelector(".auto-cols-\\[340px\\]")).not.toBeNull();
+        expect(container.querySelector(".auto-cols-\\[300px\\]")).toBeNull();
     });
     test("selecting ghosts the siblings and opens the child column headed '· for <champion>'", () => {
         const onSelect = vi.fn();
@@ -101,7 +119,7 @@ describe("NavigatorColumns", () => {
         expect(col1?.textContent).toContain("Blue Pick 4 + Blue Pick 5");
         expect(col1?.textContent).toContain("for Tristana");
         const pairCard = col1?.querySelector("[data-column-node]");
-        expect(pairCard?.querySelectorAll("img")).toHaveLength(2);
+        expect(pairCard?.querySelectorAll("[data-confirmed-half] img")).toHaveLength(2);
         expect(pairCard?.querySelectorAll("[data-confirmed-half='true']")).toHaveLength(
             1
         );
@@ -201,5 +219,56 @@ describe("NavigatorColumns", () => {
         expect(
             container.querySelector("[data-column-node][data-rank='2'] [data-pinned]")
         ).not.toBeNull();
+    });
+    test("a ban card shows the opponent's row with the banned champion slashed as the candidate", () => {
+        const ban = node(["Caitlyn"], [12], "red", 0.4, [], { actionType: "ban" });
+        const banFanout = node([], [11], "red", 0, [ban]);
+        const { container } = render(() => (
+            <NavigatorColumns
+                {...props({
+                    columns: deriveColumns(banFanout, []),
+                    // What NavigatorDrafting's seatRowFor passes for a red ban: BLUE's picks + Caitlyn.
+                    seatRowFor: () => ({
+                        ids: ["Gragas", "Hecarim", "Akali", "Caitlyn"],
+                        candidateIds: ["Caitlyn"],
+                        beforeIds: ["Gragas", "Hecarim", "Akali"],
+                        side: "blue",
+                        slashCandidate: true
+                    })
+                })}
+            />
+        ));
+        const row = container.querySelector(
+            "[data-column-node][data-rank='1'] [data-seat-row]"
+        );
+        expect(
+            row?.querySelector("[data-seat='adc']")?.getAttribute("data-occupant")
+        ).toBe("Caitlyn");
+        expect(
+            row
+                ?.querySelector("[data-seat='adc'] [data-seat-ring]")
+                ?.getAttribute("data-slash")
+        ).toBe("true");
+        expect(
+            row?.querySelector("[data-seat='top']")?.getAttribute("data-occupant")
+        ).toBe("Gragas");
+        expect(
+            row
+                ?.querySelector("[data-seat='top'] [data-seat-ring]")
+                ?.getAttribute("data-slash")
+        ).toBe("false");
+        expect(
+            container.querySelector("[data-commit]")?.getAttribute("data-commit")
+        ).toBe("ban");
+    });
+    test("the budget-hit hint renders under column 0 only when asked", () => {
+        const off = render(() => <NavigatorColumns {...props()} />);
+        expect(off.container.querySelector("[data-budget-hint]")).toBeNull();
+        cleanup();
+        const on = render(() => <NavigatorColumns {...props({ budgetHit: true })} />);
+        expect(
+            on.container.querySelector("[data-column][data-depth='0'] [data-budget-hint]")
+                ?.textContent
+        ).toBe("search budget hit — the order among close scores is soft");
     });
 });

@@ -12,21 +12,18 @@ import type {
     NavigatorWorkflowContextValue
 } from "../../contexts/NavigatorContext";
 import { NavigatorWorkflowContext } from "../../contexts/NavigatorContext";
-import item5 from "../../utils/__fixtures__/navigator-item5-snapshot.json";
+import item5 from "../../utils/__fixtures__/navigator-item5-shares-snapshot.json";
 import { NavigatorTreeNodeSchema } from "../../utils/navigatorTreeSchema";
 import { eventsToConfirmedTurns, synthesizeFullTree } from "../../utils/treeReconcile";
 import { TURN_SEQUENCE } from "../../utils/turnSequence";
 import NavigatorDrafting from "./NavigatorDrafting";
 
-// The item5 snapshot is an engine recording made under the positions table
-// champions.json carried on 2026-09-05 (positions refresh slice 1); the role
-// line and role-gap strip asserted below are solved locally from that table,
-// so the test reads the frozen copy rather than the live file, which follows
-// the latest patch (recency rule, 2026-10-06).
+// The seat rows and the role module solve on the FROZEN 2026-10-10 share table, the table the
+// item5 shares snapshot was captured on (plan-level decision 2); the live champions.json
+// follows the latest patch.
 vi.mock("../../data/champions.json", async () => ({
-    default: (
-        await import("../../utils/__fixtures__/champions-2026-09-05-positions.json")
-    ).default
+    default: (await import("../../utils/__fixtures__/champions-2026-10-10-shares.json"))
+        .default
 }));
 
 // The canvas list query is enabled once a line is selected and the palette is open;
@@ -73,26 +70,18 @@ const ITEM5_ORDER = [
     "Xayah",
     "Shen"
 ];
-const ITEM7_ORDER = [
-    "Irelia",
-    "Galio",
-    "Shaco",
-    "Caitlyn",
+// Red Jinx + Aphelios: both `playable: [BOTTOM]` only, so no playable seating exists (design § 7).
+// 9 events → Blue Pick 2 next; the empty fan carries red's reason although it is Blue's turn.
+const INFEASIBLE_ORDER = [
     "Ashe",
-    "Viego",
-    "Jayce",
-    "Rengar",
-    "Nidalee",
-    "Diana",
-    "Talon",
-    "Yone",
-    "KSante",
-    "Pantheon",
-    "Locke",
-    "LeeSin",
-    "Ezreal",
+    "Twitch",
+    "Caitlyn",
     "Jhin",
-    "Xerath"
+    "Kaisa",
+    "Draven",
+    "Gragas",
+    "Jinx",
+    "Aphelios"
 ];
 
 function events(order: string[]): NavigatorEventData[] {
@@ -148,7 +137,13 @@ const emptyTree: NavigatorTreeNode = {
 function mount(
     order: string[],
     initialEngineTree: NavigatorTreeNode,
-    opts: { computing?: boolean; archive?: boolean; failed?: boolean } = {}
+    opts: {
+        computing?: boolean;
+        archive?: boolean;
+        failed?: boolean;
+        budgetHit?: boolean;
+        treeOrder?: string[];
+    } = {}
 ) {
     const computing = opts.computing ?? false;
     const failed = opts.failed ?? false;
@@ -159,7 +154,8 @@ function mount(
         computeTimeMs: 371,
         pruningRate: 0,
         depthReached: 8,
-        transpositionsFound: 0
+        transpositionsFound: 0,
+        budgetHit: opts.budgetHit === true
     };
     const archiveGame: NavigatorCompletedGame = {
         draft: {
@@ -209,7 +205,7 @@ function mount(
         connected: true,
         error: null
     };
-    const turns = eventsToConfirmedTurns(evs);
+    const turns = eventsToConfirmedTurns(opts.treeOrder ? events(opts.treeOrder) : evs);
     const synthetic = () => synthesizeFullTree(engineTree(), turns);
     const emitPickStep = vi.fn();
     const emitBan = vi.fn();
@@ -252,7 +248,7 @@ function mount(
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
 describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)", () => {
-    test("item5: header, ready pill, top-1 Pantheon as Sup at 3.00, role-gap strip", () => {
+    test("item5: header, ready pill, top-1 Pantheon as Sup at 3.43, role-gap strip", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree);
         expect(container.querySelector("[data-drafting-header]")?.textContent).toContain(
             "Pick Phase 2 — Red Pick 5"
@@ -262,19 +258,27 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         );
         const pill = container.querySelector("[data-engine-status]");
         expect(pill?.getAttribute("data-engine-status")).toBe("ready");
-        expect(pill?.textContent).toBe("● 8 candidates · depth 8 · 371 ms");
+        expect(pill?.textContent).toBe("● 5 candidates · depth 8 · 371 ms");
         const top1 = container.querySelector(
             "[data-column][data-depth='0'] [data-column-node][data-rank='1']"
         );
         expect(top1?.textContent).toContain("Pantheon");
-        expect(top1?.querySelector("[data-node-role]")?.textContent).toBe("Sup");
-        expect(top1?.querySelector("[data-node-score]")?.textContent).toBe("3.00");
+        const seat = top1?.querySelector("[data-seat-row] [data-seat='support']");
+        expect(seat?.getAttribute("data-occupant")).toBe("Pantheon");
+        expect(seat?.getAttribute("data-marker")).toBe("candidate");
+        expect(
+            top1
+                ?.querySelector("[data-seat-row] [data-seat='top']")
+                ?.getAttribute("data-occupant")
+        ).toBe("Sejuani");
+        expect(top1?.querySelector("[data-node-score]")?.textContent).toBe("3.43");
+        expect(container.querySelector("[data-budget-hint]")).toBeNull(); // meta.budgetHit false
         expect(
             container.querySelector("[data-role-gap-side='blue']")?.textContent
         ).toContain("all five covered");
         expect(
             container.querySelector("[data-role-gap-side='red']")?.textContent
-        ).toContain("Top or Jg or Mid or ADC or Sup");
+        ).toContain("Red needs Sup");
         expect(
             container.querySelectorAll("[data-timeline-slot][data-filled='true']")
         ).toHaveLength(19);
@@ -316,19 +320,19 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         const taric = container.querySelector(
             "[data-column][data-depth='0'] [data-column-node][data-rank='2']"
         );
-        expect(taric?.textContent).toContain("Taric");
+        expect(taric?.textContent).toContain("Tahm Kench");
         if (taric) fireEvent.click(taric);
         expect(
             container.querySelector("[data-column-node][data-selected='true']")
                 ?.textContent
-        ).toContain("Taric");
+        ).toContain("Tahm Kench");
         const [first, second, ...rest] = item5Tree.children;
-        setEngineTree({ ...item5Tree, children: [second, first, ...rest] }); // Phase-2 re-rank: same events, Taric now #1
+        setEngineTree({ ...item5Tree, children: [second, first, ...rest] }); // Phase-2 re-rank: same events, Tahm Kench now #1
         const selected = container.querySelector(
             "[data-column-node][data-selected='true']"
         );
         expect(selected?.getAttribute("data-rank")).toBe("1");
-        expect(selected?.textContent).toContain("Taric");
+        expect(selected?.textContent).toContain("Tahm Kench");
     });
     test("a failed compute renders the failed pill (target note D10 item 2)", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree, { failed: true });
@@ -338,12 +342,12 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
             "✕ Engine failed · next pick, ban or undo retries"
         );
     });
-    test("item7: empty pill with the infeasibility reason and the empty-fan card", () => {
-        const { container, emitUndo } = mount(ITEM7_ORDER, emptyTree);
+    test("infeasible red side: empty pill with the reason, red strip, the empty-fan card's undo remedy", () => {
+        const { container, emitUndo } = mount(INFEASIBLE_ORDER, emptyTree);
         const pill = container.querySelector("[data-engine-status]");
         expect(pill?.getAttribute("data-engine-status")).toBe("empty");
         expect(pill?.textContent).toBe(
-            "✕ No legal completion — red cannot fill five roles with Rengar, Nidalee, Yone, Ezreal · undo or relax pool"
+            "✕ No legal completion — red cannot fill five roles with Jinx, Aphelios · undo or relax pool"
         );
         expect(
             container.querySelector("[data-role-gap-side='red']")?.textContent
@@ -405,5 +409,74 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(viewGame).toHaveBeenCalledWith(null);
         key("/");
         expect(container.querySelector("[data-palette]")).toBeNull();
+    });
+    test("a ban card's seat row is the OPPONENT's picks with the banned champion slashed (seatRowFor, design § 4)", () => {
+        const banNode: NavigatorTreeNode = {
+            ...emptyTree,
+            championIds: ["Xayah"],
+            actionType: "ban",
+            phase: "ban2",
+            side: "red",
+            slots: [12]
+        };
+        const { container } = mount(ITEM5_ORDER.slice(0, 12), {
+            ...emptyTree,
+            children: [banNode]
+        }); // next = slot 12, Red Ban 4
+        const row = container.querySelector(
+            "[data-column-node][data-rank='1'] [data-seat-row]"
+        );
+        expect(
+            row?.querySelector("[data-seat='adc']")?.getAttribute("data-occupant")
+        ).toBe("Xayah");
+        expect(
+            row
+                ?.querySelector("[data-seat='adc'] [data-seat-ring]")
+                ?.getAttribute("data-slash")
+        ).toBe("true");
+        expect(
+            row?.querySelector("[data-seat='top']")?.getAttribute("data-occupant")
+        ).toBe("Gragas"); // blue's picks
+        expect(
+            row?.querySelector("[data-seat='jungle']")?.getAttribute("data-occupant")
+        ).toBe("Hecarim");
+    });
+    test("the budget-hit hint follows the ready pill's budgetHit", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree, { budgetHit: true });
+        expect(container.querySelector("[data-engine-status]")?.textContent).toContain(
+            "budget hit"
+        );
+        expect(container.querySelector("[data-budget-hint]")).not.toBeNull();
+    });
+    test("a pair-pending card: the confirmed half stays in the baseline (no sky marker), only the added half is the candidate", () => {
+        const pairNode: NavigatorTreeNode = {
+            ...emptyTree,
+            championIds: ["Xayah", "Shen"],
+            phase: "pick2",
+            side: "blue",
+            slots: [17, 18],
+            confirmedChampionIds: ["Xayah"]
+        };
+        // 18 events (Xayah confirmed at 17, slot 18 next) over the 17-event spine — the live pair-pending shape.
+        const { container } = mount(
+            ITEM5_ORDER.slice(0, 18),
+            { ...emptyTree, children: [pairNode] },
+            { treeOrder: ITEM5_ORDER.slice(0, 17) }
+        );
+        const row = container.querySelector(
+            "[data-column-node][data-rank='1'] [data-seat-row]"
+        );
+        expect(
+            row?.querySelector("[data-seat='adc']")?.getAttribute("data-occupant")
+        ).toBe("Xayah");
+        expect(row?.querySelector("[data-seat='adc']")?.getAttribute("data-marker")).toBe(
+            "none"
+        );
+        expect(
+            row?.querySelector("[data-seat='support']")?.getAttribute("data-occupant")
+        ).toBe("Shen");
+        expect(
+            row?.querySelector("[data-seat='support']")?.getAttribute("data-marker")
+        ).toBe("candidate");
     });
 });

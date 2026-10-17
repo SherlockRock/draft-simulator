@@ -62,6 +62,7 @@ import {
 import { ROLES } from "../../utils/championRoles";
 import type { RolePoolMap, TeamPool } from "@draft-sim/shared-types";
 import { getOurSideForGame } from "../../utils/navigatorSide";
+import { otherSide, type Side } from "../../utils/navigatorSeats";
 import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import {
     PHASE_LABELS,
@@ -72,7 +73,7 @@ import {
 import type { ContextMenuAction } from "../../utils/types";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
 import { EngineStatusPill } from "./EngineStatusPill";
-import { NavigatorColumns, type NodeRoleLine } from "./NavigatorColumns";
+import { NavigatorColumns, type SeatRowInput } from "./NavigatorColumns";
 import { NavigatorCommandPalette, type PaletteTurn } from "./NavigatorCommandPalette";
 import { NavigatorTimeline } from "./NavigatorTimeline";
 import { PoolEditModal } from "./PoolEditModal";
@@ -289,6 +290,11 @@ const NavigatorDrafting: Component = () => {
             computeFailed: viewingArchive() ? false : computeFailed()
         })
     );
+    // Design § 4 budget-hit hint: only a READY status carries budgetHit.
+    const budgetHit = createMemo(() => {
+        const s = status();
+        return s.kind === "ready" && s.budgetHit;
+    });
 
     // ---- columns + selection (design § 2) ----
     const [selectedPath, setSelectedPath] = createSignal<number[]>([]);
@@ -321,33 +327,50 @@ const NavigatorDrafting: Component = () => {
         const f = fanout();
         return f ? lineNodes(f, selectedPath()) : [];
     });
-    const roleLineFor = (node: NavigatorTreeNode, column: ColumnModel): NodeRoleLine => {
-        if (node.actionType === "ban" || node.side === null)
-            return { roles: [], shift: null };
-        const before = sidePicksBefore(turns(), column.lineage, node.side);
-        const line = roleLineForPick(
-            before,
-            node.championIds,
-            node.assignmentDistribution,
-            node.confirmedChampionIds ?? []
-        );
+    // Design § 4: the card's seat row. Pick nodes: the side's picks before the node plus the
+    // node's champions, the ADDED champions as candidates (a pair-pending node's confirmed half
+    // stays in the baseline, as roleLineForPick did). Ban nodes: the OPPONENT's picks plus the
+    // banned champion, slashed — "what this ban denies"; with no opponent picks yet (phase 1)
+    // the row is the banned champion alone. `slashCandidate` also switches SeatRow to denyMode
+    // (plan-level decision 15): a ban the opponent could not seat never flips their row red.
+    const seatRowFor = (node: NavigatorTreeNode, column: ColumnModel): SeatRowInput => {
+        const side: Side = node.side ?? "blue";
+        if (node.actionType === "ban") {
+            const opponent = otherSide(side);
+            const before = sidePicksBefore(turns(), column.lineage, opponent);
+            return {
+                ids: [...before, ...node.championIds],
+                candidateIds: [...node.championIds],
+                beforeIds: before,
+                side: opponent,
+                slashCandidate: true
+            };
+        }
+        const before = sidePicksBefore(turns(), column.lineage, side);
+        const confirmed = new Set(node.confirmedChampionIds ?? []);
+        const added = node.championIds.filter((id) => !confirmed.has(id));
         return {
-            roles: line.roles.map((r) => (r ? ROLE_SHORT_LABELS[r] : "?")),
-            shift: line.shift
-                ? `${nameOf(line.shift.championId)} → ${ROLE_SHORT_LABELS[line.shift.to]}`
-                : null
+            ids: [...before, ...node.championIds],
+            candidateIds: added,
+            beforeIds: before.filter((id) => !added.includes(id)),
+            side,
+            slashCandidate: false
         };
     };
     const rankedRoleLine = (championId: string): string => {
         const node = fan().find((n) => n.championIds.includes(championId));
-        if (!node) return "";
-        const line = roleLineFor(node, {
-            depth: 0,
-            nodes: fan(),
-            selectedIndex: null,
-            lineage: []
-        });
-        return [line.roles.join(" · "), line.shift].filter((s) => s).join(" · ");
+        if (!node || node.actionType === "ban" || node.side === null) return "";
+        const line = roleLineForPick(
+            sidePicksBefore(turns(), [], node.side),
+            node.championIds,
+            node.assignmentDistribution,
+            node.confirmedChampionIds ?? []
+        );
+        const roles = line.roles.map((r) => (r ? ROLE_SHORT_LABELS[r] : "?")).join(" · ");
+        const shift = line.shift
+            ? `${nameOf(line.shift.championId)} → ${ROLE_SHORT_LABELS[line.shift.to]}`
+            : null;
+        return [roles, shift].filter((s) => s).join(" · ");
     };
 
     // ---- commits (slot = confirmed event count, as the old picker column did) ----
@@ -852,7 +875,8 @@ const NavigatorDrafting: Component = () => {
                                     }
                                     canEditPools={canEditPools()}
                                     canUndo={confirmedEvents().length > 0}
-                                    roleLineFor={roleLineFor}
+                                    seatRowFor={seatRowFor}
+                                    budgetHit={budgetHit()}
                                     onSelect={(depth, index) =>
                                         setSelectedPath((p) => [
                                             ...p.slice(0, depth),

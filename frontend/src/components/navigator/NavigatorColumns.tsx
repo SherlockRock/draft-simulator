@@ -7,13 +7,19 @@ import {
     NO_BAN_SIGNAL_LABEL,
     type ColumnModel
 } from "../../utils/navigatorColumns";
+import type { Side } from "../../utils/navigatorSeats";
 import { turnLabelForSlots } from "../../utils/turnSequence";
+import { SeatRow } from "./SeatRow";
 
-export interface NodeRoleLine {
-    /** One formatted label per node champion ("Sup"). */
-    roles: string[];
-    /** "Sylas → Sup" when the pick moves an earlier pick (design § 2), else null. */
-    shift: string | null;
+/** What a card's seat row solves (design § 4): the side's picks before the node plus the
+ *  node's champions; the champions the node ADDS are the candidates; `beforeIds` is the moved-marker
+ *  baseline. Ban cards pass the OPPONENT's picks with the banned champion slashed. */
+export interface SeatRowInput {
+    ids: string[];
+    candidateIds: string[];
+    beforeIds: string[];
+    side: Side;
+    slashCandidate: boolean;
 }
 
 export interface NavigatorColumnsProps {
@@ -25,7 +31,9 @@ export interface NavigatorColumnsProps {
     canEditPools: boolean;
     /** False at zero confirmed events — the server rejects an undo. */
     canUndo: boolean;
-    roleLineFor: (node: NavigatorTreeNode, column: ColumnModel) => NodeRoleLine;
+    seatRowFor: (node: NavigatorTreeNode, column: ColumnModel) => SeatRowInput;
+    /** `status().kind === "ready" && budgetHit` — a one-line note under column 0 (design § 4). */
+    budgetHit: boolean;
     onSelect: (depth: number, index: number) => void;
     onCommit: (node: NavigatorTreeNode) => void;
     onContextMenu: (args: {
@@ -82,7 +90,7 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
     };
 
     return (
-        <div class="custom-scrollbar grid min-h-0 flex-1 auto-cols-[300px] grid-flow-col gap-4 overflow-x-auto px-4 py-4">
+        <div class="custom-scrollbar grid min-h-0 flex-1 auto-cols-[340px] grid-flow-col gap-4 overflow-x-auto px-4 py-4">
             <Show when={props.columns.length === 0 && props.emptyReason !== null}>
                 <div
                     data-empty-fan
@@ -142,9 +150,9 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                 const selected = () => column().selectedIndex === i();
                                 const ghost = () =>
                                     column().selectedIndex !== null && !selected();
-                                // Memoised: each call runs two P(5,n) solves (up to 240 permutations).
-                                const line = createMemo(() =>
-                                    props.roleLineFor(node, column())
+                                // Memoised: each seat row runs up to three P(5,n) solves.
+                                const row = createMemo(() =>
+                                    props.seatRowFor(node, column())
                                 );
                                 const confirmed = new Set(
                                     node.confirmedChampionIds ?? []
@@ -206,28 +214,15 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                                     </span>
                                                 </Show>
                                             </div>
-                                            <div class="truncate text-[11px] text-slate-400">
-                                                <span data-node-role>
-                                                    {node.actionType === "ban"
-                                                        ? "ban"
-                                                        : line().roles.join(" · ")}
-                                                </span>
-                                                <Show
-                                                    when={
-                                                        node.actionType === "pick" &&
-                                                        line().shift
-                                                    }
-                                                >
-                                                    {(shift) => (
-                                                        <span
-                                                            data-node-shift
-                                                            class="text-amber-300"
-                                                        >
-                                                            {" "}
-                                                            · {shift()}
-                                                        </span>
-                                                    )}
-                                                </Show>
+                                            <div class="mt-0.5">
+                                                <SeatRow
+                                                    ids={row().ids}
+                                                    candidateIds={row().candidateIds}
+                                                    beforeIds={row().beforeIds}
+                                                    side={row().side}
+                                                    size="card"
+                                                    slashCandidate={row().slashCandidate}
+                                                />
                                             </div>
                                         </div>
                                         <Show
@@ -269,6 +264,11 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                 );
                             }}
                         </For>
+                        <Show when={column().depth === 0 && props.budgetHit}>
+                            <div data-budget-hint class="text-[11px] text-amber-300/80">
+                                search budget hit — the order among close scores is soft
+                            </div>
+                        </Show>
                         <Show
                             when={
                                 column().depth === 0 &&
