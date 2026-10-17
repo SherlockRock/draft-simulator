@@ -90,7 +90,7 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
     };
 
     return (
-        <div class="custom-scrollbar grid min-h-0 flex-1 auto-cols-[340px] grid-flow-col gap-4 overflow-x-auto px-4 py-4">
+        <div class="custom-scrollbar grid max-h-[55%] shrink-0 auto-cols-[340px] grid-flow-col gap-4 overflow-x-auto overflow-y-auto px-4 py-4">
             <Show when={props.columns.length === 0 && props.emptyReason !== null}>
                 <div
                     data-empty-fan

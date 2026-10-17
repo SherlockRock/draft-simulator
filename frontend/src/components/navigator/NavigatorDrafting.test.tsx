@@ -323,14 +323,32 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(top1?.querySelector("[data-node-score]")?.textContent).toBe("3.43");
         expect(container.querySelector("[data-budget-hint]")).toBeNull(); // meta.budgetHit false
         expect(
-            container.querySelector("[data-role-gap-side='blue']")?.textContent
-        ).toContain("all five covered");
+            container.querySelectorAll("[data-roles-summary='blue'] [data-open='true']")
+        ).toHaveLength(0);
         expect(
-            container.querySelector("[data-role-gap-side='red']")?.textContent
-        ).toContain("Red needs Sup");
+            container.querySelectorAll("[data-roles-summary='red'] [data-open='true']")
+        ).toHaveLength(1); // support
         expect(
-            container.querySelectorAll("[data-timeline-slot][data-filled='true']")
-        ).toHaveLength(19);
+            container
+                .querySelector("[data-roles-summary='red'] [data-seat='adc']")
+                ?.getAttribute("data-occupant")
+        ).toBe("Tristana");
+        expect(
+            container.querySelectorAll("[data-pick-row][data-filled='true']")
+        ).toHaveLength(9);
+        expect(
+            container.querySelectorAll("[data-ban-slot][data-filled='true']")
+        ).toHaveLength(10);
+        expect(container.querySelectorAll("[data-tick-state='filled']")).toHaveLength(19);
+        expect(
+            container.querySelector("[data-tick='19']")?.getAttribute("data-tick-state")
+        ).toBe("next");
+        expect(
+            container
+                .querySelector("[data-pick-row='R5']")
+                ?.getAttribute("data-next-slot")
+        ).toBe("true");
+        expect(container.querySelector("[data-timeline-slot]")).toBeNull();
     });
     test("'/' opens the palette centred; the next slot FOCUSES THE POOL SEARCH; the palette's pick stage still commits a tile", () => {
         const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
@@ -403,9 +421,22 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(pill?.textContent).toBe(
             "✕ No legal completion — red cannot fill five roles with Jinx, Aphelios · undo or relax pool"
         );
+        const summary = container.querySelector(
+            "[data-roles-summary='red'] [data-seat-row]"
+        );
+        expect(summary?.getAttribute("data-infeasible")).toBe("true");
         expect(
-            container.querySelector("[data-role-gap-side='red']")?.textContent
-        ).toContain("cannot complete five roles");
+            summary?.querySelector("[data-seat='adc']")?.getAttribute("data-count")
+        ).toBe("2");
+        expect(
+            container.querySelector("[data-roles-summary='red'] [data-infeasible-text]")
+                ?.textContent
+        ).toBe("✕ cannot fill five roles with Jinx, Aphelios");
+        expect(
+            container
+                .querySelector("[data-team-column='blue']")
+                ?.getAttribute("data-on-clock")
+        ).toBe("true"); // Blue's turn — the red summary is the earlier signal (design § 7)
         const undo = container.querySelector("[data-empty-fan] [data-remedy='undo']");
         if (undo) fireEvent.click(undo);
         expect(emitUndo).toHaveBeenCalledWith("draft-1");
@@ -452,8 +483,14 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(container.querySelector("[data-engine-status]")).toBeNull();
         expect(container.querySelector("[data-next-slot='true']")).toBeNull();
         expect(
-            container.querySelectorAll("[data-timeline-slot][data-filled='true']")
-        ).toHaveLength(20);
+            container.querySelectorAll("[data-pick-row][data-filled='true']")
+        ).toHaveLength(10);
+        expect(
+            container.querySelectorAll("[data-ban-slot][data-filled='true']")
+        ).toHaveLength(10);
+        expect(container.querySelector("[data-glow='true']")).toBeNull();
+        expect(container.querySelector("[data-pool-panel]")).toBeNull();
+        expect(container.querySelector("[data-tick-state='next']")).toBeNull();
         expect(container.querySelector("[data-archive-card]")?.textContent).toContain(
             "Game 1 complete"
         );
@@ -674,5 +711,35 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(b.container.querySelector("[data-pool-title]")?.textContent).toBe(
             "Blue's pool · Ban for Red Ban 4"
         );
+        expect(b.container.querySelector("[data-glow='true']")).toBeNull();
+        expect(
+            b.container.querySelector("[data-tick='12']")?.getAttribute("data-tick-state")
+        ).toBe("next");
+    });
+    test("a fresh pair turn glows both rows; clicking the glowing row focuses the pool search whose header reads 1 of 2", () => {
+        const { container } = mount(ITEM5_ORDER.slice(0, 17), emptyTree); // next = 17, Blue Pick 4 + 5
+        const glowing = Array.from(container.querySelectorAll("[data-glow='true']")).map(
+            (r) => r.getAttribute("data-pick-row")
+        );
+        expect(glowing).toEqual(["B4", "B5"]);
+        const next = container.querySelector("[data-next-slot='true']");
+        expect(next?.getAttribute("data-pick-row")).toBe("B4");
+        if (next) fireEvent.click(next);
+        expect(document.activeElement).toBe(
+            container.querySelector("[data-pool-search]")
+        );
+        expect(container.querySelector("[data-pool-title]")?.textContent).toContain(
+            "Blue Pick 4 + Blue Pick 5 — 1 of 2"
+        );
+        expect(
+            container
+                .querySelector("[data-team-column='blue']")
+                ?.getAttribute("data-on-clock")
+        ).toBe("true");
+        expect(
+            container
+                .querySelector("[data-team-column='red']")
+                ?.getAttribute("data-on-clock")
+        ).toBe("false");
     });
 });

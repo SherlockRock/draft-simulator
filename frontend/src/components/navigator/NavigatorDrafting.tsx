@@ -55,8 +55,6 @@ import {
 import {
     ROLE_SHORT_LABELS,
     emptyFanReason,
-    formatRoleGap,
-    roleGap,
     roleLineForPick
 } from "../../utils/navigatorRoles";
 import { ROLES } from "../../utils/championRoles";
@@ -78,11 +76,12 @@ import {
 } from "../../utils/turnSequence";
 import type { ContextMenuAction } from "../../utils/types";
 import { BetweenGamesPanel } from "./BetweenGamesPanel";
+import { DraftOrderTicks } from "./DraftOrderTicks";
 import { EngineStatusPill } from "./EngineStatusPill";
 import { NavigatorColumns, type SeatRowInput } from "./NavigatorColumns";
 import { NavigatorCommandPalette, type PaletteTurn } from "./NavigatorCommandPalette";
 import { NavigatorPoolPanel } from "./NavigatorPoolPanel";
-import { NavigatorTimeline } from "./NavigatorTimeline";
+import { NavigatorTeamColumn } from "./NavigatorTeamColumn";
 import { PoolEditModal } from "./PoolEditModal";
 import { SeriesTabStrip } from "./SeriesTabStrip";
 
@@ -202,10 +201,6 @@ const NavigatorDrafting: Component = () => {
         turns()
             .filter((t) => t.actionType === "pick" && t.side === side)
             .flatMap((t) => t.championIds);
-    const gapText = createMemo(() => ({
-        blue: formatRoleGap(roleGap(picksOf("blue")), picksOf("blue").length),
-        red: formatRoleGap(roleGap(picksOf("red")), picksOf("red").length)
-    }));
     const usedChampionIdSet = createMemo(
         () => new Set(confirmedEvents().map((e) => e.champion_id))
     );
@@ -827,11 +822,11 @@ const NavigatorDrafting: Component = () => {
                     data-drafting-header
                     class="flex items-center gap-4 border-b border-darius-border/60 bg-darius-card px-4 py-2"
                 >
-                    <div>
+                    <div class="min-w-0">
                         <div class="text-[10px] uppercase tracking-wider text-slate-400">
                             Draft Navigator
                         </div>
-                        <div class="text-sm font-semibold text-slate-50">
+                        <div class="truncate text-sm font-semibold text-slate-50">
                             <Show
                                 when={nextTurn()}
                                 fallback={<span>Draft complete</span>}
@@ -851,7 +846,13 @@ const NavigatorDrafting: Component = () => {
                             </Show>
                         </div>
                     </div>
-                    <div class="ml-auto flex items-center gap-2">
+                    <div class="ml-4 shrink-0">
+                        <DraftOrderTicks
+                            filledCount={confirmedEvents().length}
+                            nextSlot={turnIsOpen() ? nextSlot() : null}
+                        />
+                    </div>
+                    <div class="ml-auto flex shrink-0 items-center gap-2">
                         <Show
                             when={viewingGameNumber() !== null}
                             fallback={<EngineStatusPill status={status()} />}
@@ -911,153 +912,164 @@ const NavigatorDrafting: Component = () => {
                     </div>
                 </div>
 
-                {/* Timeline row */}
-                <NavigatorTimeline
-                    events={confirmedEvents()}
-                    nextSlot={turnIsOpen() ? nextSlot() : null}
-                    ourSide={ourSide()}
-                    readOnly={!turnIsOpen()}
-                    gapText={gapText()}
-                    onNextSlotClick={() => requestPoolFocus()}
-                />
-
-                {/* Columns row, or the between-games panel, or the archive card */}
-                <Show
-                    when={showBetweenGamesPanel() && session() && activeDraft()}
-                    fallback={
+                {/* The lobby board (design § 1): team columns on the sides, the work in the middle */}
+                <div class="flex min-h-0 flex-1">
+                    <NavigatorTeamColumn
+                        side="blue"
+                        events={confirmedEvents()}
+                        ourSide={ourSide()}
+                        nextSlot={turnIsOpen() ? nextSlot() : null}
+                        active={turnIsOpen()}
+                        onPickNow={requestPoolFocus}
+                    />
+                    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                         <Show
-                            when={viewingArchive()}
+                            when={showBetweenGamesPanel() && session() && activeDraft()}
                             fallback={
-                                <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                                    <NavigatorColumns
-                                        columns={columns()}
-                                        ourSide={ourSide()}
-                                        dimmed={computing()}
-                                        canMutate={canMutate()}
-                                        emptyReason={
-                                            status().kind === "empty"
-                                                ? emptyFanReason(
-                                                      picksOf("blue"),
-                                                      picksOf("red"),
-                                                      nameOf
-                                                  )
-                                                : null
-                                        }
-                                        canEditPools={canEditPools()}
-                                        canUndo={confirmedEvents().length > 0}
-                                        seatRowFor={seatRowFor}
-                                        budgetHit={budgetHit()}
-                                        onSelect={(depth, index) =>
-                                            setSelectedPath((p) => [
-                                                ...p.slice(0, depth),
-                                                index
-                                            ])
-                                        }
-                                        onCommit={commitNode}
-                                        onContextMenu={(args) => setMenu(args)}
-                                        onUndo={undo}
-                                        onEditPools={() =>
-                                            canEditPools()
-                                                ? setPoolEditOpen(true)
-                                                : toast(
-                                                      "Pools can be edited between games",
-                                                      {
-                                                          icon: "ℹ️"
-                                                      }
-                                                  )
-                                        }
-                                    />
-                                    <NavigatorPoolPanel
-                                        turn={poolTurn()}
-                                        ourSide={ourSide()}
-                                        view={poolView()}
-                                        onViewChange={setViewOverride}
-                                        pools={{
-                                            blue:
-                                                session()?.blue_pool.display ??
-                                                EMPTY_ROLE_POOL_MAP,
-                                            red:
-                                                session()?.red_pool.display ??
-                                                EMPTY_ROLE_POOL_MAP
-                                        }}
-                                        picks={{
-                                            blue: picksOf("blue"),
-                                            red: picksOf("red")
-                                        }}
-                                        fan={fan()}
-                                        unavailable={unavailable()}
-                                        unavailableReason={unavailableReason}
-                                        query={poolQuery()}
-                                        onQueryChange={setPoolQuery}
-                                        focusRequest={focusSeq()}
-                                        onCommit={commitChampions}
-                                        onExplore={explore}
-                                        onBlurToPage={blurToPage}
-                                        committing={
-                                            pendingSlot() !== null &&
-                                            pendingSlot() === nextSlot()
-                                        }
-                                        canEditPools={canEditPools()}
-                                        onEditPools={() =>
-                                            canEditPools()
-                                                ? setPoolEditOpen(true)
-                                                : toast(
-                                                      "Pools can be edited between games",
-                                                      { icon: "ℹ️" }
-                                                  )
-                                        }
-                                    />
-                                </div>
-                            }
-                        >
-                            {(archive) => (
-                                <div
-                                    data-archive-card
-                                    class="m-4 max-w-md self-start rounded-lg border border-slate-600 bg-darius-card p-4 text-sm text-slate-200"
+                                <Show
+                                    when={viewingArchive()}
+                                    fallback={
+                                        <>
+                                            <NavigatorColumns
+                                                columns={columns()}
+                                                ourSide={ourSide()}
+                                                dimmed={computing()}
+                                                canMutate={canMutate()}
+                                                emptyReason={
+                                                    status().kind === "empty"
+                                                        ? emptyFanReason(
+                                                              picksOf("blue"),
+                                                              picksOf("red"),
+                                                              nameOf
+                                                          )
+                                                        : null
+                                                }
+                                                canEditPools={canEditPools()}
+                                                canUndo={confirmedEvents().length > 0}
+                                                seatRowFor={seatRowFor}
+                                                budgetHit={budgetHit()}
+                                                onSelect={(depth, index) =>
+                                                    setSelectedPath((p) => [
+                                                        ...p.slice(0, depth),
+                                                        index
+                                                    ])
+                                                }
+                                                onCommit={commitNode}
+                                                onContextMenu={(args) => setMenu(args)}
+                                                onUndo={undo}
+                                                onEditPools={() =>
+                                                    canEditPools()
+                                                        ? setPoolEditOpen(true)
+                                                        : toast(
+                                                              "Pools can be edited between games",
+                                                              {
+                                                                  icon: "ℹ️"
+                                                              }
+                                                          )
+                                                }
+                                            />
+                                            <NavigatorPoolPanel
+                                                turn={poolTurn()}
+                                                ourSide={ourSide()}
+                                                view={poolView()}
+                                                onViewChange={setViewOverride}
+                                                pools={{
+                                                    blue:
+                                                        session()?.blue_pool.display ??
+                                                        EMPTY_ROLE_POOL_MAP,
+                                                    red:
+                                                        session()?.red_pool.display ??
+                                                        EMPTY_ROLE_POOL_MAP
+                                                }}
+                                                picks={{
+                                                    blue: picksOf("blue"),
+                                                    red: picksOf("red")
+                                                }}
+                                                fan={fan()}
+                                                unavailable={unavailable()}
+                                                unavailableReason={unavailableReason}
+                                                query={poolQuery()}
+                                                onQueryChange={setPoolQuery}
+                                                focusRequest={focusSeq()}
+                                                onCommit={commitChampions}
+                                                onExplore={explore}
+                                                onBlurToPage={blurToPage}
+                                                committing={
+                                                    pendingSlot() !== null &&
+                                                    pendingSlot() === nextSlot()
+                                                }
+                                                canEditPools={canEditPools()}
+                                                onEditPools={() =>
+                                                    canEditPools()
+                                                        ? setPoolEditOpen(true)
+                                                        : toast(
+                                                              "Pools can be edited between games",
+                                                              { icon: "ℹ️" }
+                                                          )
+                                                }
+                                            />
+                                        </>
+                                    }
                                 >
-                                    <div class="font-semibold">
-                                        Game {archive().draft.game_number} complete —
-                                        timeline only
-                                    </div>
-                                    <div class="mt-1 text-slate-400">
-                                        The engine's projections at each decision aren't
-                                        persisted — only a game's final snapshot is.
-                                    </div>
-                                    <button
-                                        type="button"
-                                        data-back-to-current
-                                        onClick={() => viewGame(null)}
-                                        class="mt-3 rounded border border-darius-border px-2 py-1 text-xs text-slate-200 hover:border-slate-400"
-                                    >
-                                        Back to the current game
-                                    </button>
-                                </div>
-                            )}
-                        </Show>
-                    }
-                >
-                    <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-                        <Show when={session()}>
-                            {(s) => (
-                                <Show when={activeDraft()}>
-                                    {(d) => (
-                                        <BetweenGamesPanel
-                                            session={s()}
-                                            completedDraft={d()}
-                                            isSeriesComplete={isSeriesComplete()}
-                                            onStartNextGame={(override) =>
-                                                startNextGame(override)
-                                            }
-                                            onSavePools={(blue, red) =>
-                                                updateSessionPools(blue, red)
-                                            }
-                                        />
+                                    {(archive) => (
+                                        <div
+                                            data-archive-card
+                                            class="m-4 max-w-md self-start rounded-lg border border-slate-600 bg-darius-card p-4 text-sm text-slate-200"
+                                        >
+                                            <div class="font-semibold">
+                                                Game {archive().draft.game_number}{" "}
+                                                complete
+                                            </div>
+                                            <div class="mt-1 text-slate-400">
+                                                The engine's projections at each decision
+                                                aren't persisted — the board shows the
+                                                game's final picks and bans.
+                                            </div>
+                                            <button
+                                                type="button"
+                                                data-back-to-current
+                                                onClick={() => viewGame(null)}
+                                                class="mt-3 rounded border border-darius-border px-2 py-1 text-xs text-slate-200 hover:border-slate-400"
+                                            >
+                                                Back to the current game
+                                            </button>
+                                        </div>
                                     )}
                                 </Show>
-                            )}
+                            }
+                        >
+                            <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                                <Show when={session()}>
+                                    {(s) => (
+                                        <Show when={activeDraft()}>
+                                            {(d) => (
+                                                <BetweenGamesPanel
+                                                    session={s()}
+                                                    completedDraft={d()}
+                                                    isSeriesComplete={isSeriesComplete()}
+                                                    onStartNextGame={(override) =>
+                                                        startNextGame(override)
+                                                    }
+                                                    onSavePools={(blue, red) =>
+                                                        updateSessionPools(blue, red)
+                                                    }
+                                                />
+                                            )}
+                                        </Show>
+                                    )}
+                                </Show>
+                            </div>
                         </Show>
                     </div>
-                </Show>
+                    <NavigatorTeamColumn
+                        side="red"
+                        events={confirmedEvents()}
+                        ourSide={ourSide()}
+                        nextSlot={turnIsOpen() ? nextSlot() : null}
+                        active={turnIsOpen()}
+                        onPickNow={requestPoolFocus}
+                    />
+                </div>
 
                 <NavigatorCommandPalette
                     open={palette() !== null}
