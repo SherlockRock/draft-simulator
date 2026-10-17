@@ -60,9 +60,15 @@ import {
     roleLineForPick
 } from "../../utils/navigatorRoles";
 import { ROLES } from "../../utils/championRoles";
+import { EMPTY_ROLE_POOL_MAP } from "@draft-sim/shared-types";
 import type { RolePoolMap, TeamPool } from "@draft-sim/shared-types";
 import { getOurSideForGame } from "../../utils/navigatorSide";
 import { otherSide, type Side } from "../../utils/navigatorSeats";
+import {
+    defaultPoolView,
+    type PoolTurn,
+    type PoolView
+} from "../../utils/navigatorPoolPanel";
 import { eventsToConfirmedTurns } from "../../utils/treeReconcile";
 import {
     PHASE_LABELS,
@@ -75,6 +81,7 @@ import { BetweenGamesPanel } from "./BetweenGamesPanel";
 import { EngineStatusPill } from "./EngineStatusPill";
 import { NavigatorColumns, type SeatRowInput } from "./NavigatorColumns";
 import { NavigatorCommandPalette, type PaletteTurn } from "./NavigatorCommandPalette";
+import { NavigatorPoolPanel } from "./NavigatorPoolPanel";
 import { NavigatorTimeline } from "./NavigatorTimeline";
 import { PoolEditModal } from "./PoolEditModal";
 import { SeriesTabStrip } from "./SeriesTabStrip";
@@ -379,8 +386,11 @@ const NavigatorDrafting: Component = () => {
         const slot = nextSlot();
         const turn = nextTurn();
         if (!draftId || slot === null || !turn || championIds.length === 0) return;
+        if (pendingSlot() === slot) return;
+        setPendingSlot(slot);
         if (turn.type === "pick") emitPickStep(draftId, championIds, slot);
         else emitBan(draftId, championIds[0], slot);
+        setPoolQuery("");
         closePalette();
     };
     const commitNode = (node: NavigatorTreeNode) => {
@@ -408,56 +418,122 @@ const NavigatorDrafting: Component = () => {
         side: "blue" | "red" | null;
     } | null>(null);
 
-    // ---- palette (design § 6) ----
-    const [palette, setPalette] = createSignal<{
-        anchor: { left: number; top: number } | null;
+    const [menu, setMenu] = createSignal<{
+        node: NavigatorTreeNode;
+        depth: number;
+        index: number;
+        x: number;
+        y: number;
     } | null>(null);
-    let pageEl: HTMLDivElement | undefined;
-    // Two meanings, kept apart: the timeline's next slot exists whenever the turn
-    // is open; the palette may additionally not open while a modal (swap/branch
-    // picker, pool editor) is up — both are z-50 window-keydown consumers and
-    // the palette would open behind them.
+
+    // ---- palette (design § 6): centred only — the anchored mode is retired (U2) ----
+    const [palette, setPalette] = createSignal<{ anchor: null } | null>(null);
+    // The next slot exists whenever the turn is open; the palette (and type-anywhere) may
+    // additionally not act while a modal (swap/branch picker, pool editor) is up — those are
+    // z-50 window-keydown consumers too.
     const turnIsOpen = () => canMutate() && !draftComplete();
     const canOpenPalette = () =>
         turnIsOpen() &&
         swapTarget() === null &&
         branchTarget() === null &&
         !poolEditOpen();
-    const PALETTE_WIDTH = 720;
-    const openPalette = (anchorEl: HTMLElement | null) => {
+    const openPalette = () => {
         if (!canOpenPalette()) return;
-        if (anchorEl && pageEl) {
-            const r = anchorEl.getBoundingClientRect();
-            const p = pageEl.getBoundingClientRect();
-            const left = Math.max(
-                8,
-                Math.min(r.left - p.left - 8, p.width - PALETTE_WIDTH - 16)
-            );
-            setPalette({ anchor: { left, top: r.bottom - p.top + 10 } });
-        } else {
-            setPalette({ anchor: null });
-        }
+        setPalette({ anchor: null });
+    };
+    const blurToPage = () => {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     };
     const closePalette = () => {
         setPalette(null);
-        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        blurToPage();
     };
-    const onSlashKey = (e: KeyboardEvent) => {
-        const t = e.target;
-        if (
-            t instanceof HTMLInputElement ||
-            t instanceof HTMLTextAreaElement ||
-            (t instanceof HTMLElement && t.isContentEditable)
+
+    // ---- pool panel state (design § 5–6) ----
+    const [poolQuery, setPoolQuery] = createSignal("");
+    const [viewOverride, setViewOverride] = createSignal<PoolView | null>(null);
+    const [focusSeq, setFocusSeq] = createSignal(0);
+    const requestPoolFocus = () => setFocusSeq((n) => n + 1);
+    // Plan-level decision 20: one commit per slot. The pool stays mounted after a click, and the
+    // server does not guard the slot, so a double click would persist two champions.
+    const [pendingSlot, setPendingSlot] = createSignal<number | null>(null);
+    const poolTurn = createMemo<PoolTurn | null>(() => {
+        const slot = nextSlot();
+        const turn = nextTurn();
+        if (slot === null || !turn || !turnIsOpen()) return null;
+        const last = turns()[turns().length - 1];
+        const partnerOf =
+            last?.pairState === "pair-pending" ? (last.championIds[0] ?? null) : null;
+        return {
+            slot,
+            type: turn.type,
+            side: turn.side,
+            collect: turn.pairStart ? 2 : 1,
+            partnerOf
+        };
+    });
+    // U11: the default is per turn; the toggle overrides for the rest of the turn. Reset with the
+    // selection scope (a commit, a game or archive switch) — a pure reaction, so `defer` is right.
+    const poolView = (): PoolView =>
+        viewOverride() ?? defaultPoolView(poolTurn(), ourSide());
+    createEffect(
+        on(
+            selectionScope,
+            () => {
+                setViewOverride(null);
+                setPoolQuery("");
+                setPendingSlot(null);
+            },
+            { defer: true }
         )
+    );
+    // A rejected commit never changes the events, so the slot guard would lock the pool until a
+    // reload: re-arm on any error the workflow reports (handleError sets `error` and toasts). The
+    // no-socket case (emitPickStep returns early) has no signal at all — a re-arm timer is a
+    // product call left to the walkthrough, not built here.
+    // `on` re-fires whenever the context OBJECT is replaced (every snapshot), so the callback must
+    // check the value: only a non-null error re-arms (Codex r3 finding 1).
+    createEffect(
+        on(
+            () => navigatorContext().error,
+            (err) => {
+                if (err !== null) setPendingSlot(null);
+            },
+            { defer: true }
+        )
+    );
+
+    // ---- the ONE window keydown: '/' and type-anywhere (design § 6) ----
+    const isTextTarget = (t: EventTarget | null): boolean =>
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        (t instanceof HTMLElement && t.isContentEditable);
+    const TYPEABLE = /^[a-z0-9 ']$/i;
+    const onPageKey = (e: KeyboardEvent) => {
+        if (isTextTarget(e.target) || isTextTarget(document.activeElement)) return;
+        if (e.key === "/") {
+            if (palette() === null && canOpenPalette()) {
+                e.preventDefault();
+                openPalette();
+            }
             return;
-        if (e.key === "/" && palette() === null && canOpenPalette()) {
-            e.preventDefault();
-            openPalette(null);
         }
+        // Type anywhere: a printable character (letters, digits, space, apostrophe; Shift allowed,
+        // no other modifier) while no input/modal/palette/menu is up and the draft is active →
+        // append it to the pool search and focus the box. Appending explicitly (rather than
+        // letting the browser insert it after focus) keeps the character from being typed twice
+        // and makes the behaviour testable.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (!TYPEABLE.test(e.key)) return;
+        if (e.key === " " && poolQuery() === "") return; // Space on a focused button activates it; never seed a query with a space
+        if (palette() !== null || menu() !== null || !canOpenPalette()) return;
+        e.preventDefault();
+        setPoolQuery((q) => q + e.key);
+        requestPoolFocus();
     };
     onMount(() => {
-        window.addEventListener("keydown", onSlashKey);
-        onCleanup(() => window.removeEventListener("keydown", onSlashKey));
+        window.addEventListener("keydown", onPageKey);
+        onCleanup(() => window.removeEventListener("keydown", onPageKey));
     });
     const paletteTurn = createMemo<PaletteTurn | null>(() => {
         const slot = nextSlot();
@@ -637,13 +713,6 @@ const NavigatorDrafting: Component = () => {
     };
 
     // ---- context menu → swap / branch / copy (kept from the radial tree) ----
-    const [menu, setMenu] = createSignal<{
-        node: NavigatorTreeNode;
-        depth: number;
-        index: number;
-        x: number;
-        y: number;
-    } | null>(null);
     const indexPathFor = (depth: number, index: number): number[] => [
         ...new Array<number>(fanoutDepth(turns())).fill(0),
         ...selectedPath().slice(0, depth),
@@ -740,7 +809,7 @@ const NavigatorDrafting: Component = () => {
 
     return (
         <>
-            <div ref={(el) => (pageEl = el)} class="relative flex h-full w-full flex-col">
+            <div class="relative flex h-full w-full flex-col">
                 <Show when={session()}>
                     {(s) => (
                         <SeriesTabStrip
@@ -829,7 +898,7 @@ const NavigatorDrafting: Component = () => {
                             <button
                                 type="button"
                                 data-open-palette
-                                onClick={() => openPalette(null)}
+                                onClick={() => openPalette()}
                                 disabled={!canOpenPalette()}
                                 class="rounded-full border border-darius-border px-3 py-1 text-xs text-slate-200 hover:border-slate-400 disabled:opacity-50"
                             >
@@ -849,7 +918,7 @@ const NavigatorDrafting: Component = () => {
                     ourSide={ourSide()}
                     readOnly={!turnIsOpen()}
                     gapText={gapText()}
-                    onNextSlotClick={(el) => openPalette(el)}
+                    onNextSlotClick={() => requestPoolFocus()}
                 />
 
                 {/* Columns row, or the between-games panel, or the archive card */}
@@ -859,41 +928,86 @@ const NavigatorDrafting: Component = () => {
                         <Show
                             when={viewingArchive()}
                             fallback={
-                                <NavigatorColumns
-                                    columns={columns()}
-                                    ourSide={ourSide()}
-                                    dimmed={computing()}
-                                    canMutate={canMutate()}
-                                    emptyReason={
-                                        status().kind === "empty"
-                                            ? emptyFanReason(
-                                                  picksOf("blue"),
-                                                  picksOf("red"),
-                                                  nameOf
-                                              )
-                                            : null
-                                    }
-                                    canEditPools={canEditPools()}
-                                    canUndo={confirmedEvents().length > 0}
-                                    seatRowFor={seatRowFor}
-                                    budgetHit={budgetHit()}
-                                    onSelect={(depth, index) =>
-                                        setSelectedPath((p) => [
-                                            ...p.slice(0, depth),
-                                            index
-                                        ])
-                                    }
-                                    onCommit={commitNode}
-                                    onContextMenu={(args) => setMenu(args)}
-                                    onUndo={undo}
-                                    onEditPools={() =>
-                                        canEditPools()
-                                            ? setPoolEditOpen(true)
-                                            : toast("Pools can be edited between games", {
-                                                  icon: "ℹ️"
-                                              })
-                                    }
-                                />
+                                <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                                    <NavigatorColumns
+                                        columns={columns()}
+                                        ourSide={ourSide()}
+                                        dimmed={computing()}
+                                        canMutate={canMutate()}
+                                        emptyReason={
+                                            status().kind === "empty"
+                                                ? emptyFanReason(
+                                                      picksOf("blue"),
+                                                      picksOf("red"),
+                                                      nameOf
+                                                  )
+                                                : null
+                                        }
+                                        canEditPools={canEditPools()}
+                                        canUndo={confirmedEvents().length > 0}
+                                        seatRowFor={seatRowFor}
+                                        budgetHit={budgetHit()}
+                                        onSelect={(depth, index) =>
+                                            setSelectedPath((p) => [
+                                                ...p.slice(0, depth),
+                                                index
+                                            ])
+                                        }
+                                        onCommit={commitNode}
+                                        onContextMenu={(args) => setMenu(args)}
+                                        onUndo={undo}
+                                        onEditPools={() =>
+                                            canEditPools()
+                                                ? setPoolEditOpen(true)
+                                                : toast(
+                                                      "Pools can be edited between games",
+                                                      {
+                                                          icon: "ℹ️"
+                                                      }
+                                                  )
+                                        }
+                                    />
+                                    <NavigatorPoolPanel
+                                        turn={poolTurn()}
+                                        ourSide={ourSide()}
+                                        view={poolView()}
+                                        onViewChange={setViewOverride}
+                                        pools={{
+                                            blue:
+                                                session()?.blue_pool.display ??
+                                                EMPTY_ROLE_POOL_MAP,
+                                            red:
+                                                session()?.red_pool.display ??
+                                                EMPTY_ROLE_POOL_MAP
+                                        }}
+                                        picks={{
+                                            blue: picksOf("blue"),
+                                            red: picksOf("red")
+                                        }}
+                                        fan={fan()}
+                                        unavailable={unavailable()}
+                                        unavailableReason={unavailableReason}
+                                        query={poolQuery()}
+                                        onQueryChange={setPoolQuery}
+                                        focusRequest={focusSeq()}
+                                        onCommit={commitChampions}
+                                        onExplore={explore}
+                                        onBlurToPage={blurToPage}
+                                        committing={
+                                            pendingSlot() !== null &&
+                                            pendingSlot() === nextSlot()
+                                        }
+                                        canEditPools={canEditPools()}
+                                        onEditPools={() =>
+                                            canEditPools()
+                                                ? setPoolEditOpen(true)
+                                                : toast(
+                                                      "Pools can be edited between games",
+                                                      { icon: "ℹ️" }
+                                                  )
+                                        }
+                                    />
+                                </div>
                             }
                         >
                             {(archive) => (

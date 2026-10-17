@@ -96,17 +96,43 @@ function events(order: string[]): NavigatorEventData[] {
         createdAt: new Date(1700000000000 + slot).toISOString()
     }));
 }
-const emptyPool = {
-    display: { top: [], jungle: [], mid: [], adc: [], support: [] },
-    search: []
-};
 const session: NavigatorSessionData = {
     id: "s1",
     name: "Tour",
     user_id: "u",
     our_side: "red",
-    blue_pool: emptyPool,
-    red_pool: emptyPool,
+    blue_pool: {
+        display: {
+            top: ["Gragas", "Shen"],
+            jungle: ["Hecarim"],
+            mid: ["Akali"],
+            adc: ["Xayah"],
+            support: ["Shen", "Braum"]
+        },
+        search: ["Gragas", "Shen", "Hecarim", "Akali", "Xayah", "Braum"]
+    },
+    red_pool: {
+        display: {
+            top: ["Pantheon", "Poppy", "Sejuani"],
+            jungle: ["Sylas", "Poppy", "Sejuani"],
+            mid: ["Swain", "Lissandra", "Sylas"],
+            adc: ["Tristana", "Jinx", "Ashe"],
+            support: ["Swain", "Taric", "TahmKench", "Pantheon"]
+        },
+        search: [
+            "Pantheon",
+            "Poppy",
+            "Sejuani",
+            "Sylas",
+            "Swain",
+            "Lissandra",
+            "Tristana",
+            "Jinx",
+            "Ashe",
+            "Taric",
+            "TahmKench"
+        ]
+    },
     opponent_pool: null,
     draft_mode: "standard",
     series_length: 1,
@@ -147,7 +173,9 @@ function mount(
 ) {
     const computing = opts.computing ?? false;
     const failed = opts.failed ?? false;
-    const evs = events(order);
+    const [evs, setEvs] = createSignal(events(order));
+    const [error, setError] = createSignal<string | null>(null);
+    const [snapshotSeq, setSnapshotSeq] = createSignal(0);
     const [engineTree, setEngineTree] = createSignal(initialEngineTree);
     const meta = {
         nodesEvaluated: 1,
@@ -166,7 +194,7 @@ function mount(
             our_side_override: null,
             draft_id: null
         },
-        events: evs,
+        events: [],
         snapshot: {
             source: "persisted",
             id: "snap-final",
@@ -178,7 +206,7 @@ function mount(
             createdAt: null
         }
     };
-    const state: NavigatorSessionState = {
+    const stateOf = (): NavigatorSessionState => ({
         session,
         draft: opts.archive
             ? archiveGame.draft
@@ -190,10 +218,10 @@ function mount(
                   our_side_override: null,
                   draft_id: null
               },
-        events: evs,
+        events: evs(),
         snapshot: {
             source: "persisted",
-            id: "snap",
+            id: `snap-${snapshotSeq()}`,
             navigator_draft_id: "draft-1",
             after_event_id: "e18",
             tree: initialEngineTree,
@@ -201,23 +229,26 @@ function mount(
             meta,
             createdAt: null
         },
-        completedGames: opts.archive ? [archiveGame] : [],
+        completedGames: opts.archive ? [{ ...archiveGame, events: evs() }] : [],
         connected: true,
-        error: null
-    };
-    const turns = eventsToConfirmedTurns(opts.treeOrder ? events(opts.treeOrder) : evs);
-    const synthetic = () => synthesizeFullTree(engineTree(), turns);
+        error: error()
+    });
+    const synthetic = () =>
+        synthesizeFullTree(
+            engineTree(),
+            eventsToConfirmedTurns(opts.treeOrder ? events(opts.treeOrder) : evs())
+        );
     const emitPickStep = vi.fn();
     const emitBan = vi.fn();
     const emitUndo = vi.fn();
     const viewGame = vi.fn();
     const value: NavigatorWorkflowContextValue = {
-        navigatorContext: () => state,
+        navigatorContext: stateOf,
         syntheticTree: synthetic,
         effectiveScenarios: () => [],
         isComputing: () => computing,
         computeFailed: () => failed,
-        currentMeta: () => state.snapshot?.meta ?? null,
+        currentMeta: () => stateOf().snapshot?.meta ?? null,
         engineHeartbeat: () => null,
         joinSession: vi.fn(),
         leaveSession: vi.fn(),
@@ -243,7 +274,25 @@ function mount(
             </NavigatorWorkflowContext.Provider>
         </QueryClientProvider>
     ));
-    return { ...utils, emitPickStep, emitBan, emitUndo, viewGame, setEngineTree };
+    const pushEvent = (championId: string) =>
+        setEvs((prev) => [
+            ...prev,
+            ...events([...prev.map((e) => e.champion_id), championId]).slice(prev.length)
+        ]);
+    const popEvent = () => setEvs((prev) => prev.slice(0, -1));
+    const bumpSnapshot = () => setSnapshotSeq((n) => n + 1);
+    return {
+        ...utils,
+        emitPickStep,
+        emitBan,
+        emitUndo,
+        viewGame,
+        setEngineTree,
+        pushEvent,
+        popEvent,
+        setError,
+        bumpSnapshot
+    };
 }
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
@@ -283,7 +332,7 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
             container.querySelectorAll("[data-timeline-slot][data-filled='true']")
         ).toHaveLength(19);
     });
-    test("'/' opens the palette centred; the next slot opens it anchored; a tile commits via emitPickStep at slot 19", () => {
+    test("'/' opens the palette centred; the next slot FOCUSES THE POOL SEARCH; the palette's pick stage still commits a tile", () => {
         const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
         key("/");
         expect(
@@ -296,16 +345,21 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(container.querySelector("[data-palette]")).toBeNull();
         const next = container.querySelector("[data-next-slot='true']");
         if (next) fireEvent.click(next);
-        expect(
-            container.querySelector("[data-palette]")?.getAttribute("data-palette-mode")
-        ).toBe("anchored");
+        expect(container.querySelector("[data-palette]")).toBeNull();
+        expect(document.activeElement).toBe(
+            container.querySelector("[data-pool-search]")
+        );
+        key("/"); // from inside the search box nothing happens…
+        expect(container.querySelector("[data-palette]")).toBeNull();
+        const search = container.querySelector("[data-pool-search]");
+        if (search) fireEvent.keyDown(search, { key: "Escape" }); // …Esc returns focus to the page…
+        key("/"); // …and '/' works again
         key("Enter");
         const taric = container.querySelector(
             "[data-champion-pane] button[data-champion='Taric']"
         );
         if (taric) fireEvent.click(taric);
         expect(emitPickStep).toHaveBeenCalledWith("draft-1", ["Taric"], 19);
-        expect(container.querySelector("[data-palette]")).toBeNull();
     });
     test("hover Pick on a column-0 card commits that node; selecting opens nothing further at depth 8 leaves", () => {
         const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
@@ -478,5 +532,147 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
         expect(
             row?.querySelector("[data-seat='support']")?.getAttribute("data-marker")
         ).toBe("candidate");
+    });
+    test("type anywhere: a printable key focuses the pool search and appends; typing on, Enter commits the highlighted tile", () => {
+        const { container, emitPickStep } = mount(ITEM5_ORDER, item5Tree);
+        key("s");
+        const search = container.querySelector("[data-pool-search]");
+        expect(document.activeElement).toBe(search);
+        expect(search instanceof HTMLInputElement ? search.value : "").toBe("s");
+        if (search) fireEvent.input(search, { target: { value: "swain" } });
+        expect(
+            container.querySelector("[data-tile='Swain'][data-highlighted='true']")
+        ).not.toBeNull();
+        if (search) fireEvent.keyDown(search, { key: "Enter" });
+        expect(emitPickStep).toHaveBeenCalledWith("draft-1", ["Swain"], 19);
+    });
+    test("type anywhere is inert for ctrl/meta/alt chords, non-printable keys, while the palette is open, and while the swap picker is up", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree);
+        const search = () => container.querySelector("[data-pool-search]");
+        const value = () => {
+            const el = search();
+            return el instanceof HTMLInputElement ? el.value : "";
+        };
+        fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+        fireEvent.keyDown(window, { key: "c", metaKey: true });
+        key(" "); // a leading space never seeds the query (a focused button keeps its Space activation)
+        key("ArrowDown");
+        key("Enter");
+        expect(document.activeElement).not.toBe(search());
+        expect(value()).toBe("");
+        key("/");
+        key("a");
+        expect(value()).toBe("");
+        key("Escape");
+        const card = container.querySelector("[data-column-node][data-rank='1']");
+        if (card) fireEvent.contextMenu(card, { clientX: 10, clientY: 10 });
+        const swap = Array.from(container.querySelectorAll("button")).find(
+            (b) => b.textContent?.trim() === "Swap champion"
+        );
+        if (swap) fireEvent.click(swap);
+        key("a");
+        expect(value()).toBe("");
+        expect(document.activeElement).not.toBe(search());
+    });
+    test("Shift is allowed: a capital letter types; apostrophes type", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree);
+        fireEvent.keyDown(window, { key: "K", shiftKey: true });
+        const search = container.querySelector("[data-pool-search]");
+        expect(document.activeElement).toBe(search);
+        // The first key focused the box, so the window handler now ignores keys (the box owns them);
+        // blur first — the query state is kept — and the next printable key appends again.
+        if (search instanceof HTMLElement) search.blur();
+        fireEvent.keyDown(window, { key: "'" });
+        expect(search instanceof HTMLInputElement ? search.value : "").toBe("K'");
+    });
+    test("the view override and the query reset at every confirmed event (design § 5)", () => {
+        const { container, pushEvent } = mount(ITEM5_ORDER.slice(0, 17), emptyTree); // Blue Pick 4 + 5 next, we are red → enemy
+        expect(
+            container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("enemy");
+        const all = container.querySelector("[data-pool-view-button='all']");
+        if (all) fireEvent.click(all);
+        key("x");
+        expect(
+            container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("all");
+        pushEvent("Xayah"); // the server confirms Blue Pick 4
+        expect(
+            container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("enemy");
+        const search = container.querySelector("[data-pool-search]");
+        expect(search instanceof HTMLInputElement ? search.value : "x").toBe("");
+    });
+    test("one commit per slot: a double click on a card's Pick emits once; the pool is disabled while committing; a server error re-arms it; the next confirmed event closes the turn", () => {
+        const { container, emitPickStep, pushEvent, setError, bumpSnapshot } = mount(
+            ITEM5_ORDER,
+            item5Tree
+        );
+        // The card's hover Pick bypasses the panel's disabled tiles — this is the path that proves pendingSlot itself.
+        const commit = container.querySelector(
+            "[data-column-node][data-rank='1'] [data-commit='pick']"
+        );
+        if (commit) fireEvent.click(commit);
+        if (commit) fireEvent.click(commit);
+        expect(emitPickStep).toHaveBeenCalledTimes(1);
+        expect(
+            container.querySelector("[data-tile='Pantheon']")?.hasAttribute("disabled")
+        ).toBe(true); // committing
+        bumpSnapshot(); // a streaming snapshot with the same events and error null must NOT release the guard
+        expect(
+            container.querySelector("[data-tile='Pantheon']")?.hasAttribute("disabled")
+        ).toBe(true);
+        setError("Champion already taken"); // the server rejected it: the pool re-arms (decision 20)
+        expect(
+            container.querySelector("[data-tile='Taric']")?.hasAttribute("disabled")
+        ).toBe(false);
+        const tile = container.querySelector(
+            "[data-pool-column='support'] [data-tile='Taric']"
+        );
+        if (tile) fireEvent.click(tile);
+        if (tile) fireEvent.click(tile);
+        expect(emitPickStep).toHaveBeenCalledTimes(2);
+        pushEvent("Taric");
+        expect(
+            container
+                .querySelector("[data-pool-panel]")
+                ?.getAttribute("data-pool-disabled")
+        ).toBe("true"); // 20 events: draft complete
+    });
+    test("Undo back to a committed slot re-arms it (pendingSlot clears with the selection scope)", () => {
+        const { container, emitPickStep, pushEvent, popEvent } = mount(
+            ITEM5_ORDER.slice(0, 16),
+            emptyTree
+        ); // Red Pick 4
+        const tile = () =>
+            container.querySelector("[data-pool-column='adc'] [data-tile='Tristana']");
+        const t1 = tile();
+        if (t1) fireEvent.click(t1);
+        expect(emitPickStep).toHaveBeenCalledTimes(1);
+        pushEvent("Tristana"); // the server confirms slot 16
+        popEvent(); // Undo: back to slot 16
+        expect(tile()?.hasAttribute("disabled")).toBe(false);
+        const t2 = tile();
+        if (t2) fireEvent.click(t2);
+        expect(emitPickStep).toHaveBeenCalledTimes(2);
+    });
+    test("the pool view defaults per turn: yours on our pick turn, enemy on a ban turn; the toggle overrides", () => {
+        const a = mount(ITEM5_ORDER, item5Tree); // Red Pick 5, we are red
+        expect(
+            a.container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("yours");
+        const all = a.container.querySelector("[data-pool-view-button='all']");
+        if (all) fireEvent.click(all);
+        expect(
+            a.container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("all");
+        cleanup();
+        const b = mount(ITEM5_ORDER.slice(0, 12), emptyTree); // Red Ban 4 (slot 12: red bans sit at 1, 3, 5, 12, 14)
+        expect(
+            b.container.querySelector("[data-pool-panel]")?.getAttribute("data-pool-view")
+        ).toBe("enemy");
+        expect(b.container.querySelector("[data-pool-title]")?.textContent).toBe(
+            "Blue's pool · Ban for Red Ban 4"
+        );
     });
 });
