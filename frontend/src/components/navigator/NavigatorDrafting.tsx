@@ -922,7 +922,11 @@ const NavigatorDrafting: Component = () => {
                                                         index
                                                     ])
                                                 }
-                                                onCommit={commitNode}
+                                                onCommit={(line) => {
+                                                    const only = line[0];
+                                                    if (line.length === 1 && only)
+                                                        commitNode(only);
+                                                }}
                                                 onContextMenu={(args) => setMenu(args)}
                                                 onUndo={undo}
                                                 onEditPools={() =>
