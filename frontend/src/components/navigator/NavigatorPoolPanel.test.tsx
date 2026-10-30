@@ -152,6 +152,11 @@ describe("NavigatorPoolPanel (design § 5)", () => {
             "Sup"
         );
     });
+    test("a role column's tile grid is five per row, each tile at most 56 px", () => {
+        const { container } = mount();
+        const grid = container.querySelector("[data-pool-column='top'] .grid");
+        expect(grid?.className).toContain("grid-cols-[repeat(5,minmax(0,56px))]");
+    });
     test("tiles: ranked first with the score badge; used tiles disabled with the reason and not committable", () => {
         const { container, onCommit } = mount();
         const top = container.querySelector("[data-pool-column='top']");

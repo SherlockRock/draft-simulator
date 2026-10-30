@@ -219,6 +219,39 @@ describe("matchQuery / highlight (design § 6 search)", () => {
             idx: 2
         }); // last column, last tile: stays
     });
+    test("moveHighlight strides by the grid's five tiles per row: down from 1 lands on 6; right from 4 leaves the column", () => {
+        const wide = poolColumns({
+            display: {
+                top: ["Pantheon", "Poppy", "Gragas", "Sylas", "Brand", "Swain", "Akali"],
+                jungle: ["Sejuani", "Hecarim"],
+                mid: [],
+                adc: [],
+                support: []
+            },
+            picks: [],
+            fan: [],
+            partnerOf: null,
+            unavailable: new Set<string>(),
+            nameOf
+        });
+        const none = new Map<string, 0 | 1>();
+        expect(moveHighlight(wide, none, { col: 0, idx: 1 }, "down")).toEqual({
+            col: 0,
+            idx: 6
+        });
+        expect(moveHighlight(wide, none, { col: 0, idx: 6 }, "up")).toEqual({
+            col: 0,
+            idx: 1
+        });
+        expect(moveHighlight(wide, none, { col: 0, idx: 4 }, "right")).toEqual({
+            col: 1,
+            idx: 0
+        });
+        expect(moveHighlight(wide, none, { col: 0, idx: 3 }, "right")).toEqual({
+            col: 0,
+            idx: 4
+        });
+    });
     test("singleMatchLabel", () => {
         expect(singleMatchLabel(matchQuery("sw", all()), "picks", nameOf)).toBe(
             "Swain · ↵ picks"

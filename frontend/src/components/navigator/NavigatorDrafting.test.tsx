@@ -169,6 +169,10 @@ function mount(
         failed?: boolean;
         budgetHit?: boolean;
         treeOrder?: string[];
+        /** Live draft status "completed" without archive mode: the between-games panel. */
+        completedLive?: boolean;
+        /** Overrides the fixture session's series_length (1). */
+        seriesLength?: 1 | 3 | 5 | 7;
     } = {}
 ) {
     const computing = opts.computing ?? false;
@@ -207,14 +211,17 @@ function mount(
         }
     };
     const stateOf = (): NavigatorSessionState => ({
-        session,
+        session:
+            opts.seriesLength === undefined
+                ? session
+                : { ...session, series_length: opts.seriesLength },
         draft: opts.archive
             ? archiveGame.draft
             : {
                   id: "draft-1",
                   session_id: "s1",
                   game_number: 1,
-                  status: "active",
+                  status: opts.completedLive ? "completed" : "active",
                   our_side_override: null,
                   draft_id: null
               },
@@ -242,6 +249,7 @@ function mount(
     const emitBan = vi.fn();
     const emitUndo = vi.fn();
     const viewGame = vi.fn();
+    const startNextGame = vi.fn();
     const value: NavigatorWorkflowContextValue = {
         navigatorContext: stateOf,
         syntheticTree: synthetic,
@@ -257,7 +265,7 @@ function mount(
         emitUndo,
         startDraft: vi.fn(),
         nextGame: vi.fn(),
-        startNextGame: vi.fn(),
+        startNextGame,
         updateSessionPools: vi.fn(),
         viewingGameNumber: () => (opts.archive ? 1 : null),
         viewGame,
@@ -287,6 +295,7 @@ function mount(
         emitBan,
         emitUndo,
         viewGame,
+        startNextGame,
         setEngineTree,
         pushEvent,
         popEvent,
@@ -297,6 +306,46 @@ function mount(
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
 describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)", () => {
+    test("the board is two bands: team columns + cards on top, the pool alone underneath", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree);
+        const top = container.querySelector("[data-board-top]");
+        const pool = container.querySelector("[data-board-pool]");
+        expect(top?.querySelectorAll("[data-team-column]")).toHaveLength(2);
+        expect(top?.querySelector("[data-pool-panel]")).toBeNull();
+        expect(pool?.querySelector("[data-pool-panel]")).not.toBeNull();
+        expect(pool?.parentElement).toBe(top?.parentElement);
+    });
+    test("archive view: no pool band", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree, { archive: true });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(
+            container.querySelector("[data-board-top] [data-archive-card]")
+        ).not.toBeNull();
+    });
+    test("between games: no pool band; the panel sits in the top band and Start still works", () => {
+        const { container, getByText, startNextGame } = mount(ITEM5_ORDER, item5Tree, {
+            completedLive: true,
+            seriesLength: 3
+        });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(container.querySelector("[data-pool-panel]")).toBeNull();
+        const start = getByText("Start Game 2");
+        expect(container.querySelector("[data-board-top]")?.contains(start)).toBe(true);
+        fireEvent.click(start);
+        expect(startNextGame).toHaveBeenCalledTimes(1);
+    });
+    test("between games, series complete: the panel renders in the top band, still no pool band", () => {
+        const { container, getByText } = mount(ITEM5_ORDER, item5Tree, {
+            completedLive: true,
+            seriesLength: 1
+        });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(
+            container
+                .querySelector("[data-board-top]")
+                ?.contains(getByText("Series Complete"))
+        ).toBe(true);
+    });
     test("item5: header, ready pill, top-1 Pantheon as Sup at 3.43, team columns with seat rings", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree);
         expect(container.querySelector("[data-drafting-header]")?.textContent).toContain(

@@ -439,7 +439,7 @@ export const NavigatorPoolPanel: Component<NavigatorPoolPanelProps> = (props) =>
                                     {statusText(column().status)}
                                 </span>
                             </div>
-                            <div class="grid grid-cols-4 gap-1">
+                            <div class="grid grid-cols-[repeat(5,minmax(0,56px))] gap-1">
                                 {/* Keyed by champion ID (a string `For` keys by value): poolColumns re-allocates
                                     every PoolTile on each run, and a `For` over the objects would rebuild every
                                     button when the pair chip or the fan changes (memory solidjs_reconcile_stale_hover). */}
