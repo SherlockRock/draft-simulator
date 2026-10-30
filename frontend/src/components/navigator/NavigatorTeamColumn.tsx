@@ -2,6 +2,7 @@ import { Component, For, Index, Show, createMemo } from "solid-js";
 import type { NavigatorEventData } from "../../contexts/NavigatorContext";
 import { getChampionImg } from "../../utils/championRoles";
 import { resolveChampion } from "../../utils/constants";
+import { ON_CLOCK, turnSlotsAt } from "../../utils/navigatorOnClock";
 import { ROLE_SHORT_LABELS, roleGap } from "../../utils/navigatorRoles";
 import {
     ROLE_HEX,
@@ -66,7 +67,7 @@ export const NavigatorTeamColumn: Component<NavigatorTeamColumnProps> = (props) 
             turn.side !== props.side
         )
             return [];
-        return turn.pairStart ? [slot, slot + 1] : [slot];
+        return turnSlotsAt(slot);
     });
     const label = (ordinal: number) => `${props.side === "blue" ? "B" : "R"}${ordinal}`;
     const sideText = () => (props.side === "blue" ? "text-blue-300" : "text-red-300");
@@ -75,12 +76,14 @@ export const NavigatorTeamColumn: Component<NavigatorTeamColumnProps> = (props) 
         <div
             data-team-column={props.side}
             data-on-clock={onClock() ? "true" : "false"}
-            class={`flex w-[230px] shrink-0 flex-col gap-2 overflow-y-auto px-3 py-3 ${props.side === "blue" ? "border-r" : "border-l"} border-darius-border/60 ${onClock() ? "bg-sky-300/[0.03]" : ""}`}
+            class={`flex w-[230px] shrink-0 flex-col gap-2 overflow-y-auto px-3 py-3 ${props.side === "blue" ? "border-r" : "border-l"} border-darius-border/60 ${onClock() ? ON_CLOCK[props.side].tint : ""}`}
         >
             <div class={`text-sm font-bold ${sideText()}`}>
                 {props.side === "blue" ? "Blue" : "Red"}
                 <Show when={onClock()}>
-                    <span class="ml-2 text-[10px] font-normal text-sky-300">
+                    <span
+                        class={`ml-2 text-[10px] font-normal ${ON_CLOCK[props.side].text}`}
+                    >
                         on the clock{props.side === props.ourSide ? " · you" : ""}
                     </span>
                 </Show>
@@ -131,14 +134,18 @@ export const NavigatorTeamColumn: Component<NavigatorTeamColumnProps> = (props) 
                                         data-next-slot={first() ? "true" : undefined}
                                         aria-label={turnLabel(slot())}
                                         onClick={() => props.onPickNow()}
-                                        class="flex min-h-[50px] w-full cursor-pointer items-center gap-2 rounded-lg border border-sky-300 px-1.5 py-1 text-left shadow-[0_0_0_2px_rgba(125,211,252,0.25)]"
+                                        class={`flex min-h-[50px] w-full cursor-pointer items-center gap-2 rounded-lg border px-1.5 py-1 text-left ${ON_CLOCK[props.side].row}`}
                                     >
                                         <span class="w-[18px] text-[9px] font-bold text-slate-500">
                                             {label(i + 1)}
                                         </span>
-                                        <span class="block h-[42px] w-[42px] shrink-0 rounded-full border-2 border-dashed border-sky-300" />
+                                        <span
+                                            class={`block h-[42px] w-[42px] shrink-0 rounded-full border-2 border-dashed ${ON_CLOCK[props.side].ring}`}
+                                        />
                                         <span class="min-w-0">
-                                            <span class="block text-xs font-semibold text-sky-300">
+                                            <span
+                                                class={`block text-xs font-semibold ${ON_CLOCK[props.side].text}`}
+                                            >
                                                 {label(i + 1)} — pick now
                                             </span>
                                             <span class="block text-[10px] text-slate-400">

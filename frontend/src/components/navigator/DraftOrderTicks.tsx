@@ -1,4 +1,5 @@
 import { Component, For, Show } from "solid-js";
+import { ON_CLOCK, turnSlotsAt } from "../../utils/navigatorOnClock";
 import { TURN_SEQUENCE, turnLabel } from "../../utils/turnSequence";
 
 /** Separators after slots 5, 11 and 15 (design § 1): before 6, 12, 16. */
@@ -11,7 +12,11 @@ export const DraftOrderTicks: Component<{
     nextSlot: number | null;
 }> = (props) => {
     const state = (i: number): "filled" | "next" | "empty" =>
-        i < props.filledCount ? "filled" : i === props.nextSlot ? "next" : "empty";
+        i < props.filledCount
+            ? "filled"
+            : turnSlotsAt(props.nextSlot).includes(i)
+              ? "next"
+              : "empty";
     return (
         <span
             data-draft-order-ticks
@@ -34,7 +39,7 @@ export const DraftOrderTicks: Component<{
                             title={turnLabel(i())}
                             class={`block h-[5px] w-2.5 rounded-sm ${
                                 state(i()) === "next"
-                                    ? "bg-sky-300 shadow-[0_0_0_2px_rgba(125,211,252,0.35)]"
+                                    ? ON_CLOCK[turn.side].tick
                                     : state(i()) === "filled"
                                       ? turn.side === "blue"
                                           ? "bg-blue-400"

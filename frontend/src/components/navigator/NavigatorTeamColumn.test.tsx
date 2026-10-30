@@ -169,6 +169,37 @@ describe("NavigatorTeamColumn (design § 3)", () => {
                 ?.hasAttribute("data-next-slot")
         ).toBe(false);
     });
+    test("an on-the-clock Red duo turn is pale red: glow rows, label and column tint carry red-200, none sky-300", () => {
+        const { container } = column("red", [...BANS, "Gragas"]); // next = slot 7, Red Pick 1 + 2
+        const glowing = Array.from(container.querySelectorAll("[data-glow='true']"));
+        expect(glowing).toHaveLength(2);
+        for (const row of glowing) {
+            expect(row.className).toContain("red-200");
+            expect(row.innerHTML).not.toContain("sky-300");
+            expect(row.innerHTML).toContain("red-200");
+        }
+        const root = container.querySelector("[data-team-column='red']");
+        expect(root?.className).toContain("red-200");
+        const label = Array.from(container.querySelectorAll("span")).find((n) =>
+            n.textContent?.startsWith("on the clock")
+        );
+        expect(label?.className).toContain("red-200");
+        expect(container.innerHTML).not.toContain("sky-300");
+    });
+    test("an on-the-clock Blue pick turn is pale blue: glow row, label and column tint carry blue-200, none sky-300", () => {
+        const { container } = column("blue", [...BANS]); // next = slot 6, Blue Pick 1
+        const glowing = Array.from(container.querySelectorAll("[data-glow='true']"));
+        expect(glowing).toHaveLength(1);
+        expect(glowing[0].className).toContain("blue-200");
+        expect(container.querySelector("[data-team-column='blue']")?.className).toContain(
+            "blue-200"
+        );
+        const label = Array.from(container.querySelectorAll("span")).find((n) =>
+            n.textContent?.startsWith("on the clock")
+        );
+        expect(label?.className).toContain("blue-200");
+        expect(container.innerHTML).not.toContain("sky-300");
+    });
     test("pair-pending glows one row: B2 confirmed, only B3 glows", () => {
         const { container } = column("blue", [
             ...BANS,
@@ -300,6 +331,39 @@ describe("NavigatorTeamColumn (design § 3)", () => {
 });
 
 describe("DraftOrderTicks (design § 1)", () => {
+    test("a duo turn lights both ticks in the side's pale colour", () => {
+        const { container } = render(() => (
+            <DraftOrderTicks filledCount={7} nextSlot={7} />
+        ));
+        const ticks = Array.from(container.querySelectorAll("[data-tick]"));
+        expect(
+            ticks
+                .filter((t) => t.getAttribute("data-tick-state") === "next")
+                .map((t) => t.getAttribute("data-tick"))
+        ).toEqual(["7", "8"]);
+        expect(ticks[7].className).toContain("red-200");
+        expect(ticks[8].className).toContain("red-200");
+        expect(ticks[7].className).not.toContain("sky-300");
+    });
+    test("a blue single turn lights one pale-blue tick", () => {
+        const { container } = render(() => (
+            <DraftOrderTicks filledCount={6} nextSlot={6} />
+        ));
+        const next = Array.from(container.querySelectorAll("[data-tick]")).filter(
+            (t) => t.getAttribute("data-tick-state") === "next"
+        );
+        expect(next.map((t) => t.getAttribute("data-tick"))).toEqual(["6"]);
+        expect(next[0].className).toContain("blue-200");
+    });
+    test("the pair's second half alone lights one tick", () => {
+        const { container } = render(() => (
+            <DraftOrderTicks filledCount={8} nextSlot={8} />
+        ));
+        const next = Array.from(container.querySelectorAll("[data-tick]")).filter(
+            (t) => t.getAttribute("data-tick-state") === "next"
+        );
+        expect(next.map((t) => t.getAttribute("data-tick"))).toEqual(["8"]);
+    });
     test("20 side-coloured ticks, the next one highlighted, separators after slots 5, 11 and 15", () => {
         const { container } = render(() => (
             <DraftOrderTicks filledCount={11} nextSlot={11} />
