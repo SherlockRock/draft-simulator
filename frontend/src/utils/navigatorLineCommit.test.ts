@@ -123,6 +123,26 @@ describe("lineCommitPlan", () => {
         );
         expect(plan).toEqual({ ok: false, reason: "slot 12 expects a ban" });
     });
+    test("plan: a node with the wrong champion count for its slot is rejected", () => {
+        const twoAtSingleSlot = lineCommitPlan(
+            [node(["Jax", "Yasuo"], [6])],
+            confirmedUpTo(6),
+            nameOf
+        );
+        expect(twoAtSingleSlot).toEqual({
+            ok: false,
+            reason: "slot 6 expects 1 champion"
+        });
+        const oneAtPairStart = lineCommitPlan(
+            [node(["Jax"], [7])],
+            confirmedUpTo(7),
+            nameOf
+        );
+        expect(oneAtPairStart).toEqual({
+            ok: false,
+            reason: "slot 7 expects 2 champions"
+        });
+    });
 });
 
 describe("lineRunNext", () => {
