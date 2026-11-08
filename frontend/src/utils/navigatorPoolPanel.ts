@@ -142,7 +142,7 @@ export interface Highlight {
     col: number;
     idx: number;
 }
-export const TILES_PER_ROW = 4;
+export const TILES_PER_ROW = 5;
 
 /** Design § 6: the first match in the first LIT column (a prefix match before a contains match);
  *  dim columns only when no lit column matches; null without a query. */

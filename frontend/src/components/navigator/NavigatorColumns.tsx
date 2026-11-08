@@ -7,6 +7,8 @@ import {
     NO_BAN_SIGNAL_LABEL,
     type ColumnModel
 } from "../../utils/navigatorColumns";
+import { lineTitle } from "../../utils/navigatorLineCommit";
+import { ON_CLOCK } from "../../utils/navigatorOnClock";
 import type { Side } from "../../utils/navigatorSeats";
 import { turnLabelForSlots } from "../../utils/turnSequence";
 import { SeatRow } from "./SeatRow";
@@ -35,7 +37,8 @@ export interface NavigatorColumnsProps {
     /** `status().kind === "ready" && budgetHit` — a one-line note under column 0 (design § 4). */
     budgetHit: boolean;
     onSelect: (depth: number, index: number) => void;
-    onCommit: (node: NavigatorTreeNode) => void;
+    /** The clicked card's whole line: `[...column.lineage, node]`. */
+    onCommit: (line: NavigatorTreeNode[]) => void;
     onContextMenu: (args: {
         node: NavigatorTreeNode;
         depth: number;
@@ -90,7 +93,7 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
     };
 
     return (
-        <div class="custom-scrollbar grid max-h-[55%] shrink-0 auto-cols-[340px] grid-flow-col gap-4 overflow-x-auto overflow-y-auto px-4 py-4">
+        <div class="custom-scrollbar grid min-h-0 flex-1 auto-cols-[340px] grid-flow-col gap-4 overflow-x-auto overflow-y-auto px-4 py-4">
             <Show when={props.columns.length === 0 && props.emptyReason !== null}>
                 <div
                     data-empty-fan
@@ -243,21 +246,29 @@ export const NavigatorColumns: Component<NavigatorColumnsProps> = (props) => {
                                                 {node.scores.composite.toFixed(2)}
                                             </span>
                                         </Show>
-                                        <Show
-                                            when={column().depth === 0 && props.canMutate}
-                                        >
+                                        <Show when={props.canMutate}>
                                             <button
                                                 type="button"
                                                 data-commit={node.actionType}
-                                                class="absolute -top-3 right-1 hidden rounded bg-sky-300 px-2 py-0.5 text-[10px] font-bold text-black group-hover:block"
+                                                data-commit-depth={column().depth}
+                                                class={`absolute -top-3 right-1 hidden rounded px-2 py-0.5 text-[10px] font-bold group-hover:block ${ON_CLOCK[node.side ?? "blue"].button}`}
+                                                title={lineTitle(
+                                                    [...column().lineage, node],
+                                                    nameOf
+                                                )}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    props.onCommit(node);
+                                                    props.onCommit([
+                                                        ...column().lineage,
+                                                        node
+                                                    ]);
                                                 }}
                                             >
-                                                {node.actionType === "ban"
-                                                    ? "Ban"
-                                                    : "Pick"}
+                                                {column().depth > 0
+                                                    ? `Take line · ${column().depth + 1}`
+                                                    : node.actionType === "ban"
+                                                      ? "Ban"
+                                                      : "Pick"}
                                             </button>
                                         </Show>
                                     </div>

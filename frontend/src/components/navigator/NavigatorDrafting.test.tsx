@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { createSignal } from "solid-js";
+import toast from "solid-toast";
 import type {
     NavigatorCompletedGame,
     NavigatorEventData,
@@ -36,7 +37,13 @@ vi.mock("../../utils/actions", () => ({
     }))
 }));
 
+// Line-run stops are announced by toast; assert on the calls.
+vi.mock("solid-toast", () => ({
+    default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() })
+}));
+
 afterEach(cleanup);
+afterEach(() => vi.mocked(toast).mockClear());
 
 // jsdom does not implement scrollIntoView; ChampionPicker's tile-focus effect
 // calls it once the swap picker opens (the "swap picker is up" test below).
@@ -169,6 +176,12 @@ function mount(
         failed?: boolean;
         budgetHit?: boolean;
         treeOrder?: string[];
+        /** Live draft status "completed" without archive mode: the between-games panel. */
+        completedLive?: boolean;
+        /** Overrides the fixture session's series_length (1). */
+        seriesLength?: 1 | 3 | 5 | 7;
+        /** A completed Game 1 entry (the live events) so `viewingGameNumber` can resolve an archive. */
+        archiveEntry?: boolean;
     } = {}
 ) {
     const computing = opts.computing ?? false;
@@ -207,14 +220,17 @@ function mount(
         }
     };
     const stateOf = (): NavigatorSessionState => ({
-        session,
+        session:
+            opts.seriesLength === undefined
+                ? session
+                : { ...session, series_length: opts.seriesLength },
         draft: opts.archive
             ? archiveGame.draft
             : {
                   id: "draft-1",
                   session_id: "s1",
                   game_number: 1,
-                  status: "active",
+                  status: opts.completedLive ? "completed" : "active",
                   our_side_override: null,
                   draft_id: null
               },
@@ -229,7 +245,8 @@ function mount(
             meta,
             createdAt: null
         },
-        completedGames: opts.archive ? [{ ...archiveGame, events: evs() }] : [],
+        completedGames:
+            opts.archive || opts.archiveEntry ? [{ ...archiveGame, events: evs() }] : [],
         connected: true,
         error: error()
     });
@@ -242,6 +259,8 @@ function mount(
     const emitBan = vi.fn();
     const emitUndo = vi.fn();
     const viewGame = vi.fn();
+    const startNextGame = vi.fn();
+    const [viewing, setViewing] = createSignal<number | null>(opts.archive ? 1 : null);
     const value: NavigatorWorkflowContextValue = {
         navigatorContext: stateOf,
         syntheticTree: synthetic,
@@ -257,9 +276,9 @@ function mount(
         emitUndo,
         startDraft: vi.fn(),
         nextGame: vi.fn(),
-        startNextGame: vi.fn(),
+        startNextGame,
         updateSessionPools: vi.fn(),
-        viewingGameNumber: () => (opts.archive ? 1 : null),
+        viewingGameNumber: viewing,
         viewGame,
         selectedScenarioIndex: () => null,
         setSelectedScenarioIndex: vi.fn(),
@@ -280,6 +299,14 @@ function mount(
             ...events([...prev.map((e) => e.champion_id), championId]).slice(prev.length)
         ]);
     const popEvent = () => setEvs((prev) => prev.slice(0, -1));
+    // An unconfirmed cache-hit commit: the workflow's optimistic event (id `optimistic-<slot>`).
+    const pushOptimistic = (championId: string) =>
+        setEvs((prev) => {
+            const next = events([...prev.map((e) => e.champion_id), championId])[
+                prev.length
+            ];
+            return [...prev, { ...next, id: `optimistic-${next.slot}` }];
+        });
     const bumpSnapshot = () => setSnapshotSeq((n) => n + 1);
     return {
         ...utils,
@@ -287,9 +314,12 @@ function mount(
         emitBan,
         emitUndo,
         viewGame,
+        startNextGame,
         setEngineTree,
         pushEvent,
         popEvent,
+        pushOptimistic,
+        setViewingGameNumber: setViewing,
         setError,
         bumpSnapshot
     };
@@ -297,6 +327,46 @@ function mount(
 const key = (k: string) => fireEvent.keyDown(window, { key: k });
 
 describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)", () => {
+    test("the board is two bands: team columns + cards on top, the pool alone underneath", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree);
+        const top = container.querySelector("[data-board-top]");
+        const pool = container.querySelector("[data-board-pool]");
+        expect(top?.querySelectorAll("[data-team-column]")).toHaveLength(2);
+        expect(top?.querySelector("[data-pool-panel]")).toBeNull();
+        expect(pool?.querySelector("[data-pool-panel]")).not.toBeNull();
+        expect(pool?.parentElement).toBe(top?.parentElement);
+    });
+    test("archive view: no pool band", () => {
+        const { container } = mount(ITEM5_ORDER, item5Tree, { archive: true });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(
+            container.querySelector("[data-board-top] [data-archive-card]")
+        ).not.toBeNull();
+    });
+    test("between games: no pool band; the panel sits in the top band and Start still works", () => {
+        const { container, getByText, startNextGame } = mount(ITEM5_ORDER, item5Tree, {
+            completedLive: true,
+            seriesLength: 3
+        });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(container.querySelector("[data-pool-panel]")).toBeNull();
+        const start = getByText("Start Game 2");
+        expect(container.querySelector("[data-board-top]")?.contains(start)).toBe(true);
+        fireEvent.click(start);
+        expect(startNextGame).toHaveBeenCalledTimes(1);
+    });
+    test("between games, series complete: the panel renders in the top band, still no pool band", () => {
+        const { container, getByText } = mount(ITEM5_ORDER, item5Tree, {
+            completedLive: true,
+            seriesLength: 1
+        });
+        expect(container.querySelector("[data-board-pool]")).toBeNull();
+        expect(
+            container
+                .querySelector("[data-board-top]")
+                ?.contains(getByText("Series Complete"))
+        ).toBe(true);
+    });
     test("item5: header, ready pill, top-1 Pantheon as Sup at 3.43, team columns with seat rings", () => {
         const { container } = mount(ITEM5_ORDER, item5Tree);
         expect(container.querySelector("[data-drafting-header]")?.textContent).toContain(
@@ -741,5 +811,187 @@ describe("NavigatorDrafting (design § 1 rows on the item5 / item7 smoke states)
                 .querySelector("[data-team-column='red']")
                 ?.getAttribute("data-on-clock")
         ).toBe("false");
+    });
+});
+
+describe("NavigatorDrafting line runner (board iteration § 4)", () => {
+    const RED_PAIR = ["Sejuani", "Sylas"];
+    const BLUE_PAIR = ["Akali", "Hecarim"];
+    const spine = ITEM5_ORDER.slice(0, 7); // Red Pick 1 + 2 (slots 7, 8) next
+    const lineNode = (over: Partial<NavigatorTreeNode>): NavigatorTreeNode => ({
+        ...emptyTree,
+        phase: "pick1",
+        ...over
+    });
+    /** red pair [7,8] → blue pair [9,10] (→ red single [11] when `third`). */
+    const lineTree = (third: boolean): NavigatorTreeNode => {
+        const redSingle = lineNode({
+            championIds: ["Tristana"],
+            side: "red",
+            slots: [11]
+        });
+        const bluePair = lineNode({
+            championIds: BLUE_PAIR,
+            side: "blue",
+            slots: [9, 10],
+            children: third ? [redSingle] : []
+        });
+        const redPair = lineNode({
+            championIds: RED_PAIR,
+            side: "red",
+            slots: [7, 8],
+            children: [bluePair]
+        });
+        return { ...emptyTree, children: [redPair] };
+    };
+    const start = (third = false, opts: { archiveEntry?: boolean } = {}) =>
+        mount(spine, lineTree(third), { treeOrder: spine, ...opts });
+    type Mounted = ReturnType<typeof start>;
+    const takeDepth1 = ({ container }: Mounted) => {
+        const first = container.querySelector("[data-column-node]");
+        if (first) fireEvent.click(first);
+        const commit = container.querySelector("[data-commit-depth='1']");
+        if (commit) fireEvent.click(commit);
+    };
+    const pushAll = (m: Mounted, ids: string[]) => ids.forEach((id) => m.pushEvent(id));
+    const toasted = (text: string) =>
+        vi.mocked(toast).mock.calls.some((c) => String(c[0]).includes(text));
+    const runEl = (m: Mounted) => m.container.querySelector("[data-line-run]");
+
+    test("a depth-2 card commits its line one turn at a time", () => {
+        const m = start();
+        takeDepth1(m);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        expect(m.emitPickStep).toHaveBeenLastCalledWith("draft-1", RED_PAIR, 7);
+        expect(m.container.querySelector("[data-line-run-label]")?.textContent).toBe(
+            "committing 1 of 2…"
+        );
+        m.pushEvent("Sejuani"); // half of step 0: still waiting
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        m.pushEvent("Sylas");
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        expect(m.emitPickStep).toHaveBeenLastCalledWith("draft-1", BLUE_PAIR, 9);
+        pushAll(m, BLUE_PAIR);
+        expect(runEl(m)).toBeNull();
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+    });
+    test("the pool and the card buttons stay locked between steps", () => {
+        const m = start();
+        takeDepth1(m);
+        pushAll(m, RED_PAIR); // step 0 landed, step 1 in flight
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        const tiles = Array.from(m.container.querySelectorAll("[data-tile]"));
+        expect(tiles.length).toBeGreaterThan(0);
+        expect(tiles.every((t) => t.hasAttribute("disabled"))).toBe(true);
+        const tile = tiles[0];
+        if (tile) fireEvent.click(tile);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        expect(m.emitBan).not.toHaveBeenCalled();
+        expect(m.container.querySelector("[data-commit]")).toBeNull();
+    });
+    test("another member's pick stops the line", () => {
+        const m = start(true);
+        const first = m.container.querySelector("[data-column-node]");
+        if (first) fireEvent.click(first);
+        const card1 = m.container
+            .querySelector("[data-commit-depth='1']")
+            ?.closest("[data-column-node]");
+        if (card1) fireEvent.click(card1);
+        const commit = m.container.querySelector("[data-commit-depth='2']");
+        expect(commit).not.toBeNull();
+        if (commit) fireEvent.click(commit);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        pushAll(m, RED_PAIR);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        m.pushEvent("Poppy"); // slot 9, not the line's champion
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        expect(runEl(m)).toBeNull();
+        expect(toasted("Line stopped after 1 of 3")).toBe(true);
+    });
+    test("a card whose slots don't match the live count emits nothing and toasts", () => {
+        const stale = lineNode({ championIds: RED_PAIR, side: "red", slots: [9, 10] });
+        const m = mount(spine, { ...emptyTree, children: [stale] }, { treeOrder: spine });
+        const commit = m.container.querySelector("[data-commit]");
+        expect(commit).not.toBeNull();
+        if (commit) fireEvent.click(commit);
+        expect(m.emitPickStep).not.toHaveBeenCalled();
+        expect(runEl(m)).toBeNull();
+        expect(toasted("The board moved")).toBe(true);
+    });
+    test("an error stops the line", () => {
+        const m = start();
+        takeDepth1(m);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        m.setError("Champion already taken");
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        expect(runEl(m)).toBeNull();
+        expect(toasted("the server rejected a step")).toBe(true);
+        m.setError(null);
+    });
+    test("Undo is disabled while a line is going in", () => {
+        const m = start();
+        takeDepth1(m);
+        const undo = m.container.querySelector("[data-undo]");
+        expect(undo?.hasAttribute("disabled")).toBe(true);
+        if (undo) fireEvent.click(undo);
+        key("/");
+        const cmd = m.container.querySelector("[data-palette-command='undo']");
+        if (cmd) fireEvent.click(cmd);
+        expect(m.emitUndo).not.toHaveBeenCalled();
+        expect(runEl(m)).not.toBeNull();
+    });
+    test("Stop ends the line; the in-flight step still lands", () => {
+        const m = start();
+        takeDepth1(m);
+        pushAll(m, RED_PAIR);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2); // step 1 in flight
+        const stop = m.container.querySelector("[data-line-run-stop]");
+        if (stop) fireEvent.click(stop);
+        expect(runEl(m)).toBeNull();
+        expect(toasted("Line stopped after 1 of 2 — stopped")).toBe(true);
+        expect(m.container.querySelector("[data-undo]")?.hasAttribute("disabled")).toBe(
+            false
+        );
+        const tiles = Array.from(m.container.querySelectorAll("[data-tile]"));
+        expect(tiles.every((t) => t.hasAttribute("disabled"))).toBe(true); // pendingSlot holds slot 9
+        const card = m.container.querySelector("[data-commit]");
+        expect(card).not.toBeNull(); // the buttons are back, and still refuse slot 9
+        if (card) fireEvent.click(card);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        pushAll(m, BLUE_PAIR); // the in-flight ack
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        expect(m.container.querySelector("[data-tile]")?.hasAttribute("disabled")).toBe(
+            false
+        );
+    });
+    test("switching to an archive mid-line stops it", () => {
+        const m = start(false, { archiveEntry: true });
+        takeDepth1(m);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+        m.setViewingGameNumber(1);
+        expect(toasted("Line stopped after 0 of 2 — the game changed")).toBe(true);
+        pushAll(m, RED_PAIR);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(1);
+    });
+    test("another member's undo stops it", () => {
+        const m = start();
+        takeDepth1(m);
+        pushAll(m, RED_PAIR);
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        m.popEvent();
+        m.popEvent();
+        expect(m.emitPickStep).toHaveBeenCalledTimes(2);
+        expect(runEl(m)).toBeNull();
+        const tile = m.container.querySelector("[data-tile]");
+        expect(tile?.hasAttribute("disabled")).toBe(false);
+    });
+    test("a line can't start over an unconfirmed cache-hit commit", () => {
+        const m = start();
+        m.pushOptimistic("Sejuani");
+        const commit = m.container.querySelector("[data-commit]");
+        expect(commit).not.toBeNull();
+        if (commit) fireEvent.click(commit);
+        expect(m.emitPickStep).not.toHaveBeenCalled();
+        expect(toasted("Wait for the last pick to confirm")).toBe(true);
     });
 });

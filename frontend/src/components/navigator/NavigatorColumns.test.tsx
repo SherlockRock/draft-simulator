@@ -137,11 +137,36 @@ describe("NavigatorColumns", () => {
         );
         expect(commit?.getAttribute("data-commit")).toBe("pick");
         if (commit) fireEvent.click(commit);
-        expect(onCommit).toHaveBeenCalledWith(fan[0]);
+        expect(onCommit).toHaveBeenCalledWith([fan[0]]);
         expect(onSelect).not.toHaveBeenCalled();
         cleanup();
         const ro = render(() => <NavigatorColumns {...props({ canMutate: false })} />);
         expect(ro.container.querySelector("[data-commit]")).toBeNull();
+    });
+    test("a deeper card carries a side-tinted 'Take line' button that hands back its whole line", () => {
+        const onCommit = vi.fn();
+        const onSelect = vi.fn();
+        const columns = deriveColumns(fanout, [0]);
+        const { container } = render(() => (
+            <NavigatorColumns {...props({ columns, onCommit, onSelect })} />
+        ));
+        const commit = container.querySelector(
+            "[data-column][data-depth='1'] [data-column-node] [data-commit]"
+        );
+        expect(commit?.textContent).toBe("Take line · 2");
+        expect(commit?.getAttribute("data-commit-depth")).toBe("1");
+        expect(commit?.className).toContain("blue-200");
+        if (commit) fireEvent.click(commit);
+        expect(onCommit).toHaveBeenCalledWith([fan[0], bluePair]);
+        expect(onSelect).not.toHaveBeenCalled();
+    });
+    test("no commit button at any depth when read-only", () => {
+        const { container } = render(() => (
+            <NavigatorColumns
+                {...props({ canMutate: false, columns: deriveColumns(fanout, [0]) })}
+            />
+        ));
+        expect(container.querySelector("[data-commit]")).toBeNull();
     });
     test("right-click reports node, depth, index and position", () => {
         const onContextMenu = vi.fn();
