@@ -235,11 +235,11 @@
     "off_pool": true
   },
   "role_verdict": {
-    "action": "Lissandra",
+    "action": "RekSai",
     "roles": [
       "top"
     ],
-    "ok": true
+    "ok": false
   },
-  "review": "2026-10-04: continuation re-derived under role maps (slots 17-18 Ahri + Rumble -> Locke + Rumble), user-vetted; supersedes 2026-09-29-top-pinch-slot-19-kittens for the recalibration read (that file stays as the slice's test artefact). 2026-10-04 user (scored read, role maps): leave the pool."
+  "review": "2026-10-04: continuation re-derived under role maps (slots 17-18 Ahri + Rumble -> Locke + Rumble), user-vetted; supersedes 2026-09-29-top-pinch-slot-19-kittens for the recalibration read (that file stays as the slice's test artefact). 2026-10-04 user (scored read, role maps): leave the pool. 2026-11-08 user (playable mask, Q sweep read): role_verdict moved from Lissandra-top (ok = true, no longer a graded top at any sampled Q) to RekSai-top (grade 92, r 0.08, the top at Q <= 0.08): would not play it, ok = false."
 }

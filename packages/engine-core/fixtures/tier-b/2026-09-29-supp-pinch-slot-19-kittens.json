@@ -235,11 +235,11 @@
     "off_pool": true
   },
   "role_verdict": {
-    "action": "Karthus",
+    "action": "Zyra",
     "roles": [
       "adc"
     ],
-    "ok": true
+    "ok": false
   },
-  "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Viktor in the ADC slot, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool."
+  "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Viktor in the ADC slot, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool. 2026-11-08 user (playable mask, Q sweep read): role_verdict moved from Karthus-adc (ok = true, no longer a graded top at any sampled Q) to Zyra-adc (grade 87, r 0.13, the top at Q <= 0.05): would not play it, ok = false."
 }
