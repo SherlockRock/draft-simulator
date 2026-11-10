@@ -9,7 +9,9 @@
 //       pick:   absent = not answered | { blind?, current, mode, t },     value: id | [id, id] | null ("no view")
 //       labels: { <option id>: { blind?, current, mode, t, via? } },
 //       span:   { blind?: { first, last }, scored?: { first, last } },    wall-clock bounds of the changes made here
-//       revealedAt: null | <time>                                         set by the reveal (task 6) or the seed
+//       revealedAt: null | <time>                                         set by `revealDraft` or the seed
+//       note:   absent | { text, mode, t }                                the card's free-text note
+//       line:   absent | { option, line, ok, t }                          the line verdict on the reference #1 (scored only)
 //     } } }
 // `mode` and `t` are those of the last change (`t` null for a value seeded from the run). `blind` is the
 // value last written in blind mode and never moves afterwards, `current` is the last value in any mode:
@@ -121,14 +123,26 @@ function restoreState(data, text) {
         const span = {};
         for (const mode of ["blind", "scored"]) {
           const s = sp.span[mode];
-          if (isPlain(s) && typeof s.first === "string" && typeof s.last === "string") span[mode] = { first: s.first, last: s.last };
+          if (isPlain(s) && isUtc(s.first) && isUtc(s.last)) span[mode] = { first: s.first, last: s.last };
         }
         ps.span = span;
       }
-      if (typeof sp.revealedAt === "string") ps.revealedAt = sp.revealedAt;
+      if (isUtc(sp.revealedAt)) ps.revealedAt = sp.revealedAt;
+      if (isPlain(sp.note) && typeof sp.note.text === "string" && (sp.note.mode === "blind" || sp.note.mode === "scored") && isUtc(sp.note.t)) {
+        ps.note = { text: sp.note.text, mode: sp.note.mode, t: sp.note.t };
+      }
+      const ln = sp.line;
+      if (isPlain(ln) && known.has(ln.option) && typeof ln.line === "string" && typeof ln.ok === "boolean" && isUtc(ln.t)) {
+        ps.line = { option: ln.option, line: ln.line, ok: ln.ok, t: ln.t };
+      }
     }
   }
   return seed;
+}
+
+// ISO-8601 UTC with a Z, with or without a fraction: what the Rust loader accepts.
+function isUtc(text) {
+  return typeof text === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(text);
 }
 
 function isPlain(x) {
@@ -188,9 +202,10 @@ function labelMode(draft, state) {
   return draftRevealState(draft, state) === "revealed" ? "scored" : "blind";
 }
 
+// Wall-clock bounds of the changes made here, never a sum of durations. `last` never moves backwards.
 function touch(state, ps, mode, now) {
   const span = ps.span[mode];
-  ps.span[mode] = span ? { first: span.first, last: now } : { first: now, last: now };
+  ps.span[mode] = span ? { first: span.first, last: now > span.last ? now : span.last } : { first: now, last: now };
   state.rev += 1;
 }
 
@@ -387,15 +402,19 @@ function pickText(value, names) {
 
 // The action's champions first, in the action's own order, then the mover's other picks. A locked pick that
 // the arrangement places outside its pool listing is stated as moved, in the same neutral words as any other.
-function sideParts(option) {
+function orderedSide(option) {
   const acting = (c) => option.action.includes(c.champion);
   const own = option.side.filter(acting).sort((a, b) => option.action.indexOf(a.champion) - option.action.indexOf(b.champion));
   const rest = option.side.filter((c) => !acting(c));
-  return [...own, ...rest].map((c) => ({
+  return [...own, ...rest];
+}
+
+function sideParts(option) {
+  return orderedSide(option).map((c) => ({
     champion: c.champion,
     role: c.role,
     moved: c.locked && !c.in_pool,
-    acting: acting(c),
+    acting: option.action.includes(c.champion),
   }));
 }
 
@@ -412,4 +431,315 @@ function poolTag(option) {
   return option.side.every((c) => c.in_pool) ? "in" : "off";
 }
 
-export { BLIND_REACH, LABELS, blindRows, buildNameIndex, cardDone, cardRows, makeStorage, rowView, currentLabel, dn, draftRevealState, hash53, isPositionRevealed, labelMode, laterRows, newState, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, restoreState, samePick, setLabel, setPick, shuffleRows, sideParts, sideText, stageTwoOpen };
+// ---- the reveal (design section 3, stage 3) ----------------------------------------------------
+
+// One call: the reveal dates itself. Every card of the draft gets `revealedAt` and opens `span.scored` at `now`,
+// and `rev` rises once, so a reveal that changes nothing still exports a dated `scored` object on every card.
+// A draft that is not ready (a blind row unlabelled) throws; one that is already revealed is a no-op.
+function revealDraft(state, draft, now) {
+  const rs = draftRevealState(draft, state);
+  if (rs === "revealed") return false;
+  if (rs !== "ready") throw new Error("the " + draft.id + " draft still has blind rows to label");
+  for (const card of draft.cards) {
+    const ps = positionState(state, card.id);
+    ps.revealedAt = now;
+    const span = ps.span.scored;
+    ps.span.scored = span ? { first: span.first, last: now > span.last ? now : span.last } : { first: now, last: now };
+  }
+  state.rev += 1;
+  return true;
+}
+
+// The card's note: free text, recorded in the mode it was written in (it dates that mode's span).
+function setNote(state, draft, cardId, text, now) {
+  const card = draft.cards.find((c) => c.id === cardId);
+  if (!card) throw new Error("card " + cardId + " is not in draft " + draft.id);
+  const ps = positionState(state, cardId);
+  const next = text.trim();
+  if ((ps.note ? ps.note.text : "") === next) return false;
+  const mode = labelMode(draft, state);
+  ps.note = { text: next, mode, t: now };
+  touch(state, ps, mode, now);
+  return true;
+}
+
+// The line, as the run lists it: each turn's champion ids joined by "+", turns joined by " > ". Never re-sorted.
+function lineText(blob) {
+  return blob.line.map((turn) => turn.join("+")).join(" > ");
+}
+
+function stepText(step, names) {
+  const who = step.champions.map((c) => dn(names, c)).join(" + ");
+  if (step.kind === "ban") return step.side + " bans " + who;
+  const roles = step.placements.map((p) => p.role).join(", ");
+  return step.side + " picks " + who + (roles ? " (" + roles + ")" : "");
+}
+
+function referenceArmIndex(data) {
+  return data.run.arms.findIndex((a) => a.id === data.run.reference_arm);
+}
+
+// The reference arm's #1 for a card: its option, its line text (null when the line is empty, as at slot 19),
+// its steps. The first rank-1 entry when several tie. null when the arm has no usable reading.
+function referenceTop(data, card) {
+  const reading = card.readings.find((r) => r.arm === referenceArmIndex(data));
+  if (!reading || reading.partial || reading.error) return null;
+  const entry = reading.ranked.find((e) => e[1] === 1);
+  if (!entry) return null;
+  const blob = entry[9] >= 0 ? card.blobs[entry[9]] : null;
+  const line = blob && blob.line.length > 0 ? lineText(blob) : null;
+  return { option: card.options[entry[0]], line, steps: blob ? blob.line_steps : [] };
+}
+
+// The line verdict: after the reveal only, on the reference #1's line, never where there is no line.
+function setLineVerdict(state, data, draft, cardId, ok, now) {
+  const card = draft.cards.find((c) => c.id === cardId);
+  if (!card) throw new Error("card " + cardId + " is not in draft " + draft.id);
+  if (typeof ok !== "boolean") throw new Error("a line verdict is ok or bad");
+  if (draftRevealState(draft, state) !== "revealed") throw new Error("the line is shown, and judged, only after the reveal");
+  const top = referenceTop(data, card);
+  if (!top || top.line === null) throw new Error("there is no line to judge on " + cardId);
+  const ps = positionState(state, cardId);
+  if (ps.line && ps.line.option === top.option.id && ps.line.line === top.line && ps.line.ok === ok) return false;
+  ps.line = { option: top.option.id, line: top.line, ok, t: now };
+  touch(state, ps, "scored", now);
+  return true;
+}
+
+function armLabel(arm, referenceId) {
+  const base = arm.rule === "roster" ? "P " + arm.p + "  Q " + arm.q : "pool or roster";
+  return base + (arm.id === referenceId ? "  (reference)" : "");
+}
+
+function fixed(x, places) {
+  return x === null || x === undefined ? "n/a" : x.toFixed(places);
+}
+
+// Leaf flags in words: how the line ended and what each side's leaf was charged.
+function endsText(ends) {
+  const side = (name, feasible, off, grade) => name + " " + (feasible ? "" : "infeasible, ") + off + " off pool, grade " + grade;
+  return (ends.kind === "Complete" ? "complete draft" : "cut at the horizon") + " · " +
+    side("Blue", ends.blue_feasible, ends.blue_off_pool, ends.blue_grade) + " · " +
+    side("Red", ends.red_feasible, ends.red_off_pool, ends.red_grade);
+}
+
+// The whole side with what the engine charged for it: grade and r of every pick placed off its pool.
+function revealSideText(option, names) {
+  if (option.side.length === 0) return option.action.map((c) => dn(names, c)).join(" + ");
+  return orderedSide(option)
+    .map((c) => {
+      const moved = c.locked && !c.in_pool ? "moved to " : "";
+      const cost = c.in_pool ? "" : " [off pool, grade " + c.grade + ", r " + fixed(c.r, 2) + "]";
+      return dn(names, c.champion) + " " + moved + c.role + cost;
+    })
+    .join(" · ");
+}
+
+// The card's rows at one arm after the reveal: every row of the catalog (blind and later), the best in-pool
+// option always, and the arm's top K; ranked first, in rank order, then the rest. Only a row takes a label.
+function revealRows(data, card, armIdx) {
+  const reading = card.readings.find((r) => r.arm === armIdx);
+  if (!reading) return { rows: [], note: "No reading at this arm.", topValue: null };
+  if (reading.error) return { rows: [], note: "The search failed at this arm: " + reading.error, topValue: null };
+  if (reading.partial) return { rows: [], note: "The search was cut at this arm; the position is left out here.", topValue: null };
+  const byOption = new Map(reading.ranked.map((e) => [e[0], e]));
+  const top = reading.ranked.find((e) => e[1] === 1);
+  const topValue = top ? top[2] : null;
+  const bestIn = reading.best_in_pool ? reading.best_in_pool.option : null;
+  const picked = [];
+  card.options.forEach((o, i) => {
+    const e = byOption.get(i);
+    if (o.row !== null || (e && e[1] <= data.run.k) || i === bestIn) picked.push({ o, i, e });
+  });
+  picked.sort((a, b) => {
+    if (a.e && b.e) return a.e[1] - b.e[1] || (a.o.id < b.o.id ? -1 : a.o.id > b.o.id ? 1 : 0);
+    if (a.e) return -1;
+    if (b.e) return 1;
+    return a.o.id < b.o.id ? -1 : a.o.id > b.o.id ? 1 : 0;
+  });
+  // A near tie is read against #1: every row within the margin of it, #1 included only when another row is.
+  const within = (e) => Boolean(e) && topValue !== null && Math.abs(topValue - e[2]) <= data.run.margin + 1e-9;
+  const alone = picked.filter(({ e }) => within(e)).length < 2;
+  const rows = picked.map(({ o, i, e }) => {
+    const blob = e && e[9] >= 0 ? card.blobs[e[9]] : null;
+    return {
+      id: o.id,
+      option: o,
+      controls: o.row !== null,
+      rowKind: o.row,
+      rank: e ? e[1] : null,
+      value: e ? e[2] : null,
+      gainLogit: e ? e[3] : null,
+      gainPp: e ? e[4] : null,
+      cls: e ? data.classes[e[5]] : null,
+      dOff: e ? e[6] : null,
+      dGrade: e ? e[7] : null,
+      nearTie: !alone && within(e),
+      bestInPool: i === bestIn,
+      ends: blob && blob.ends ? endsText(blob.ends) : null,
+      line: blob && blob.line.length > 0 ? lineText(blob) : null,
+      steps: blob ? blob.line_steps.map((s) => stepText(s, data.names)) : [],
+      sideText: revealSideText(o, data.names),
+    };
+  });
+  return { rows, note: null, topValue };
+}
+
+// The own pick's place in the reference arm's whole ranking (design section 3): a rank, or "not ranked".
+function ownPickPlace(card, value) {
+  if (value === null || value === undefined) return null;
+  const hit = card.reference_ranking.find((e) => samePick(e[0], value));
+  return hit ? { rank: hit[1], value: hit[2] } : { rank: null, value: null };
+}
+
+function menuView(card, names) {
+  return Object.entries(card.menu).map(([role, items]) => ({
+    role,
+    items: items.map((m) => ({
+      champion: dn(names, m.champion),
+      status: m.status,
+      rank: m.best ? m.best.rank : null,
+      gainLogit: m.best ? m.best.gain_logit : null,
+      gainPp: m.best ? m.best.gain_pp : null,
+    })),
+  }));
+}
+
+// What the fixture already says about the position: the old report's verdicts, the review text, and each earlier
+// graded entry in one line (mode, when it finished, how many labels, the own pick, the note).
+function earlierView(card, names) {
+  const lg = card.legacy || {};
+  const legacy =
+    "Old report: off-pool verdict " + (lg.off_pool ? "leave the pool" : "stay in the pool") +
+    "; role verdict " + (lg.role_verdict ? JSON.stringify(lg.role_verdict) : "none") + ".";
+  const review = card.review ? "Review: " + card.review : "No review text.";
+  const entries = card.seed.verdicts.map((e) => {
+    const parts = [e.mode, "finished " + e.finished, Object.keys(e.labels || {}).length + " label" + (Object.keys(e.labels || {}).length === 1 ? "" : "s")];
+    if (Object.prototype.hasOwnProperty.call(e, "would_pick")) parts.push("own pick: " + pickText(e.would_pick, names));
+    if (e.line) parts.push("line verdict " + (e.line.ok ? "ok" : "bad"));
+    if (e.note) parts.push("note: " + e.note);
+    return parts.join(" · ");
+  });
+  return { legacy, review, entries };
+}
+
+// A note for the card when the depth check did not hold; null when it held or was not run.
+function depthNote(card, names) {
+  const d = card.depth_check;
+  if (!d || d.stable) return null;
+  const top3 = d.top_3.map((a) => a.map((c) => dn(names, c)).join(" + ")).join(" | ");
+  return "One ply deeper (horizon " + d.horizon + ") the #1 " + (d.same_first ? "held" : "changed") + " and the top 3 " + (d.same_top_3 ? "held" : "changed") + ". Deeper top 3: " + top3 + ". Read a clear never on this card with care.";
+}
+
+// The blind rows are counted in `progress`; the rows that only come after the reveal are counted here.
+function laterProgress(data, state) {
+  let done = 0;
+  let total = 0;
+  for (const draft of data.drafts) {
+    for (const card of draft.cards) {
+      const ps = positionState(state, card.id);
+      const rows = laterRows(card);
+      total += rows.length;
+      done += rows.filter((o) => ps.labels[o.id] !== undefined).length;
+    }
+  }
+  return { done, total };
+}
+
+// ---- the export (design section 3: tier-b-verdicts/1) ------------------------------------------
+
+function pickToExport(card, value, names) {
+  if (value === null) return { value: null };
+  const ids = Array.isArray(value) ? value : [value];
+  const problem = pickProblem(card, ids, names);
+  if (problem) return { problem };
+  return { value };
+}
+
+function checkUtc(text, what) {
+  if (!isUtc(text)) throw new Error(what + " is not an ISO-8601 UTC time: " + String(text));
+  return text;
+}
+
+// `data` is the page's data (assemblePageData's result: it holds the run's stamps and each card's `base`).
+// The export is the page's whole state at `rev`, so the newest export supersedes the rest; a position with
+// nothing recorded on this page is left out. An own pick the loader would refuse (a half pair, a duplicate, an
+// unknown id, an array at a single root) is left out and named in `problems`. Option ids and the line text are
+// copied from the run, never built or re-sorted. The pre-set `via: "own-pick"` is an ordinary label here.
+function exportWithProblems(state, data) {
+  const stamps = data.run.data || {};
+  for (const key of ["fm_version", "positions_patch"]) {
+    if (typeof stamps[key] !== "string" || stamps[key] === "") throw new Error("the run carries no " + key + ": an export without it would be refused by the loader");
+  }
+  const problems = [];
+  const positions = {};
+  for (const draft of data.drafts) {
+    for (const card of draft.cards) {
+      // No option is judged at a ban root: the loader warns and does not read `verdicts` there.
+      if (card.kind === "ban") continue;
+      const ps = positionState(state, card.id);
+      const blind = ps.span.blind;
+      const scored = ps.span.scored;
+      // A change made here in a mode that has no valid span (restored storage with a bad time) cannot be dated.
+      // The position is refused by name, whole, rather than exported half: apply would otherwise never hear of it.
+      const changeModes = new Set();
+      for (const rec of Object.values(ps.labels)) if (rec.mode) changeModes.add(rec.mode);
+      if (ps.pick && ps.pick.mode) changeModes.add(ps.pick.mode);
+      if (ps.note) changeModes.add(ps.note.mode);
+      if (ps.line) changeModes.add("scored");
+      const undated = [...changeModes].filter((m) => !ps.span[m]);
+      if (undated.length > 0) {
+        problems.push(card.id + ": not exported: changes in " + undated.join(" and ") + " mode have no valid start and end time (the stored state was damaged)");
+        continue;
+      }
+      if (!blind && !scored) continue;
+      const out = { base: card.base };
+      if (blind) {
+        const b = { started: checkUtc(blind.first, "blind.started"), finished: checkUtc(blind.last, "blind.finished") };
+        if (ps.pick && ps.pick.blind !== undefined) {
+          const p = pickToExport(card, ps.pick.blind, data.names);
+          if (p.problem) problems.push(card.id + ": own pick not exported: " + p.problem);
+          else b.would_pick = p.value;
+        }
+        b.labels = {};
+        for (const o of card.options) {
+          const rec = ps.labels[o.id];
+          if (rec && rec.blind !== undefined) b.labels[o.id] = rec.blind;
+        }
+        out.blind = b;
+      }
+      out.revealed = Boolean(scored);
+      if (scored) {
+        const s = { started: checkUtc(scored.first, "scored.started"), finished: checkUtc(scored.last, "scored.finished") };
+        if (ps.pick && ps.pick.mode === "scored") {
+          const p = pickToExport(card, ps.pick.current, data.names);
+          if (p.problem) problems.push(card.id + ": own pick not exported: " + p.problem);
+          else s.would_pick = p.value;
+        }
+        s.labels = {};
+        for (const o of card.options) {
+          const rec = ps.labels[o.id];
+          if (rec && rec.mode === "scored") s.labels[o.id] = rec.current;
+        }
+        if (ps.line) s.line = { option: ps.line.option, line: ps.line.line, ok: ps.line.ok };
+        out.scored = s;
+      }
+      if (ps.note && ps.note.text !== "") out.note = ps.note.text;
+      positions[card.id] = out;
+    }
+  }
+  const exported = {
+    schema: "tier-b-verdicts/1",
+    run: data.run.id,
+    rev: state.rev,
+    data: { fm_version: stamps.fm_version, positions_patch: stamps.positions_patch },
+    positions,
+  };
+  return { exported, problems };
+}
+
+function buildExport(state, data) {
+  return exportWithProblems(state, data).exported;
+}
+
+export { BLIND_REACH, LABELS, armLabel, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen };

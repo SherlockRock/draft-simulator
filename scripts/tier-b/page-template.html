@@ -94,6 +94,28 @@ section.draft{margin-top:26px}
 .seg button .k{font-size:10px;opacity:.6;margin-right:4px}
 @media(max-width:460px){.o{grid-template-columns:minmax(0,1fr)}}
 .dfoot{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:flex-end;color:var(--muted)}
+.armsel{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}
+.armsel[hidden]{display:none}
+.armsel select{font:inherit;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+#export-box{display:block;width:100%;min-height:120px;margin-top:8px;font:12px/1.3 ui-monospace,Consolas,monospace;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+#export-box[hidden]{display:none}
+.o .meta{grid-column:1/-1;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
+.o .meta b{color:var(--fg)}
+.o.rv{border-left:4px solid transparent}
+.o.near{border-left-color:var(--gold);background:var(--gold-soft)}
+.o.ro{background:var(--panel2);opacity:.9}
+.bdg{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:3px;padding:1px 4px;line-height:1.2;display:inline-block;margin-left:6px;vertical-align:1px;border:1px solid var(--muted);color:var(--muted)}
+.bdg.tie{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
+.bdg.bip{border-color:var(--good);color:var(--good)}
+.bdg.late{border-color:var(--blue);color:var(--blue)}
+.facts{display:flex;flex-direction:column;gap:3px;font-size:13px;margin:6px 0}
+.facts .warn{background:var(--need-soft);color:var(--need);border:1px solid var(--need);border-radius:6px;padding:4px 8px}
+details.more{margin-top:8px;font-size:13px}
+details.more summary{cursor:pointer;font-weight:600}
+details.more table{border-collapse:collapse;margin-top:4px;font-variant-numeric:tabular-nums}
+details.more td,details.more th{padding:2px 8px;text-align:left;border-bottom:1px solid var(--line)}
+.lineverdict{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px;display:flex;flex-direction:column;gap:4px}
+.cardnote{width:100%;min-height:48px;margin-top:6px;font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px}
 </style>
 </head>
 <body>
@@ -107,10 +129,13 @@ section.draft{margin-top:26px}
     <span class="notice" id="storage-notice" hidden></span>
     <span class="notice" id="load-errors" hidden></span>
     <span class="note">keys 1 2 3 = play, maybe, never</span>
-    <button class="btn" type="button" id="copy" disabled title="The export arrives with the reveal.">Copy verdicts</button>
-    <button class="btn ghost" type="button" id="download" disabled title="The export arrives with the reveal.">Download</button>
+    <label class="armsel" id="armwrap" hidden>arm <select id="arm"></select></label>
+    <span class="note" id="export-msg"></span>
+    <button class="btn" type="button" id="copy" disabled title="Nothing to export yet.">Copy verdicts</button>
+    <button class="btn ghost" type="button" id="download" disabled title="Nothing to export yet.">Download</button>
   </div>
 </header>
+<div class="wrap"><textarea id="export-box" readonly hidden aria-label="Verdicts export"></textarea></div>
 <main id="root"></main>
 </div>
 <script id="page-data" type="application/json">@@DATA@@</script>
@@ -232,22 +257,8 @@ function poolBlock(card) {
 }
 
 // ---- stage 1: the own pick, before any engine row is on screen ----
-function stageOne(draft, card) {
-  const ps = state.positions[card.id];
-  const wrap = el("div", "stage");
-  wrap.appendChild(el("p", "lbl", "1. My " + (card.kind === "ban" ? "ban" : "pick")));
-  if (pickAnswered(ps)) {
-    const l = el("div", "locked");
-    l.appendChild(el("b", "", pickText(ps.pick.current, NAMES)));
-    const revealed = draftRevealState(draft, state) === "revealed";
-    l.appendChild(el("span", "note", revealed ? "given blind; locked until the reveal view" : "locked: given before any engine option was shown"));
-    wrap.appendChild(l);
-    return wrap;
-  }
-  if (draftRevealState(draft, state) === "revealed" || Object.keys(ps.labels).length > 0) {
-    wrap.appendChild(el("p", "note", "No own pick is recorded for this card."));
-    return wrap;
-  }
+// The pick form: one input at a single root, two at a pair root, and "No view".
+function pickForm(draft, card, wrap, afterReveal) {
   const n = card.kind === "pair" ? 2 : 1;
   const row = el("div", "pickrow");
   const inputs = [];
@@ -262,7 +273,7 @@ function stageOne(draft, card) {
     row.appendChild(inp);
   }
   const err = el("div", "perr", "");
-  const lock = el("button", "btn", "Lock my pick");
+  const lock = el("button", "btn", afterReveal ? "Record my pick" : "Lock my pick");
   lock.type = "button";
   const submit = () => {
     const ids = inputs.map((inp) => parseNameInput(inp.value, NAME_INDEX));
@@ -281,11 +292,61 @@ function stageOne(draft, card) {
   row.appendChild(nv);
   wrap.appendChild(row);
   wrap.appendChild(err);
-  wrap.appendChild(el("p", "note", "Once locked the pick cannot be changed before the reveal, and the options appear. Name it first: nothing from the engine is shown until you do."));
+  wrap.appendChild(el("p", "note", afterReveal
+    ? "Given now, after the options were shown: it is recorded as scored, not as a blind pick."
+    : "Once locked the pick cannot be changed before the reveal, and the options appear. Name it first: nothing from the engine is shown until you do."));
+}
+
+function stageOne(draft, card) {
+  const ps = state.positions[card.id];
+  const wrap = el("div", "stage");
+  wrap.appendChild(el("p", "lbl", "1. My " + (card.kind === "ban" ? "ban" : "pick")));
+  const revealed = draftRevealState(draft, state) === "revealed";
+  if (pickAnswered(ps)) {
+    const l = el("div", "locked");
+    l.appendChild(el("b", "", pickText(ps.pick.current, NAMES)));
+    const text = !revealed
+      ? "locked: given before any engine option was shown"
+      : ps.pick.blind !== undefined ? "given blind; a change now is recorded as scored" : "given after the options were shown (scored)";
+    l.appendChild(el("span", "note", text));
+    wrap.appendChild(l);
+    if (revealed) pickForm(draft, card, wrap, true);
+    return wrap;
+  }
+  if (revealed) {
+    wrap.appendChild(el("p", "note", "No own pick was recorded for this card. One can still be given now."));
+    pickForm(draft, card, wrap, true);
+    return wrap;
+  }
+  if (Object.keys(ps.labels).length > 0) {
+    wrap.appendChild(el("p", "note", "No own pick is recorded for this card."));
+    return wrap;
+  }
+  pickForm(draft, card, wrap, false);
   return wrap;
 }
 
 // ---- stage 2: the card's blind rows, shuffled, no scores ----
+// The three-way control of a labelled row, shared by the blind rows and the revealed ones.
+function segFor(draft, card, option, idx, wordsText) {
+  const cur = currentLabel(state, card.id, option.id);
+  const seg = el("div", "seg");
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "Label for " + wordsText);
+  LABELS.forEach((lab, i) => {
+    const b = el("button", "");
+    b.type = "button";
+    b.appendChild(el("span", "k", String(i + 1)));
+    b.appendChild(document.createTextNode(lab));
+    b.setAttribute("aria-pressed", String(cur === lab));
+    b.tabIndex = -1;
+    b.onclick = () => labelRow(draft, card, option, lab, idx, false);
+    seg.appendChild(b);
+  });
+  return seg;
+}
+// The rows of each card that take a label, in the order they are drawn: what keys 1/2/3 and "advance" walk.
+const ROWLIST = new Map();
 function optionRow(draft, card, option, idx) {
   const ps = state.positions[card.id];
   const cur = currentLabel(state, card.id, option.id);
@@ -302,30 +363,18 @@ function optionRow(draft, card, option, idx) {
   if (view.tag) words.appendChild(el("span", "tag " + view.tag, view.tag === "in" ? "in pool" : "off pool"));
   who.appendChild(words);
   r.appendChild(who);
-  const seg = el("div", "seg");
-  seg.setAttribute("role", "group");
-  seg.setAttribute("aria-label", "Label for " + view.text);
-  LABELS.forEach((lab, i) => {
-    const b = el("button", "");
-    b.type = "button";
-    b.appendChild(el("span", "k", String(i + 1)));
-    b.appendChild(document.createTextNode(lab));
-    b.setAttribute("aria-pressed", String(cur === lab));
-    b.tabIndex = -1;
-    b.onclick = () => labelRow(draft, card, option, lab, idx, false);
-    seg.appendChild(b);
-  });
-  r.appendChild(seg);
+  r.appendChild(segFor(draft, card, option, idx, view.text));
   if (ps.labels[option.id] && ps.labels[option.id].via === "own-pick") r.title = "Pre-set to play: this is your own pick.";
   return r;
 }
 function labelRow(draft, card, option, lab, idx, advance) {
   changed(() => setLabel(state, draft, card.id, option.id, lab, now()), card.id);
-  const focusAt = advance ? Math.min(idx + 1, cardRows(draft, card, state).length - 1) : idx;
+  const focusAt = advance ? Math.min(idx + 1, (ROWLIST.get(card.id) || []).length - 1) : idx;
   const target = document.querySelector('.o[data-card="' + CSS.escape(card.id) + '"][data-idx="' + focusAt + '"]');
   if (target) target.focus();
 }
 function stageTwo(draft, card, rows) {
+  ROWLIST.set(card.id, rows);
   const wrap = el("div", "stage");
   const ps = state.positions[card.id];
   const done = rows.filter((o) => ps.labels[o.id] !== undefined).length;
@@ -342,6 +391,177 @@ function slotText(card) {
   if (card.kind === "pair") return "pair, slots " + card.slot + "+" + (card.slot + 1);
   return (card.kind === "ban" ? "ban" : "single pick") + ", slot " + card.slot;
 }
+// ---- stage 3: the reveal, per draft and one way ----
+let viewArm = referenceArmIndex(DATA);
+const f2 = (x) => (x === null || x === undefined ? "n/a" : x.toFixed(2));
+const f3 = (x) => (x === null || x === undefined ? "n/a" : x.toFixed(3));
+const f4 = (x) => (x === null || x === undefined ? "n/a" : x.toFixed(4));
+
+function fact(text, cls) {
+  return el("div", cls || "", text);
+}
+function badge(text, cls) {
+  return el("span", "bdg " + cls, text);
+}
+
+function ownPickFacts(card, ps) {
+  const out = [];
+  if (!pickAnswered(ps)) {
+    out.push(fact("My pick: none recorded."));
+  } else if (ps.pick.current === null) {
+    out.push(fact("My pick: no view."));
+  } else {
+    const place = ownPickPlace(card, ps.pick.current);
+    out.push(fact("My pick: " + pickText(ps.pick.current, NAMES) + " - " + (place.rank === null ? "not ranked" : "ranked #" + place.rank + " (value " + f4(place.value) + ")") + " at the reference arm."));
+  }
+  if (pickAnswered(ps) && ps.pick.blind !== undefined && !samePick(ps.pick.blind, ps.pick.current)) {
+    out.push(fact("Given blind: " + pickText(ps.pick.blind, NAMES) + "."));
+  }
+  if (card.actual_next && card.actual_next.length > 0) {
+    out.push(fact("Played next: " + card.actual_next.map(DN).join(" + ") + "."));
+  }
+  return out;
+}
+
+function revealRow(draft, card, rv, idx) {
+  const cur = currentLabel(state, card.id, rv.id);
+  const r = el("div", "o rv" + (cur ? " labelled" : "") + (rv.nearTie ? " near" : "") + (rv.controls ? "" : " ro"));
+  if (rv.controls) {
+    r.tabIndex = 0;
+    r.dataset.card = card.id;
+    r.dataset.idx = String(idx);
+  }
+  const who = el("div", "who2");
+  const ics = el("div", "ics");
+  for (const c of rv.option.action) ics.appendChild(icon(c));
+  who.appendChild(ics);
+  const words = el("div", "words", rv.sideText);
+  if (rv.rank !== null) words.appendChild(badge("#" + rv.rank, ""));
+  if (rv.nearTie) words.appendChild(badge("near tie with #1", "tie"));
+  if (rv.bestInPool) words.appendChild(badge("best in pool", "bip"));
+  if (rv.rowKind === "later") words.appendChild(badge("ranks 6-10: label now", "late"));
+  if (rv.rank === null) words.appendChild(badge("not ranked at this arm", ""));
+  who.appendChild(words);
+  r.appendChild(who);
+  if (rv.controls) r.appendChild(segFor(draft, card, rv.option, idx, rv.sideText));
+  const meta = el("div", "meta");
+  if (rv.rank !== null) {
+    meta.appendChild(el("span", "", "value " + f4(rv.value)));
+    meta.appendChild(el("span", "", "gain " + f3(rv.gainLogit) + " logit (" + f2(rv.gainPp) + " pp)"));
+    meta.appendChild(el("span", "", rv.cls + " - off-pool picks " + rv.dOff + ", grade " + rv.dGrade));
+  }
+  if (rv.line) meta.appendChild(el("span", "", "line: " + rv.line));
+  for (const s of rv.steps) meta.appendChild(el("span", "", s));
+  if (rv.ends) meta.appendChild(el("span", "", rv.ends));
+  r.appendChild(meta);
+  return r;
+}
+
+function lineBlock(draft, card) {
+  const top = referenceTop(DATA, card);
+  if (!top) return null;
+  const box = el("div", "lineverdict");
+  box.appendChild(el("p", "lbl", "Line of the reference #1"));
+  box.appendChild(el("div", "words", rowView(top.option, NAMES).text));
+  if (top.line === null) {
+    box.appendChild(el("p", "note", "No line at this slot: nothing to judge."));
+    return box;
+  }
+  box.appendChild(el("div", "note", "line: " + top.line));
+  for (const s of top.steps) box.appendChild(el("div", "note", stepText(s, NAMES)));
+  const ps = state.positions[card.id];
+  const seg = el("div", "seg");
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "Does the continuation read like a draft?");
+  for (const [text, ok] of [["ok", true], ["bad", false]]) {
+    const b = el("button", "", text);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(Boolean(ps.line) && ps.line.line === top.line && ps.line.ok === ok));
+    b.onclick = () => changed(() => setLineVerdict(state, DATA, draft, card.id, ok, now()), card.id);
+    seg.appendChild(b);
+  }
+  box.appendChild(el("p", "note", "Does the continuation read like a draft?"));
+  box.appendChild(seg);
+  return box;
+}
+
+function menuBlock(card) {
+  const d = el("details", "more");
+  d.appendChild(el("summary", "", "Pool menu at the reference arm"));
+  for (const m of menuView(card, NAMES)) {
+    const t = el("table", "");
+    const head = el("tr", "");
+    head.appendChild(el("th", "", m.role));
+    head.appendChild(el("th", "", "rank"));
+    head.appendChild(el("th", "", "gain"));
+    t.appendChild(head);
+    for (const it of m.items) {
+      const tr = el("tr", "");
+      tr.appendChild(el("td", "", it.champion + (it.status === "open" ? "" : " (" + it.status + ")")));
+      tr.appendChild(el("td", "", it.rank === null ? "-" : "#" + it.rank));
+      tr.appendChild(el("td", "", it.rank === null ? "-" : f3(it.gainLogit) + " logit (" + f2(it.gainPp) + " pp)"));
+      t.appendChild(tr);
+    }
+    d.appendChild(t);
+  }
+  return d;
+}
+
+function earlierBlock(card) {
+  const d = el("details", "more");
+  d.appendChild(el("summary", "", "Earlier verdicts and the review"));
+  const view = earlierView(card, NAMES);
+  d.appendChild(fact(view.legacy));
+  d.appendChild(fact(view.review));
+  d.appendChild(fact("Graded history in the fixture: " + (view.entries.length === 0 ? "none." : view.entries.length + " earlier entr" + (view.entries.length === 1 ? "y:" : "ies:"))));
+  for (const line of view.entries) d.appendChild(fact(line, "note"));
+  if (card.notes) d.appendChild(fact("Fixture notes: " + card.notes));
+  return d;
+}
+
+function revealStage(draft, card) {
+  const wrap = el("div", "stage");
+  const ps = state.positions[card.id];
+  const arm = DATA.run.arms[viewArm];
+  wrap.appendChild(el("p", "lbl", "3. Revealed - " + armLabel(arm, DATA.run.reference_arm)));
+  const facts = el("div", "facts");
+  const depth = depthNote(card, NAMES);
+  if (depth) facts.appendChild(fact(depth, "warn"));
+  for (const f of ownPickFacts(card, ps)) facts.appendChild(f);
+  for (const w of card.warnings) facts.appendChild(fact("Loader warning: " + w, "warn"));
+  wrap.appendChild(facts);
+  const view = revealRows(DATA, card, viewArm);
+  const labelled = [];
+  if (view.note) wrap.appendChild(el("p", "note", view.note));
+  const box = el("div", "opts");
+  view.rows.forEach((rv) => {
+    const idx = rv.controls ? labelled.length : -1;
+    if (rv.controls) labelled.push(rv.option);
+    box.appendChild(revealRow(draft, card, rv, idx));
+  });
+  ROWLIST.set(card.id, labelled);
+  wrap.appendChild(box);
+  wrap.appendChild(el("p", "note", "A label or pick changed now is recorded as scored. Rows within " + DATA.run.margin + " logit of #1 are marked as a near tie. Gain is over this arm's best in-pool option."));
+  const lb = lineBlock(draft, card);
+  if (lb) wrap.appendChild(lb);
+  wrap.appendChild(menuBlock(card));
+  wrap.appendChild(earlierBlock(card));
+  return wrap;
+}
+
+function noteBlock(draft, card) {
+  const wrap = el("div", "stage");
+  wrap.appendChild(el("p", "lbl", "Note on this position"));
+  const ta = el("textarea", "cardnote");
+  ta.value = state.positions[card.id].note ? state.positions[card.id].note.text : "";
+  ta.setAttribute("aria-label", "Note on " + card.id);
+  // The card is not rebuilt: the change fires on blur, often because a label button was pressed, and replacing
+  // the card then would swallow that click.
+  ta.addEventListener("change", () => changed(() => setNote(state, draft, card.id, ta.value, now()), card.id, false));
+  wrap.appendChild(ta);
+  return wrap;
+}
+
 function buildCard(draft, card, hideDone) {
   const mc = card.mover.toLowerCase();
   const done = cardDone(card, state);
@@ -357,8 +577,18 @@ function buildCard(draft, card, hideDone) {
   c.appendChild(bw);
   c.appendChild(poolBlock(card));
   c.appendChild(stageOne(draft, card));
-  const rows = cardRows(draft, card, state);
-  if (rows.length > 0) c.appendChild(stageTwo(draft, card, rows));
+  if (draftRevealState(draft, state) === "revealed") {
+    c.appendChild(revealStage(draft, card));
+    c.appendChild(noteBlock(draft, card));
+  } else {
+    const rows = cardRows(draft, card, state);
+    if (rows.length > 0) {
+      c.appendChild(stageTwo(draft, card, rows));
+      c.appendChild(noteBlock(draft, card));
+    } else {
+      ROWLIST.set(card.id, []);
+    }
+  }
   // The filter applies when it is toggled and on load, never to a card the reader is still working in.
   c.hidden = hideDone && done;
   return c;
@@ -374,19 +604,33 @@ function draftFoot(draft) {
   const f = el("div", "dfoot");
   const rs = draftRevealState(draft, state);
   const left = draft.cards.reduce((n, c) => n + blindRows(c).filter((o) => state.positions[c.id].labels[o.id] === undefined).length, 0);
-  const msg = rs === "revealed" ? "Revealed in an earlier sitting." : rs === "ready" ? "Every blind row of this draft is labelled." : left + " blind row" + (left === 1 ? "" : "s") + " left in this draft.";
+  const msg = rs === "revealed" ? "Revealed. Labels and picks changed now are recorded as scored." : rs === "ready" ? "Every blind row of this draft is labelled. The reveal is one way." : left + " blind row" + (left === 1 ? "" : "s") + " left in this draft.";
   f.appendChild(el("span", "", msg));
   const b = el("button", "btn", "Reveal the " + draft.title.replace(/ draft$/, "") + " draft");
   b.type = "button";
-  b.disabled = true;
-  b.title = rs === "ready" ? "The reveal view is not built yet." : "Label every blind row of this draft first.";
+  b.disabled = rs !== "ready";
+  b.title = rs === "ready" ? "Show the engine's scores for every card of this draft." : rs === "revealed" ? "Already revealed." : "Label every blind row of this draft first.";
+  b.onclick = () => {
+    let did = false;
+    try { did = revealDraft(state, draft, now()); } catch (e) { console.error(e); return; }
+    if (did) { persist(); render(); }
+  };
   f.appendChild(b);
   return f;
 }
 function updateHeader() {
   const p = progress(DATA, state);
-  document.getElementById("count-rows").textContent = p.blindDone + " / " + p.blindTotal + " blind";
+  const anyRevealed = DATA.drafts.some((d) => draftRevealState(d, state) === "revealed");
+  const later = laterProgress(DATA, state);
+  document.getElementById("count-rows").textContent = p.blindDone + " / " + p.blindTotal + " blind" + (anyRevealed ? " - " + later.done + " / " + later.total + " later" : "");
   document.getElementById("count-cards").textContent = p.cardsDone + " / " + p.cardsTotal + " cards";
+  document.getElementById("armwrap").hidden = !anyRevealed;
+  const has = state.rev > 0;
+  for (const id of ["copy", "download"]) {
+    const b = document.getElementById(id);
+    b.disabled = !has;
+    b.title = has ? "The page's whole state at rev " + state.rev + "; the newest export replaces the older ones." : "Nothing to export yet.";
+  }
 }
 const EL = new Map();
 function refresh(cardId) {
@@ -405,10 +649,10 @@ function refresh(cardId) {
   updateHeader();
 }
 // Run a state change; persist and redraw only when it recorded something.
-function changed(fn, cardId) {
+function changed(fn, cardId, rebuild = true) {
   let did = false;
   try { did = fn(); } catch (e) { console.error(e); return; }
-  if (did) { persist(); refresh(cardId); }
+  if (did) { persist(); if (rebuild) refresh(cardId); else updateHeader(); }
 }
 function render() {
   const root = document.getElementById("root");
@@ -447,11 +691,87 @@ document.addEventListener("keydown", (ev) => {
   const t = ev.target;
   if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
   const row = t instanceof Element ? t.closest(".o") : null;
-  if (!row) return;
-  ev.preventDefault();
+  if (!row || !row.dataset.card) return;
   const { draft, card } = CARDS.get(row.dataset.card);
   const idx = Number(row.dataset.idx);
-  labelRow(draft, card, cardRows(draft, card, state)[idx], lab, idx, true);
+  const option = (ROWLIST.get(card.id) || [])[idx];
+  if (!option) return;
+  ev.preventDefault();
+  labelRow(draft, card, option, lab, idx, true);
+});
+
+// ---- the arm selector, and the export ----
+(function armSelect() {
+  const sel = document.getElementById("arm");
+  DATA.run.arms.forEach((a, i) => {
+    const o = el("option", "", armLabel(a, DATA.run.reference_arm));
+    o.value = String(i);
+    sel.appendChild(o);
+  });
+  sel.value = String(viewArm);
+  sel.addEventListener("change", () => {
+    viewArm = Number(sel.value);
+    render();
+  });
+})();
+
+function setExportMessage(text) {
+  document.getElementById("export-msg").textContent = text;
+}
+// The whole state at the current rev. Problems (an own pick the loader would refuse) are shown, never exported.
+function currentExport() {
+  try {
+    const { exported, problems } = exportWithProblems(state, DATA);
+    return { text: JSON.stringify(exported, null, 2) + "\n", problems, rev: exported.rev };
+  } catch (e) {
+    setExportMessage("Export failed: " + e.message);
+    return null;
+  }
+}
+function problemSuffix(problems) {
+  return problems.length === 0 ? "" : " Left out: " + problems.join(" | ");
+}
+function showBox(text) {
+  const box = document.getElementById("export-box");
+  box.hidden = false;
+  box.value = text;
+  if (box.select) box.select();
+  return box;
+}
+document.getElementById("copy").addEventListener("click", () => {
+  const ex = currentExport();
+  if (!ex) return;
+  const ok = () => setExportMessage("Copied rev " + ex.rev + "." + problemSuffix(ex.problems));
+  const manual = () => {
+    showBox(ex.text);
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch (e) { copied = false; }
+    setExportMessage(copied ? "Copied rev " + ex.rev + "." + problemSuffix(ex.problems) : "The browser blocked copying: the text is selected below; copy it, or use Download." + problemSuffix(ex.problems));
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ex.text).then(ok, manual);
+    else manual();
+  } catch (e) {
+    manual();
+  }
+});
+document.getElementById("download").addEventListener("click", () => {
+  const ex = currentExport();
+  if (!ex) return;
+  try {
+    const url = URL.createObjectURL(new Blob([ex.text], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tier-b-verdicts-" + DATA.run.id.replace(/:/g, "") + "-rev" + ex.rev + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setExportMessage("Downloaded rev " + ex.rev + "." + problemSuffix(ex.problems));
+  } catch (e) {
+    showBox(ex.text);
+    setExportMessage("The download failed: the text is shown below." + problemSuffix(ex.problems));
+  }
 });
 document.getElementById("unfinished").addEventListener("change", () => {
   for (const [id, { card }] of EL) if (!id.startsWith("draft:")) card.hidden = cardDone(CARDS.get(id).card, state) && document.getElementById("unfinished").checked;

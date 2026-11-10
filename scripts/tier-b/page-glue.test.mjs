@@ -108,7 +108,7 @@ function makeDoc(dataJson) {
     return n;
   };
   const fixed = {};
-  for (const id of ["runline", "count-rows", "count-cards", "unfinished", "storage-notice", "load-errors", "root", "copy", "download"]) {
+  for (const id of ["runline", "count-rows", "count-cards", "unfinished", "storage-notice", "load-errors", "root", "copy", "download", "armwrap", "arm", "export-msg", "export-box"]) {
     fixed[id] = doc.createElement("div");
     fixed[id].id = id;
   }
@@ -313,3 +313,187 @@ test("a scored pick alone reveals the draft", () => {
 });
 
 import { draftRevealState as draftState } from "./review-logic.mjs";
+
+// ---- task 6: the reveal and the export in the page ----
+
+const C = "2026-10-04-supp-pinch-slot-19-kittens";
+const D = "2026-10-04-top-pinch-slot-19-kittens";
+const SUPP_CARDS = [A, B, C];
+const anyButton = (doc, text) => walk(doc.root, (n) => n.tag === "button" && n.textContent === text)[0];
+function labelCardViaDom(doc, id, labelIndex = 0) {
+  button(doc, id, "No view").onclick();
+  const n = rowsOf(doc, id).length;
+  for (let i = 0; i < n; i++) walk(rowsOf(doc, id)[i], (x) => x.tag === "button")[labelIndex].onclick();
+}
+function revealSupp(doc) {
+  for (const id of SUPP_CARDS) labelCardViaDom(doc, id);
+  const b = anyButton(doc, "Reveal the Support draft");
+  assert.equal(b.disabled, false, "enabled once every blind row of the draft is labelled");
+  b.onclick();
+}
+const textOf = (doc, id) => cardEl(doc, id).textContent;
+
+test("the reveal button stays disabled until every card of the draft is labelled; the reveal is per draft", () => {
+  const mem = memoryStorage();
+  const { doc } = loadPage({ localStorage: () => mem.api });
+  assert.equal(anyButton(doc, "Reveal the Support draft").disabled, true);
+  labelCardViaDom(doc, A);
+  labelCardViaDom(doc, B);
+  assert.equal(anyButton(doc, "Reveal the Support draft").disabled, true, "one card still open");
+  assert.equal(anyButton(doc, "Reveal the Top draft").disabled, true);
+  assert.equal(doc.fixed.copy.disabled, false, "something to export after the first change");
+});
+
+test("after the reveal the cards show rank, value, gain, line and the near-tie mark, the draft only", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  for (const id of SUPP_CARDS) {
+    const t = textOf(doc, id);
+    assert.match(t, /3\. Revealed/);
+    assert.match(t, /#1/);
+    assert.match(t, /value 0\.\d{4}/);
+    assert.match(t, /gain [-\d.]+ logit \([-\d.]+ pp\)/);
+    assert.match(t, /near tie with #1/);
+    assert.match(t, /My pick: no view/);
+    assert.match(t, /Pool menu at the reference arm/);
+    assert.match(t, /Earlier verdicts and the review/);
+    assert.equal(t.includes("2. Options (shuffled, no scores)"), false, "the shuffled blind list is replaced");
+  }
+  assert.equal(textOf(doc, D).includes("3. Revealed"), false, "the top draft is still blind");
+  assert.equal(doc.fixed.armwrap.hidden, false);
+  assert.match(doc.fixed["count-rows"].textContent, /later/);
+  // rows are in rank order
+  const ranks = rowsOf(doc, A).map((r) => {
+    const badge = walk(r, (n) => n.classList.contains("bdg") && /^#\d+$/.test(n.textContent))[0];
+    return badge ? Number(badge.textContent.slice(1)) : 99;
+  });
+  assert.ok(ranks.length > 2 && ranks[0] === 1);
+  assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
+  // a pair card's ranks-6-10 row is offered for a label
+  assert.match(textOf(doc, A), /ranks 6-10: label now/);
+  const n = data.drafts.find((d) => d.id === "supp").cards.length;
+  assert.equal(n, 3);
+});
+
+test("a label changed after the reveal is stored as scored; keys 1/2/3 work on the revealed rows and walk the labelled rows only", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  const first = rowsOf(doc, B)[0];
+  assert.ok(first.dataset.idx === "0");
+  first.focus();
+  let prevented = false;
+  for (const h of doc.handlers.keydown) h({ key: "3", target: first, ctrlKey: false, metaKey: false, altKey: false, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  const stored = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  const recs = Object.values(stored.positions[B].labels);
+  assert.equal(recs.filter((r) => r.mode === "scored" && r.current === "never").length, 1);
+  assert.equal(recs.filter((r) => r.mode === "blind").length, recs.length - 1, "the others stay blind labels");
+});
+
+test("the line verdict is on the card after the reveal, as ok/bad buttons, and lands in scored", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  assert.match(textOf(doc, A), /Line of the reference #1/);
+  assert.match(textOf(doc, A), /line: /);
+  button(doc, A, "bad").onclick();
+  const bad = button(doc, A, "bad");
+  assert.equal(bad.attrs["aria-pressed"], "true");
+  const stored = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  assert.equal(stored.positions[A].line.ok, false);
+  assert.equal(typeof stored.positions[A].line.line, "string");
+});
+
+test("Copy verdicts puts the whole export in front of the user when the clipboard is unavailable, and it parses", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  for (const h of doc.fixed.copy.handlers.click) h();
+  const box = doc.fixed["export-box"];
+  assert.equal(box.hidden, false);
+  const x = JSON.parse(box.value);
+  assert.equal(x.schema, "tier-b-verdicts/1");
+  assert.equal(x.run, data.run.id);
+  assert.equal(x.positions[A].revealed, true);
+  assert.equal(typeof x.positions[A].scored.started, "string");
+  assert.equal(x.data.fm_version, data.run.data.fm_version);
+  assert.match(doc.fixed["export-msg"].textContent, /blocked copying/);
+});
+
+test("the arm selector redraws the revealed cards at the chosen arm", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  const sel = doc.fixed.arm;
+  assert.equal(sel.children.length, data.run.arms.length);
+  assert.match(textOf(doc, A), /\(reference\)/);
+  sel.value = "0";
+  for (const h of sel.handlers.change) h();
+  assert.match(textOf(doc, A), /pool or roster/);
+  assert.equal(textOf(doc, A).includes("(reference)"), false);
+});
+
+test("a card with no own pick in a revealed draft offers the pick form, recorded as scored", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  // answer every card's stage 1 and label, except that the pick of B is dropped from the stored state afterwards
+  revealSupp(doc);
+  const stored = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  delete stored.positions[B].pick;
+  mem.m.set("tier-b-review/" + data.run.id, JSON.stringify(stored));
+  const again = loadPage({ localStorage: () => mem.api });
+  assert.match(textOf(again.doc, B), /No own pick was recorded/);
+  assert.match(textOf(again.doc, B), /recorded as scored/);
+  walk(cardEl(again.doc, B), (n) => n.tag === "input").forEach((inp) => (inp.value = "Ashe"));
+  button(again.doc, B, "Record my pick").onclick();
+  const after = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  assert.equal(after.positions[B].pick.mode, "scored");
+  assert.equal(after.positions[B].pick.current, "Ashe");
+});
+
+test("a note box is on the card once its options are, and a note is stored", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  assert.equal(walk(cardEl(doc, B), (n) => n.tag === "textarea").length, 0, "nothing before the pick");
+  button(doc, B, "No view").onclick();
+  const ta = walk(cardEl(doc, B), (n) => n.tag === "textarea")[0];
+  ta.value = "Galio support is not this team.";
+  ta.handlers.change[0]();
+  const stored = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  assert.equal(stored.positions[B].note.text, "Galio support is not this team.");
+});
+
+// ---- task 6 fix round ----
+
+const inTree = (n) => {
+  for (let cur = n; cur.parent; cur = cur.parent) if (!cur.parent.children.includes(cur)) return false;
+  return true;
+};
+
+test("typing a note and then pressing a label button does not swallow the click: the note's change leaves the card in place", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  button(doc, B, "No view").onclick();
+  const ta = walk(cardEl(doc, B), (n) => n.tag === "textarea")[0];
+  const labelBtn = walk(rowsOf(doc, B)[0], (x) => x.tag === "button")[1]; // the button about to be pressed
+  ta.value = "typed, then blurred by the click";
+  ta.handlers.change[0](); // the blur
+  assert.equal(inTree(labelBtn), true, "the button is still the one on the page");
+  assert.equal(inTree(ta), true);
+  labelBtn.onclick();
+  const stored = JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+  assert.equal(stored.positions[B].note.text, "typed, then blurred by the click");
+  assert.equal(Object.values(stored.positions[B].labels)[0].current, "maybe");
+});
+
+test("the earlier-verdicts block shows each earlier entry, not a count", () => {
+  const mem = memoryStorage();
+  const { doc } = loadPage({ localStorage: () => mem.api });
+  const E = "2026-10-07-synth-dme-adc-pinch-slot-19";
+  const t = cardEl(doc, E).textContent;
+  assert.match(t, /Old report: off-pool verdict/);
+  assert.match(t, /blind · finished 2026-11-09T14:12:41Z · \d+ labels?/);
+  assert.match(t, /scored · finished /);
+});
