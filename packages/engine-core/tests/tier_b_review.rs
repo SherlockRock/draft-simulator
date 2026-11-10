@@ -19,11 +19,13 @@ use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{
     Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
-use engine_core::reference::tier_b_review::{run_review, EngineStamp, ReviewConfig, ReviewRun};
+use engine_core::reference::tier_b_review::{
+    draft_of, run_review, EngineStamp, ReviewConfig, ReviewRun,
+};
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
 /// `(id, positions, playable, shares)` per champion, as JSON list bodies; `""` leaves a field out.
@@ -1942,4 +1944,415 @@ fn line_steps_carry_the_side_and_kind_of_each_step() {
         assert!(steps_seen > 20, "{} steps", steps_seen);
     }
     assert!(first_bans > 20, "{first_bans} lines open with a ban");
+}
+
+// ---- Task 4: reference data, the depth check, the binary ---------------------------------------------
+
+/// The depth check's config: one roster arm at the reference price, narrow widths, depth check on.
+fn depth_config() -> ReviewConfig {
+    ReviewConfig {
+        ps: vec![0.1],
+        qs: vec![0.05],
+        shortlist: Shortlist {
+            singles: 10,
+            pairs: 20,
+            root_off_pool: 30,
+        },
+        depth_check: true,
+        ..review_config()
+    }
+}
+
+/// A real slot-16 fixture (read-only copy of `fixtures/tier-b/2026-09-29-ad-pinch-slot-16-kittens`).
+/// Measured (debug, widths 10/20/30, P 0.1 Q 0.05; about 7 s for the whole run): horizon 2 ranks Bard
+/// 0.3985, Zeri 0.4151, Janna 0.4861, Seraphine 0.5027; horizon 3 ranks Zeri, Bard, Ashe first. One more
+/// turn reaches another pick (F13), so both the #1 and the top-3 set move.
+fn deeper_fixture() -> Value {
+    review_data("depth/2026-09-29-ad-pinch-slot-16-kittens.json")
+}
+
+/// The slot-16 position's run under `depth_config`, computed once for the tests that read it (about 7 s).
+fn deeper_run() -> &'static Value {
+    static RUN: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    RUN.get_or_init(|| run_value(&[deeper_fixture()], &depth_config(), &live()))
+}
+
+fn names(v: &Value, what: &str) -> Vec<String> {
+    array(v, what)
+        .iter()
+        .map(|c| text(c, what).to_string())
+        .collect()
+}
+
+/// `draft` is the id's text between the date prefix and `-pinch` or `-slot-`, else the whole id.
+/// Kills: a draft that keeps the date; a missing fallback.
+#[test]
+fn draft_is_derived_from_the_id() {
+    for (id, draft) in [
+        ("2026-10-04-supp-pinch-slot-17-dme", "supp"),
+        ("2026-10-07-synth-dme-adc-pinch-slot-17", "synth-dme-adc"),
+        (
+            "2026-09-27-smoke-1-blue-first-pick",
+            "2026-09-27-smoke-1-blue-first-pick",
+        ),
+        ("2026-09-29-top-pinch-slot-19-kittens", "top"),
+        ("2026-10-04-supp-slot-17", "supp"),
+        ("labelled-position", "labelled-position"),
+        ("2026-10-04--slot-1", "2026-10-04--slot-1"),
+    ] {
+        assert_eq!(draft_of(id), draft, "{id}");
+    }
+    assert_eq!(base_run()["positions"][0]["draft"], "labelled-position");
+}
+
+/// One ply deeper moves the #1 and the top-3 set on a real slot-16 position: `stable` is false, and
+/// the readings agree with the two rankings recomputed here from `reference_ranking` and `top_3`.
+/// Kills: a depth check that searches the same horizon; `stable` that reads only the #1 or only the set.
+#[test]
+fn a_ranking_that_moves_one_ply_deeper_is_not_stable() {
+    let p = &deeper_run()["positions"][0];
+    let d = &p["depth_check"];
+    assert_eq!(d["horizon"], 3);
+    let shallow: Vec<Vec<String>> = array(&p["reference_ranking"], "reference_ranking")
+        .iter()
+        .take(3)
+        .map(|x| names(&x["action"], "action"))
+        .collect();
+    let deep: Vec<Vec<String>> = array(&d["top_3"], "top_3")
+        .iter()
+        .map(|a| names(a, "a top-3 action"))
+        .collect();
+    assert_eq!(shallow[0], ["Bard"]);
+    assert_eq!(deep[0], ["Zeri"]);
+    assert_eq!(d["same_first"], false);
+    let as_set = |l: &[Vec<String>]| l.iter().cloned().collect::<BTreeSet<Vec<String>>>();
+    assert_ne!(as_set(&shallow), as_set(&deep));
+    assert_eq!(d["same_top_3"], false);
+    assert_eq!(d["stable"], false);
+}
+
+/// A position the extra ply cannot change reads `stable: true` with nothing null; with the check off
+/// the key is absent; where every search is cut or fails every reading is `null` and `top_3` is empty.
+/// Kills: `null` read as stable or unstable; a depth check written when switched off; a panic on failure.
+#[test]
+fn the_depth_check_is_null_free_when_stable_absent_when_off_and_null_when_cut() {
+    let live = live();
+    // Slot 19: the last pick, nothing deeper to see.
+    let run = run_value(&[por_only_fixture()], &depth_config(), &live);
+    let d = &run["positions"][0]["depth_check"];
+    assert_eq!(d["horizon"], 3);
+    assert_eq!(d["stable"], true, "{d}");
+    assert_eq!(d["same_first"], true);
+    assert_eq!(d["same_top_3"], true);
+    assert_eq!(array(&d["top_3"], "top_3").len(), 3);
+
+    let off = ReviewConfig {
+        depth_check: false,
+        ..depth_config()
+    };
+    let run = run_value(&[por_only_fixture()], &off, &live);
+    assert!(!run["positions"][0]
+        .as_object()
+        .expect("a position")
+        .contains_key("depth_check"));
+    assert!(!base_run()["positions"][0]
+        .as_object()
+        .expect("a position")
+        .contains_key("depth_check"));
+
+    // A node budget of 1 fails every search; 1_000 cuts every one at depth 1 (partial).
+    for node_budget in [1, 1_000] {
+        let cut = ReviewConfig {
+            node_budget,
+            ..depth_config()
+        };
+        let run = run_value(&[labelled()], &cut, &live);
+        let d = &run["positions"][0]["depth_check"];
+        assert_eq!(d["horizon"], 3, "{node_budget}");
+        for key in ["stable", "same_first", "same_top_3"] {
+            assert!(d[key].is_null(), "{node_budget} {key}");
+        }
+        assert_eq!(d["top_3"], json!([]), "{node_budget}");
+    }
+}
+
+/// `open_roles` on the wire: the labelled position's Blue side (Rumble at top) leaves the other four
+/// open, in role order and in the role map's spelling.
+/// Kills: roles in the wrong order or spelling (`middle`, `bottom`).
+#[test]
+fn open_roles_go_out_in_role_order() {
+    let p = &base_run()["positions"][0];
+    assert_eq!(
+        p["open_roles"],
+        json!([["jungle", "mid", "adc", "support"]])
+    );
+}
+
+/// The menu at a pair root: the mover's pool for each open role; a champion the board took reads its
+/// status and no best; an open champion's best is an in-pool pair carrying it, in the catalog, at the
+/// reference arm's rank, and the arm's best in-pool option is the one with gain 0.
+/// Kills: a best that is not in-pool or does not carry the champion; a champion on the board read as
+/// open; a menu option missing from the catalog; the top role (Rumble locked there) offered as open.
+#[test]
+fn the_menu_reads_the_reference_arms_best_in_pool_pair_per_champion() {
+    let p = &base_run()["positions"][0];
+    let menu = check_menu(p, 20);
+    assert_eq!(
+        menu.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["adc", "jungle", "mid", "support"],
+        "the open roles only"
+    );
+
+    // The board's champions: Locke (Red's pick) in mid, Naafiri (banned) and Vi (Red's pick) in jungle.
+    let status = |role: &str, champion: &str| {
+        array(&menu[role], role)
+            .iter()
+            .find(|e| e["champion"] == champion)
+            .map(|e| e["status"].clone())
+    };
+    assert_eq!(status("mid", "Locke"), Some(json!("picked")));
+    assert_eq!(status("jungle", "Naafiri"), Some(json!("banned")));
+    assert_eq!(status("jungle", "Vi"), Some(json!("picked")));
+}
+
+/// The menu's rules on one position: every open champion's best is an in-pool action carrying it, in the
+/// catalog, with the reading's rank and gains, gains at most 0, and the arm's best in-pool option the
+/// only gain 0; a champion the board took has no best. Returns the menu.
+fn check_menu(p: &Value, min_open: usize) -> &serde_json::Map<String, Value> {
+    let menu = p["menu"].as_object().expect("menu");
+    let reference = reading(p, REFERENCE_ARM);
+    let best_in_pool = &reference["best_in_pool"];
+    let mut zero_gain = Vec::new();
+    let mut seen_open = 0;
+    for (role, entries) in menu {
+        for e in array(entries, role) {
+            let c = text(&e["champion"], "champion");
+            let status = text(&e["status"], "status");
+            if status != "open" {
+                assert!(e["best"].is_null(), "{role} {c} is {status}");
+                continue;
+            }
+            seen_open += 1;
+            let best = &e["best"];
+            let id = text(&best["option"], "best option");
+            let option = &p["options"][id];
+            assert!(option.is_object(), "{id} is in the catalog");
+            assert!(names(&option["action"], "action").iter().any(|a| a == c));
+            let x = ranked(reference)
+                .iter()
+                .find(|x| x["option"] == id)
+                .unwrap_or_else(|| panic!("{id} is read at the reference arm"));
+            assert_eq!(x["class"], "in-pool", "{id}");
+            assert_eq!(x["rank"], best["rank"], "{id}");
+            assert_eq!(x["gain_logit"], best["gain_logit"], "{id}");
+            assert_eq!(x["gain_pp"], best["gain_pp"], "{id}");
+            // Nothing in-pool that carries the champion is read above its best.
+            for y in ranked(reference) {
+                let carries = names(
+                    &p["options"][text(&y["option"], "option")]["action"],
+                    "action",
+                )
+                .iter()
+                .any(|a| a == c);
+                if carries && y["class"] == "in-pool" {
+                    assert!(
+                        y["rank"].as_u64() >= best["rank"].as_u64(),
+                        "{c}: {}",
+                        y["option"]
+                    );
+                }
+            }
+            let gain = number(&best["gain_logit"], "gain");
+            assert!(gain <= 0.0, "{id}");
+            if gain == 0.0 {
+                zero_gain.push(id);
+            }
+        }
+    }
+    assert!(seen_open >= min_open, "{seen_open} open champions");
+    assert!(!zero_gain.is_empty());
+    assert!(zero_gain.iter().all(|id| *id == best_in_pool["option"]));
+    menu
+}
+
+/// `reference_ranking` is the reference arm's whole list: as long as the search's ranked list, best
+/// first for the mover, ranks as 1 + the strictly better, and every option the reading carries is in it
+/// at the same rank and value.
+/// Kills: a truncated list; a list in another order; ranks that differ from the reading's.
+#[test]
+fn the_reference_ranking_is_complete_and_ordered() {
+    let p = &base_run()["positions"][0];
+    assert_eq!(p["mover"], "Blue");
+    let list = array(&p["reference_ranking"], "reference_ranking");
+    let reference = reading(p, REFERENCE_ARM);
+    assert_eq!(
+        list.len() as u64,
+        reference["searched"].as_u64().expect("searched")
+    );
+    assert!(list.len() > 100);
+    // Blue moves: best first is value descending, and a tie shares its rank.
+    let values: Vec<f64> = list.iter().map(|x| number(&x["value"], "value")).collect();
+    assert!(values.windows(2).all(|w| w[0] >= w[1]));
+    for (i, x) in list.iter().enumerate() {
+        let better = values.iter().filter(|v| **v > values[i]).count();
+        assert_eq!(x["rank"].as_u64(), Some(better as u64 + 1), "entry {i}");
+    }
+    for x in ranked(reference) {
+        let action = &p["options"][text(&x["option"], "option")]["action"];
+        let found = list
+            .iter()
+            .find(|l| &l["action"] == action)
+            .unwrap_or_else(|| panic!("{action} is in the reference ranking"));
+        assert_eq!(found["rank"], x["rank"]);
+        assert_eq!(found["value"], x["value"]);
+    }
+}
+
+/// A Red mover's reference ranking is best first for Red: values ascend.
+/// Kills: a sort that assumes Blue.
+#[test]
+fn a_red_movers_reference_ranking_ascends() {
+    let run = run_value(&[por_only_fixture()], &review_config(), &live());
+    let p = &run["positions"][0];
+    assert_eq!(p["mover"], "Red");
+    let list = array(&p["reference_ranking"], "reference_ranking");
+    assert!(list.len() > 5);
+    let values: Vec<f64> = list.iter().map(|x| number(&x["value"], "value")).collect();
+    assert!(values.windows(2).all(|w| w[0] <= w[1]));
+    assert_eq!(list[0]["rank"], 1);
+}
+
+/// The binary: a missing `TIER_B_JSON` is a usage error (exit 2) before any search; a run on a corpus
+/// directory writes the `ReviewRun` struct in its field order (not a sorted `Value`), with the depth
+/// check, and prints what it did.
+/// Kills: a run that starts without an output path; output keys sorted alphabetically.
+#[test]
+fn the_binary_writes_the_run_in_struct_order_and_refuses_no_output_path() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let refused = std::process::Command::new(exe)
+        .env_remove("TIER_B_JSON")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(refused.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("TIER_B_JSON"), "{stderr}");
+
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let out = std::env::temp_dir().join(format!("tier-b-review-bin-{}.json", std::process::id()));
+    let ran = std::process::Command::new(exe)
+        .env("TIER_B_JSON", &out)
+        .env("TIER_B_FIXTURES", &dir)
+        .env("TIER_B_P", "0.1")
+        .env("TIER_B_Q", "0.05")
+        .env("TIER_B_WIDTHS", "10,20,30")
+        .env("TIER_B_K", "3")
+        .env("TIER_B_JOBS", "2")
+        .env("TIER_B_RUN_ID", "2026-11-09T00:00:00Z")
+        .output()
+        .expect("the binary runs");
+    let stderr = String::from_utf8_lossy(&ran.stderr);
+    assert!(ran.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("1 positions, 2 arms, 0 load errors"),
+        "{stderr}"
+    );
+    let written = std::fs::read_to_string(&out).expect("the run JSON");
+    std::fs::remove_file(&out).expect("clean up");
+    assert!(written.ends_with("}\n"));
+    let at = |key: &str| {
+        written
+            .find(&format!("\n  \"{key}\""))
+            .unwrap_or_else(|| panic!("top-level key {key}"))
+    };
+    assert!(at("schema") < at("run"));
+    assert!(at("run") < at("positions"));
+    assert!(at("positions") < at("load_errors"));
+    let v: Value = serde_json::from_str(&written).expect("it is JSON");
+    assert_eq!(v["schema"], "tier-b-run/1");
+    assert_eq!(v["run"]["id"], "2026-11-09T00:00:00Z");
+    assert_eq!(v["run"]["search"]["jobs"], 2);
+    assert_eq!(v["run"]["data"]["positions_patch"], "16.19");
+    assert_eq!(v["run"]["k"], 3);
+    assert_eq!(
+        v["run"]["search"]["widths"],
+        json!({"singles": 10, "pairs": 20, "root_off_pool": 30})
+    );
+    assert_eq!(v["positions"][0]["depth_check"]["horizon"], 3);
+    assert_eq!(v["positions"][0]["draft"], "top");
+}
+
+/// A Red mover's menu (the slot-16 position, Red to pick one champion): the same rules as the Blue
+/// pair root, with gains signed for Red. Measured: Ashe's best is at rank 6 with gain -0.111 logit.
+/// Kills: `menu_of` signing the gain for Blue (every Red gain would read >= 0 and not match the
+/// reading's); a best that is any class rather than in-pool (here higher-ranked actions carrying a
+/// champion are off-pool).
+#[test]
+fn a_red_movers_menu_gains_are_mover_signed() {
+    let p = &deeper_run()["positions"][0];
+    assert_eq!(p["mover"], "Red");
+    let menu = check_menu(p, 5);
+    assert_eq!(
+        menu.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["adc", "support"]
+    );
+    let ashe = array(&menu["adc"], "adc")
+        .iter()
+        .find(|e| e["champion"] == "Ashe")
+        .expect("Ashe is in the adc pool");
+    assert_eq!(ashe["best"]["rank"], 6);
+    let gain = number(&ashe["best"]["gain_logit"], "gain");
+    assert!((gain + 0.111).abs() < 0.001, "{gain}");
+}
+
+/// A champion the fixture excludes reads `excluded` with no best (copy of the labelled position with
+/// Aphelios, in Blue's adc pool, excluded); the rest of the adc menu is unchanged in kind.
+/// Kills: the `excluded` branch of the board status read as open.
+#[test]
+fn an_excluded_champion_reads_excluded() {
+    let mut file = labelled();
+    file["exclusions"] = json!(["Aphelios"]);
+    let cfg = ReviewConfig {
+        depth_check: false,
+        ..depth_config()
+    };
+    let run = run_value(&[file], &cfg, &live());
+    let menu = &run["positions"][0]["menu"];
+    let adc = array(&menu["adc"], "adc");
+    let aphelios = adc
+        .iter()
+        .find(|e| e["champion"] == "Aphelios")
+        .expect("Aphelios is in the adc pool");
+    assert_eq!(aphelios["status"], "excluded");
+    assert!(aphelios["best"].is_null());
+    assert!(adc
+        .iter()
+        .any(|e| e["status"] == "open" && !e["best"].is_null()));
+}
+
+/// `TIER_B_JOBS=0` is one job, and the JSON records the jobs actually used.
+/// Kills: a stamped 0.
+#[test]
+fn zero_jobs_is_one_job() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let out = std::env::temp_dir().join(format!("tier-b-review-jobs-{}.json", std::process::id()));
+    let ran = std::process::Command::new(exe)
+        .env("TIER_B_JSON", &out)
+        .env("TIER_B_FIXTURES", &dir)
+        .env("TIER_B_P", "0.1")
+        .env("TIER_B_Q", "0.05")
+        .env("TIER_B_WIDTHS", "10,20,30")
+        .env("TIER_B_DEPTH_CHECK", "0")
+        .env("TIER_B_JOBS", "0")
+        .output()
+        .expect("the binary runs");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&out).expect("the run JSON"))
+        .expect("it is JSON");
+    std::fs::remove_file(&out).expect("clean up");
+    assert_eq!(v["run"]["search"]["jobs"], 1);
 }

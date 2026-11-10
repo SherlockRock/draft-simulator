@@ -12,7 +12,8 @@
 
 use super::entries::role_key;
 use super::feasibility::{
-    action_charge, arrangement, placements, FeasibilityMemo, FeasibilityRule, Price, SidePlacement,
+    action_charge, arrangement, open_roles, placements, FeasibilityMemo, FeasibilityRule, Price,
+    SidePlacement,
 };
 use super::live::LiveUniverse;
 use super::oracle::{Mode, OracleInput};
@@ -23,6 +24,7 @@ use super::universe::{ChampionIdx, Universe, DEFAULT_OFF_POOL_COST, DEFAULT_OFF_
 use crate::cancellation::CancelHandle;
 use crate::draft_state::{ActionType, Side};
 use crate::feasibility::ROLES;
+use crate::pools::Role;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -52,7 +54,7 @@ pub struct ReviewConfig {
     pub k: usize,
     pub margin: f64,
     pub jobs: usize,
-    /// Read by the depth check (Task 4); the runner proper does not use it.
+    /// Search the reference arm once more at `horizon + 1` and record per position whether it held.
     pub depth_check: bool,
     pub node_budget: u64,
     pub run_id: String,
@@ -338,19 +340,102 @@ pub struct Reading {
     pub ranked: Vec<RankedRead>,
 }
 
+/// The reference arm searched one ply deeper (design § 2). `stable` is the same #1 and the same top-3
+/// set by action; every reading is `null` where either search failed or was cut. `top_3` is the deeper
+/// search's top three, so the page can name what moved in.
+#[derive(Debug, Serialize)]
+pub struct DepthCheckWire {
+    pub horizon: usize,
+    pub stable: Option<bool>,
+    pub same_first: Option<bool>,
+    pub same_top_3: Option<bool>,
+    pub top_3: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RankedActionWire {
+    pub action: Vec<String>,
+    pub rank: usize,
+    pub value: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MenuBest {
+    pub option: String,
+    pub rank: usize,
+    pub gain_logit: Option<f64>,
+    pub gain_pp: Option<f64>,
+}
+
+/// One pool champion for an open role: `status` is `open`, or what the board did with it (`banned`,
+/// `picked`, `excluded`), and `best` is the best in-pool action carrying it at the reference arm
+/// (`null` where the board took it or no such action was ranked).
+#[derive(Debug, Serialize)]
+pub struct MenuEntry {
+    pub champion: String,
+    pub status: &'static str,
+    pub best: Option<MenuBest>,
+}
+
+/// The mover's pool per open role, in `ROLE_KEYS` order; a role that is not open is left out. Empty at
+/// a ban root, for a list-form side and for a side with no valid arrangement.
+#[derive(Debug, Default, Serialize)]
+pub struct MenuWire {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top: Option<Vec<MenuEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jungle: Option<Vec<MenuEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mid: Option<Vec<MenuEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adc: Option<Vec<MenuEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub support: Option<Vec<MenuEntry>>,
+}
+
+/// The id's text between the `YYYY-MM-DD-` prefix and `-pinch` or `-slot-` (`supp`, `top`,
+/// `synth-dme-adc`); the whole id when there is no date prefix, neither marker, or nothing between.
+pub fn draft_of(id: &str) -> String {
+    let b = id.as_bytes();
+    let dated = b.len() > 11
+        && b[..11].iter().enumerate().all(|(i, c)| match i {
+            4 | 7 | 10 => *c == b'-',
+            _ => c.is_ascii_digit(),
+        });
+    if !dated {
+        return id.to_string();
+    }
+    let rest = &id[11..];
+    match ["-pinch", "-slot-"]
+        .iter()
+        .filter_map(|m| rest.find(m))
+        .min()
+    {
+        Some(at) if at > 0 => rest[..at].to_string(),
+        _ => id.to_string(),
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct PositionRead {
     pub id: String,
+    pub draft: String,
     pub category: &'static str,
     pub notes: String,
     pub mover: String,
     pub slot: usize,
     pub kind: &'static str,
+    /// Absent when the run was made without the depth check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth_check: Option<DepthCheckWire>,
     pub board: Vec<BoardWire>,
     /// The fixture's `pools` as written (list or role map, authored order); `null` where absent.
     pub pools: serde_json::Value,
     pub exclusions: Vec<String>,
     pub actual_next: Option<Vec<String>>,
+    /// The role sets the mover's locked picks leave open (`open_roles`); empty for a list-form side AND
+    /// for a side with no valid arrangement: it does not say which.
+    pub open_roles: Vec<Vec<&'static str>>,
     pub warnings: Vec<String>,
     pub loader_notes: Vec<String>,
     pub review: String,
@@ -363,6 +448,10 @@ pub struct PositionRead {
     pub would_pick: PickPair,
     pub options: BTreeMap<String, OptionRead>,
     pub readings: Vec<Reading>,
+    /// The reference arm's whole ranking, best first: an own pick anywhere has a rank. Empty where that
+    /// search failed or was cut.
+    pub reference_ranking: Vec<RankedActionWire>,
+    pub menu: MenuWire,
 }
 
 // ---- the run ----------------------------------------------------------------------------------------
@@ -384,12 +473,31 @@ pub fn run_review(
     }
     let n_arms = arms.len();
     let searched = parallel_map(oks.len() * n_arms, cfg.jobs, |n| {
-        search_one(&oks[n / n_arms].fixture, arms[n % n_arms].kind, live, cfg)
+        search_one(
+            &oks[n / n_arms].fixture,
+            arms[n % n_arms].kind,
+            cfg.horizon,
+            live,
+            cfg,
+        )
+    });
+    // The depth check: the reference arm once more, one ply deeper, after the grid.
+    let deep = cfg.depth_check.then(|| {
+        parallel_map(oks.len(), cfg.jobs, |i| {
+            search_one(
+                &oks[i].fixture,
+                reference_kind(),
+                cfg.horizon + 1,
+                live,
+                cfg,
+            )
+        })
     });
     let positions = parallel_map(oks.len(), cfg.jobs, |i| {
         read_position(
             oks[i],
             &searched[i * n_arms..(i + 1) * n_arms],
+            deep.as_ref().map(|d| &d[i]),
             &arms,
             live,
             cfg,
@@ -473,6 +581,7 @@ struct Searched {
 fn search_one(
     fx: &TierBFixture,
     arm: ArmKind,
+    horizon: usize,
     live: &LiveUniverse,
     cfg: &ReviewConfig,
 ) -> Searched {
@@ -492,7 +601,7 @@ fn search_one(
                     pools: &fx.root.pools,
                     objective: u,
                     feasibility: arm.rule(),
-                    mode: Mode::Horizon(cfg.horizon),
+                    mode: Mode::Horizon(horizon),
                     epsilon: 1e-9,
                     off_pool_cost,
                     off_role_cost,
@@ -624,6 +733,88 @@ fn mover_sign(mover: Side) -> f64 {
     }
 }
 
+/// An option's gain over the arm's best in-pool option, mover-signed: in logits, and in win-probability
+/// points. `+ 0.0` turns a Red `-0.0` into `0.0`.
+fn gains(value: f64, best_in_pool: f64, mover: Side) -> (f64, f64) {
+    (
+        (value - best_in_pool) * mover_sign(mover) + 0.0,
+        (mover_win(value, mover) - mover_win(best_in_pool, mover)) * 100.0 + 0.0,
+    )
+}
+
+impl MenuWire {
+    fn set(&mut self, role: Role, entries: Vec<MenuEntry>) {
+        let slot = match role {
+            Role::Top => &mut self.top,
+            Role::Jungle => &mut self.jungle,
+            Role::Middle => &mut self.mid,
+            Role::Adc => &mut self.adc,
+            Role::Support => &mut self.support,
+        };
+        *slot = Some(entries);
+    }
+}
+
+/// The mover's pool for each open role, read from the reference arm's ranking (design § 2). Empty at a
+/// ban root, for a list-form side, and where no role is open.
+fn menu_of(
+    view: &ArmView<'_>,
+    position: &Position<'_>,
+    open: &[Vec<Role>],
+    pools: &Pools,
+    u: &Universe,
+) -> MenuWire {
+    let mut menu = MenuWire::default();
+    let Some(outcome) = view.searched.outcome.as_ref().ok().filter(|o| !o.partial) else {
+        return menu;
+    };
+    let Some(mover) = position.mover() else {
+        return menu;
+    };
+    let Some(tags) = pools.roles(mover) else {
+        return menu;
+    };
+    let best_in = view.best_in_pool.map(|i| outcome.ranked[i].value);
+    let mut memo = FeasibilityMemo::new(view.arm.kind.price(u));
+    for role in ROLES {
+        if !open.iter().any(|set| set.contains(&role)) {
+            continue;
+        }
+        let entries = tags
+            .for_role(role)
+            .iter()
+            .map(|c| {
+                let status = board_status(position, c);
+                let best = match (status, view.menu_best.get(&c)) {
+                    (None, Some(i)) => {
+                        let r = &outcome.ranked[*i];
+                        let side = arrangement(&mut memo, mover, position, pools, u, r.action);
+                        let key = OptionKey {
+                            action: r.action,
+                            comp: comp_of(&side),
+                        };
+                        let gain = best_in.map(|b| gains(r.value, b, mover));
+                        Some(MenuBest {
+                            option: key.id(u),
+                            rank: view.ranks[*i],
+                            gain_logit: gain.map(|g| g.0),
+                            gain_pp: gain.map(|g| g.1),
+                        })
+                    }
+                    _ => None,
+                };
+                MenuEntry {
+                    champion: u.id(c).to_string(),
+                    status: status.unwrap_or("open"),
+                    best,
+                }
+            })
+            .collect();
+        menu.set(role, entries);
+    }
+    menu
+}
+
 /// 1 + the number of strictly better values, as `tests/tier_b.rs` does: a tie reads as a tie. The list
 /// is best-first, so a run of equal values shares its first rank.
 fn ranks(values: &[f64]) -> Vec<usize> {
@@ -734,11 +925,71 @@ struct ArmView<'a> {
     ranks: Vec<usize>,
     /// Index into `ranked` of the first in-pool action, at a pick root.
     best_in_pool: Option<usize>,
+    /// Reference arm at a pick root only: per champion, the index into `ranked` of the best in-pool
+    /// action carrying it (what `menu` reads).
+    menu_best: HashMap<ChampionIdx, usize>,
+}
+
+/// `(same #1, same top-3 set, stable)` of two rankings, each best first with ties in canonical order (the
+/// search's order). The top 3 is the first three of the list, so a tie at #3 is resolved by that order,
+/// not reported. `stable` is both.
+fn same_top(a: &[Action], b: &[Action]) -> (bool, bool, bool) {
+    let top3 = |list: &[Action]| list.iter().take(3).copied().collect::<BTreeSet<Action>>();
+    let (first, set) = (a.first() == b.first(), top3(a) == top3(b));
+    (first, set, first && set)
+}
+
+/// The depth check's reading of one position: both searches whole, then the same #1 and the same
+/// top-3 set by action.
+fn depth_check_of(
+    base: &Searched,
+    deep: &Searched,
+    horizon: usize,
+    u: &Universe,
+) -> DepthCheckWire {
+    let whole = |s: &Searched| {
+        s.outcome
+            .as_ref()
+            .ok()
+            .filter(|o| !o.partial)
+            .map(|o| o.ranked.iter().map(|r| r.action).collect::<Vec<Action>>())
+    };
+    let (Some(a), Some(b)) = (whole(base), whole(deep)) else {
+        return DepthCheckWire {
+            horizon,
+            stable: None,
+            same_first: None,
+            same_top_3: None,
+            top_3: Vec::new(),
+        };
+    };
+    let (same_first, same_top_3, stable) = same_top(&a, &b);
+    DepthCheckWire {
+        horizon,
+        stable: Some(stable),
+        same_first: Some(same_first),
+        same_top_3: Some(same_top_3),
+        top_3: b.iter().take(3).map(|x| ids(*x, u)).collect(),
+    }
+}
+
+/// What the board did with a champion: `banned`, `picked`, `excluded` (taken but not on the board:
+/// the fixture's cross-game exclusions), or `None` where it is open.
+fn board_status(position: &Position<'_>, c: ChampionIdx) -> Option<&'static str> {
+    for e in position.entries() {
+        match e {
+            Entry::Ban(b) if *b == c => return Some("banned"),
+            Entry::Pick(p) if *p == c => return Some("picked"),
+            _ => {}
+        }
+    }
+    position.taken().contains(c).then_some("excluded")
 }
 
 fn read_position(
     loaded: &Loaded,
     searched: &[Searched],
+    deep: Option<&Searched>,
     arms: &[Arm],
     live: &LiveUniverse,
     cfg: &ReviewConfig,
@@ -765,6 +1016,7 @@ fn read_position(
     let mover_picks = position.picks(mover);
     let resolved = fx.resolved();
 
+    let reference_id = reference_kind().id();
     // One pass per arm over what the charge says: the in-pool ranking each arm's gains read from.
     let mut views: Vec<ArmView<'_>> = Vec::with_capacity(arms.len());
     let mut seeds: BTreeSet<Action> = BTreeSet::new();
@@ -774,6 +1026,7 @@ fn read_position(
             searched: s,
             ranks: Vec::new(),
             best_in_pool: None,
+            menu_best: HashMap::new(),
         };
         // A cut search (`partial`) leaves the position out at that arm (design § 2): no seeds, no
         // best in-pool, no rows, no `reach`; its reading is kept, flagged, with an empty `ranked`.
@@ -795,6 +1048,17 @@ fn read_position(
                     .position(|r| charge.of(r.action).is_in_pool());
                 if let Some(i) = view.best_in_pool {
                     seeds.insert(o.ranked[i].action);
+                }
+                // Every option `menu` references is in the catalog: seed each champion's best.
+                if arm.id == reference_id {
+                    for (i, r) in o.ranked.iter().enumerate() {
+                        if charge.of(r.action).is_in_pool() {
+                            for c in r.action.champions() {
+                                view.menu_best.entry(c).or_insert(i);
+                            }
+                        }
+                    }
+                    seeds.extend(view.menu_best.values().map(|i| o.ranked[*i].action));
                 }
             }
         }
@@ -856,7 +1120,6 @@ fn read_position(
         let mut trace_memo = FeasibilityMemo::new(price);
         let roster = matches!(arm.kind, ArmKind::Roster { .. });
         let margin = margin_len(outcome, cfg.margin);
-        let sign = mover_sign(mover);
         let best_in = view.best_in_pool.map(|i| &outcome.ranked[i]);
         let mut best_in_pool = None;
         let mut ranked_read = Vec::new();
@@ -905,10 +1168,10 @@ fn read_position(
                     value: r.value,
                 });
             }
-            // `+ 0.0` turns a Red `-0.0` into `0.0`.
-            let gain_logit = best_in.map(|b| (r.value - b.value) * sign + 0.0);
-            let gain_pp = best_in
-                .map(|b| (mover_win(r.value, mover) - mover_win(b.value, mover)) * 100.0 + 0.0);
+            let (gain_logit, gain_pp) = match best_in.map(|b| gains(r.value, b.value, mover)) {
+                Some((logit, pp)) => (Some(logit), Some(pp)),
+                None => (None, None),
+            };
             let steps = line_steps(&position, pools, u, &mut trace_memo, r);
             ranked_read.push(RankedRead {
                 option: id,
@@ -990,8 +1253,43 @@ fn read_position(
         })
         .collect();
 
+    let open = open_roles(mover, &position, pools, u);
+    let reference = views.iter().find(|v| v.arm.id == reference_id);
+    let reference_ranking = reference
+        .and_then(|v| {
+            let o = v.searched.outcome.as_ref().ok().filter(|o| !o.partial)?;
+            Some(
+                o.ranked
+                    .iter()
+                    .zip(&v.ranks)
+                    .map(|(r, rank)| RankedActionWire {
+                        action: ids(r.action, u),
+                        rank: *rank,
+                        value: r.value,
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    let menu = match reference {
+        Some(v) if pick_root => menu_of(v, &position, &open, pools, u),
+        _ => MenuWire::default(),
+    };
+    let depth_check = deep.and_then(|deep| {
+        let at = arms.iter().position(|a| a.id == reference_id)?;
+        Some(depth_check_of(&searched[at], deep, cfg.horizon + 1, u))
+    });
+
     PositionRead {
         id: fx.id.clone(),
+        draft: draft_of(&fx.id),
+        depth_check,
+        open_roles: open
+            .iter()
+            .map(|set| set.iter().map(|r| role_key(*r)).collect())
+            .collect(),
+        reference_ranking,
+        menu,
         category: category_name(fx.category),
         notes: fx.notes.clone(),
         mover: format!("{mover:?}"),
@@ -1048,8 +1346,39 @@ fn read_position(
 
 #[cfg(test)]
 mod tests {
-    use super::{parallel_map, rank_prefix, ranks};
+    use super::{parallel_map, rank_prefix, ranks, same_top};
+    use crate::reference::state::Action;
+    use crate::reference::universe::ChampionIdx;
     use std::time::Duration;
+
+    fn picks(ids: &[u8]) -> Vec<Action> {
+        ids.iter().map(|i| Action::Pick(ChampionIdx(*i))).collect()
+    }
+
+    /// `stable` is the same #1 AND the same top-3 set. Kills: `stable` reading only #1, only the set,
+    /// either (`||`); a set of 4; an order-sensitive set.
+    #[test]
+    fn the_depth_check_compares_the_first_and_the_top_three_set() {
+        let stable = |a: &[u8], b: &[u8]| same_top(&picks(a), &picks(b));
+        // Both hold, also with #2 and #3 swapped (a set, not an order).
+        assert_eq!(stable(&[1, 2, 3, 4], &[1, 3, 2, 4]), (true, true, true));
+        // #1 moved, the set the same: not stable.
+        assert_eq!(stable(&[1, 2, 3, 4], &[2, 1, 3, 4]), (false, true, false));
+        // #1 held, the set moved (4 in for 3): not stable.
+        assert_eq!(stable(&[1, 2, 3, 4], &[1, 2, 4, 3]), (true, false, false));
+        // A change only at #4 or below: stable (kills a set of 4).
+        assert_eq!(
+            stable(&[1, 2, 3, 4, 5], &[1, 2, 3, 5, 4]),
+            (true, true, true)
+        );
+        assert_eq!(stable(&[1, 2, 3, 4], &[1, 2, 3, 9]), (true, true, true));
+        // A tie at #3 is resolved by list order (canonical): a tie between 3 and 4 listed 3 first on one
+        // side and 4 first on the other reads as a moved set; the check does not report the tie.
+        assert_eq!(stable(&[1, 2, 3, 4], &[1, 2, 4, 3]), (true, false, false));
+        // Fewer than three: compared as they stand; empty lists agree.
+        assert_eq!(stable(&[1, 2], &[1, 2]), (true, true, true));
+        assert_eq!(stable(&[], &[]), (true, true, true));
+    }
 
     /// The first job sleeps longest, so with one worker per job the results complete in reverse index
     /// order; the output must still be in index order. Kills: results merged in completion order (the
