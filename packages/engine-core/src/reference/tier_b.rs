@@ -637,8 +637,23 @@ pub struct TierBFixture {
     /// Review-tool design § 1: the graded verdict history, in file order; fold with `resolved`.
     /// Empty at a ban root, where it is not read.
     pub verdicts: Vec<VerdictEntry>,
+    /// The file's `verdicts` entries exactly as written, all of them, also at a ban root where
+    /// `verdicts` is empty: what the run JSON echoes, and what `base` counts (apply's staleness check).
+    pub verdicts_raw: Vec<serde_json::Value>,
+    /// The file's `pools` as written (list or role map, authored order), `None` where absent: what the
+    /// run JSON echoes. `root.pools` is the resolved form.
+    pub pools_raw: Option<serde_json::Value>,
     pub capture: Option<serde_json::Value>,
     pub path: Option<PathBuf>,
+}
+
+/// A second, lenient read of the file for its `verdicts` and `pools`, kept as written.
+#[derive(Deserialize)]
+struct RawFields {
+    #[serde(default)]
+    verdicts: Vec<serde_json::Value>,
+    #[serde(default)]
+    pools: Option<serde_json::Value>,
 }
 
 /// A loaded fixture plus the non-fatal findings (data-version mismatches, an illegal `actual_next`)
@@ -722,6 +737,13 @@ impl TierBFixture {
 
     pub fn from_json(raw: &str, label: &str, live: &LiveUniverse) -> Result<Loaded, TierBError> {
         let file: TierBFile = serde_json::from_str(raw).map_err(|source| TierBError::Json {
+            label: label.to_string(),
+            source,
+        })?;
+        let RawFields {
+            verdicts: verdicts_raw,
+            pools: pools_raw,
+        } = serde_json::from_str::<RawFields>(raw).map_err(|source| TierBError::Json {
             label: label.to_string(),
             source,
         })?;
@@ -1042,6 +1064,8 @@ impl TierBFixture {
                 verdict: file.verdict,
                 role_verdict,
                 verdicts,
+                verdicts_raw,
+                pools_raw,
                 capture: file.capture,
                 path: None,
             },

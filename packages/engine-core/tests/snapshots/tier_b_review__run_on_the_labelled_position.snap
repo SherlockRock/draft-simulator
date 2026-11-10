@@ -1,0 +1,3503 @@
+---
+source: packages/engine-core/tests/tier_b_review.rs
+expression: text
+---
+{
+  "load_errors": [],
+  "positions": [
+    {
+      "actual_next": [
+        "Galio",
+        "MonkeyKing"
+      ],
+      "base": 2,
+      "board": [
+        {
+          "champion": "Zilean",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 0
+        },
+        {
+          "champion": "Qiyana",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 1
+        },
+        {
+          "champion": "Zaahen",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 2
+        },
+        {
+          "champion": "Naafiri",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 3
+        },
+        {
+          "champion": "Ivern",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 4
+        },
+        {
+          "champion": "Ambessa",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 5
+        },
+        {
+          "champion": "Rumble",
+          "kind": "pick",
+          "side": "Blue",
+          "slot": 6
+        },
+        {
+          "champion": "Vi",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 7
+        },
+        {
+          "champion": "Locke",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 8
+        }
+      ],
+      "category": "off-pool",
+      "exclusions": [],
+      "id": "labelled-position",
+      "kind": "pair",
+      "labels": {
+        "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": {
+          "current": "play"
+        },
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "blind": "play",
+          "current": "play"
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "blind": "never",
+          "current": "maybe"
+        }
+      },
+      "legacy": {
+        "off_pool": false,
+        "role_verdict": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "ok": true,
+          "roles": [
+            "mid",
+            "jungle"
+          ]
+        }
+      },
+      "loader_notes": [],
+      "mover": "Blue",
+      "notes": "TEST DATA for the Tier B review tool: a copy of 2026-10-04-ad-pinch-slot-9-dme (Blue pair at slot 9, Rumble already locked, role-map pools) carrying a role_verdict and two verdict entries. Not a real fixture; the labels are made up.",
+      "options": {
+        "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": {
+          "action": [
+            "Ahri",
+            "LeeSin"
+          ],
+          "comp": {
+            "jungle": "LeeSin",
+            "mid": "Ahri",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "reach": 218,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "LeeSin",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Galio"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 4,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Kayle"
+          ],
+          "comp": {
+            "mid": "Kayle",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 5,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Kayle",
+              "grade": 58,
+              "in_pool": false,
+              "locked": false,
+              "r": 0.42228739,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 2,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zyra"
+          ],
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 1,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona": {
+          "action": [
+            "Cassiopeia",
+            "Leona"
+          ],
+          "comp": {
+            "mid": "Cassiopeia",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 3,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Cassiopeia",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+Leona|top=Rumble,mid=Galio,support=Leona": {
+          "action": [
+            "Galio",
+            "Leona"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 5,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Galio",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "reach": 44,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona": {
+          "action": [
+            "Leona",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 1,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona": {
+          "action": [
+            "Leona",
+            "Zyra"
+          ],
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 3,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "action": [
+            "MonkeyKing",
+            "Syndra"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Syndra",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "reach": 147,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Syndra",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Shaco+Thresh|top=Rumble,jungle=Shaco,support=Thresh": {
+          "action": [
+            "Shaco",
+            "Thresh"
+          ],
+          "comp": {
+            "jungle": "Shaco",
+            "support": "Thresh",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 4,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Shaco",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Thresh",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Thresh+Zyra|top=Rumble,jungle=Zyra,support=Thresh": {
+          "action": [
+            "Thresh",
+            "Zyra"
+          ],
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Thresh",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "reach": 2,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Thresh",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        }
+      },
+      "pools": {
+        "blue": {
+          "adc": [
+            "Yunara",
+            "Ziggs",
+            "Aphelios",
+            "Ezreal",
+            "Kaisa",
+            "Kalista",
+            "Lucian",
+            "Zeri"
+          ],
+          "jungle": [
+            "Naafiri",
+            "Qiyana",
+            "LeeSin",
+            "JarvanIV",
+            "MonkeyKing",
+            "XinZhao",
+            "Vi",
+            "Shyvana"
+          ],
+          "mid": [
+            "Locke",
+            "Syndra",
+            "Nasus",
+            "Ahri",
+            "Galio",
+            "Cassiopeia",
+            "Orianna",
+            "Ryze"
+          ],
+          "support": [
+            "Bard",
+            "Alistar",
+            "Lulu",
+            "Milio",
+            "Nautilus",
+            "Nami",
+            "Leona",
+            "Renata"
+          ],
+          "top": [
+            "Rumble",
+            "Riven",
+            "Camille",
+            "Ambessa",
+            "KSante",
+            "Aurora",
+            "Zaahen",
+            "Yone"
+          ]
+        },
+        "red": {
+          "adc": [
+            "Ezreal",
+            "Caitlyn",
+            "Jhin",
+            "Jinx",
+            "Kaisa",
+            "Ashe",
+            "Sivir",
+            "Varus"
+          ],
+          "jungle": [
+            "JarvanIV",
+            "Ivern",
+            "Shyvana",
+            "XinZhao",
+            "Vi",
+            "MonkeyKing",
+            "Zaahen",
+            "Aatrox"
+          ],
+          "mid": [
+            "Zilean",
+            "Locke",
+            "Galio",
+            "Chogath",
+            "Orianna",
+            "Ryze",
+            "Syndra",
+            "Viktor"
+          ],
+          "support": [
+            "Bard",
+            "Neeko",
+            "Seraphine",
+            "Rakan",
+            "Amumu",
+            "Alistar",
+            "Braum",
+            "Nami"
+          ],
+          "top": [
+            "Sion",
+            "KSante",
+            "Zaahen",
+            "Ornn",
+            "DrMundo",
+            "Aatrox",
+            "Malphite",
+            "Renekton"
+          ]
+        }
+      },
+      "readings": [
+        {
+          "arm": "pool_or_roster",
+          "best_in_pool": {
+            "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "rank": 1,
+            "value": 0.10933166
+          },
+          "depth": 2,
+          "error": null,
+          "fan": 528,
+          "partial": false,
+          "ranked": [
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.0,
+              "gain_pp": 0.0,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.730572059,
+              "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+              "rank": 1,
+              "value": 0.10933166
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.007085941,
+              "gain_pp": -0.176653643,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.553918417,
+              "option": "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+              "rank": 2,
+              "value": 0.102245718
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.019383925,
+              "gain_pp": -0.483393567,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.247178492,
+              "option": "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+              "rank": 3,
+              "value": 0.089947735
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.021075266,
+              "gain_pp": -0.525593275,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.204978784,
+              "option": "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+              "rank": 4,
+              "value": 0.088256394
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.028499248,
+              "gain_pp": -0.710861361,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.019710698,
+              "option": "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+              "rank": 5,
+              "value": 0.080832412
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101504215,
+              "gain_pp": -2.534886952,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.195685108,
+              "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+              "rank": 31,
+              "value": 0.007827444
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.173182502,
+              "gain_pp": -4.326301024,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 48.404271035,
+              "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+              "rank": 95,
+              "value": -0.063850843
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.2341159,
+              "gain_pp": -5.846136383,
+              "line": [
+                [
+                  "Braum"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Braum",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Braum"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Braum",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 46.884435676,
+              "option": "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri",
+              "rank": 165,
+              "value": -0.12478424
+            }
+          ],
+          "searched": 382,
+          "top_set": 1
+        },
+        {
+          "arm": "roster:0.02:0",
+          "best_in_pool": {
+            "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "rank": 7,
+            "value": 0.10933166
+          },
+          "depth": 2,
+          "error": null,
+          "fan": 13366,
+          "partial": false,
+          "ranked": [
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.037714405,
+              "gain_pp": 0.938969874,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.669541934,
+              "option": "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+              "rank": 1,
+              "value": 0.147046065
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 2,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 2,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 52,
+                "red_off_pool": 1
+              },
+              "gain_logit": 0.016952708,
+              "gain_pp": 0.422348083,
+              "line": [
+                [
+                  "Karthus"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Karthus",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Karthus"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Karthus",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.152920143,
+              "option": "Thresh+Zyra|top=Rumble,jungle=Zyra,support=Thresh",
+              "rank": 2,
+              "value": 0.126284368
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": 0.012929691,
+              "gain_pp": 0.322160012,
+              "line": [
+                [
+                  "Zeri"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Zeri",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Zeri"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Zeri",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.052732071,
+              "option": "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona",
+              "rank": 3,
+              "value": 0.122261351
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 2,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 2,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.009086333,
+              "gain_pp": 0.226423118,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.956995177,
+              "option": "Shaco+Thresh|top=Rumble,jungle=Shaco,support=Thresh",
+              "rank": 4,
+              "value": 0.118417993
+            },
+            {
+              "class": "off-pool graded",
+              "d_grade": 58,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 58,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.007906455,
+              "gain_pp": 0.197028296,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.927600356,
+              "option": "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar",
+              "rank": 5,
+              "value": 0.117238114
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.0,
+              "gain_pp": 0.0,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.730572059,
+              "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+              "rank": 7,
+              "value": 0.10933166
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.007085941,
+              "gain_pp": -0.176653643,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.553918417,
+              "option": "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+              "rank": 11,
+              "value": 0.102245718
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 93,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.031962267,
+              "gain_pp": -0.797301521,
+              "line": [
+                [
+                  "Kassadin"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Kassadin",
+                  "role": "top"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Kassadin"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Kassadin",
+                      "role": "top"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.933270538,
+              "option": "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+              "rank": 24,
+              "value": 0.077369393
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.050388318,
+              "gain_pp": -1.25741501,
+              "line": [
+                [
+                  "Xayah"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Xayah",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Xayah"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Xayah",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.473157049,
+              "option": "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+              "rank": 43,
+              "value": 0.058943342
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.085155153,
+              "gain_pp": -2.126188824,
+              "line": [
+                [
+                  "Xayah"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Xayah",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Xayah"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Xayah",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.604383236,
+              "option": "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+              "rank": 78,
+              "value": 0.024176507
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101504215,
+              "gain_pp": -2.534886952,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.195685108,
+              "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+              "rank": 85,
+              "value": 0.007827444
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.173182502,
+              "gain_pp": -4.326301024,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 48.404271035,
+              "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+              "rank": 147,
+              "value": -0.063850843
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.2341159,
+              "gain_pp": -5.846136383,
+              "line": [
+                [
+                  "Braum"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Braum",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Braum"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Braum",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 46.884435676,
+              "option": "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri",
+              "rank": 218,
+              "value": -0.12478424
+            }
+          ],
+          "searched": 382,
+          "top_set": 1
+        },
+        {
+          "arm": "roster:0.1:0",
+          "best_in_pool": {
+            "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "rank": 1,
+            "value": 0.10933166
+          },
+          "depth": 2,
+          "error": null,
+          "fan": 13366,
+          "partial": false,
+          "ranked": [
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.0,
+              "gain_pp": 0.0,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.730572059,
+              "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+              "rank": 1,
+              "value": 0.10933166
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.007085941,
+              "gain_pp": -0.176653643,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.553918417,
+              "option": "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+              "rank": 2,
+              "value": 0.102245718
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.019383925,
+              "gain_pp": -0.483393567,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.247178492,
+              "option": "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+              "rank": 3,
+              "value": 0.089947735
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.021075266,
+              "gain_pp": -0.525593275,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.204978784,
+              "option": "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+              "rank": 4,
+              "value": 0.088256394
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.028499248,
+              "gain_pp": -0.710861361,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.019710698,
+              "option": "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+              "rank": 5,
+              "value": 0.080832412
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.042285595,
+              "gain_pp": -1.055048038,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.675524021,
+              "option": "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+              "rank": 9,
+              "value": 0.067046065
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.043872218,
+              "gain_pp": -1.094670121,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.635901939,
+              "option": "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona",
+              "rank": 10,
+              "value": 0.065459442
+            },
+            {
+              "class": "off-pool graded",
+              "d_grade": 58,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 58,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.072093545,
+              "gain_pp": -1.799726767,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.930845293,
+              "option": "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar",
+              "rank": 21,
+              "value": 0.037238114
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101504215,
+              "gain_pp": -2.534886952,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.195685108,
+              "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+              "rank": 49,
+              "value": 0.007827444
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.173182502,
+              "gain_pp": -4.326301024,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 48.404271035,
+              "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+              "rank": 155,
+              "value": -0.063850843
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.2341159,
+              "gain_pp": -5.846136383,
+              "line": [
+                [
+                  "Braum"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Braum",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Braum"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Braum",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 46.884435676,
+              "option": "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri",
+              "rank": 225,
+              "value": -0.12478424
+            }
+          ],
+          "searched": 382,
+          "top_set": 1
+        },
+        {
+          "arm": "roster:0.02:0.05",
+          "best_in_pool": {
+            "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "rank": 6,
+            "value": 0.10933166
+          },
+          "depth": 2,
+          "error": null,
+          "fan": 13366,
+          "partial": false,
+          "ranked": [
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.037714405,
+              "gain_pp": 0.938969874,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.669541934,
+              "option": "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+              "rank": 1,
+              "value": 0.147046065
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 2,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 2,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.020478128,
+              "gain_pp": 0.510123269,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.240695329,
+              "option": "Thresh+Zyra|top=Rumble,jungle=Zyra,support=Thresh",
+              "rank": 2,
+              "value": 0.129809787
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": 0.012929691,
+              "gain_pp": 0.322160012,
+              "line": [
+                [
+                  "Zeri"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Zeri",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Zeri"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Zeri",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 53.052732071,
+              "option": "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona",
+              "rank": 3,
+              "value": 0.122261351
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 2,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 2,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.009086333,
+              "gain_pp": 0.226423118,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.956995177,
+              "option": "Shaco+Thresh|top=Rumble,jungle=Shaco,support=Thresh",
+              "rank": 4,
+              "value": 0.118417993
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.0,
+              "gain_pp": 0.0,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.730572059,
+              "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+              "rank": 6,
+              "value": 0.10933166
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.007085941,
+              "gain_pp": -0.176653643,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.553918417,
+              "option": "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+              "rank": 9,
+              "value": 0.102245718
+            },
+            {
+              "class": "off-pool graded",
+              "d_grade": 58,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 58,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.021093545,
+              "gain_pp": -0.52604938,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.20452268,
+              "option": "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar",
+              "rank": 14,
+              "value": 0.088238114
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.025300771,
+              "gain_pp": -0.631035134,
+              "line": [
+                [
+                  "Janna"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Janna",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Janna"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Janna",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.099536925,
+              "option": "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+              "rank": 15,
+              "value": 0.084030889
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.050388318,
+              "gain_pp": -1.25741501,
+              "line": [
+                [
+                  "Xayah"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Xayah",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Xayah"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Xayah",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.473157049,
+              "option": "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+              "rank": 49,
+              "value": 0.058943342
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 1
+              },
+              "gain_logit": -0.085155153,
+              "gain_pp": -2.126188824,
+              "line": [
+                [
+                  "Xayah"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Xayah",
+                  "role": "adc"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Xayah"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Xayah",
+                      "role": "adc"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.604383236,
+              "option": "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+              "rank": 78,
+              "value": 0.024176507
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101504215,
+              "gain_pp": -2.534886952,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.195685108,
+              "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+              "rank": 85,
+              "value": 0.007827444
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.173182502,
+              "gain_pp": -4.326301024,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 48.404271035,
+              "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+              "rank": 147,
+              "value": -0.063850843
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.2341159,
+              "gain_pp": -5.846136383,
+              "line": [
+                [
+                  "Braum"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Braum",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Braum"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Braum",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 46.884435676,
+              "option": "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri",
+              "rank": 219,
+              "value": -0.12478424
+            }
+          ],
+          "searched": 382,
+          "top_set": 1
+        },
+        {
+          "arm": "roster:0.1:0.05",
+          "best_in_pool": {
+            "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "rank": 1,
+            "value": 0.10933166
+          },
+          "depth": 2,
+          "error": null,
+          "fan": 13366,
+          "partial": false,
+          "ranked": [
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": 0.0,
+              "gain_pp": 0.0,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.730572059,
+              "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+              "rank": 1,
+              "value": 0.10933166
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.007085941,
+              "gain_pp": -0.176653643,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.553918417,
+              "option": "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+              "rank": 2,
+              "value": 0.102245718
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.019383925,
+              "gain_pp": -0.483393567,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.247178492,
+              "option": "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+              "rank": 3,
+              "value": 0.089947735
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.021075266,
+              "gain_pp": -0.525593275,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.204978784,
+              "option": "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+              "rank": 4,
+              "value": 0.088256394
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.028499248,
+              "gain_pp": -0.710861361,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 52.019710698,
+              "option": "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+              "rank": 5,
+              "value": 0.080832412
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.042285595,
+              "gain_pp": -1.055048038,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.675524021,
+              "option": "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+              "rank": 9,
+              "value": 0.067046065
+            },
+            {
+              "class": "off-pool base",
+              "d_grade": 0,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.043872218,
+              "gain_pp": -1.094670121,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 51.635901939,
+              "option": "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona",
+              "rank": 10,
+              "value": 0.065459442
+            },
+            {
+              "class": "off-pool graded",
+              "d_grade": 58,
+              "d_off": 1,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 58,
+                "blue_off_pool": 1,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101093545,
+              "gain_pp": -2.524620369,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.205951691,
+              "option": "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar",
+              "rank": 43,
+              "value": 0.008238114
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.101504215,
+              "gain_pp": -2.534886952,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 50.195685108,
+              "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+              "rank": 44,
+              "value": 0.007827444
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.173182502,
+              "gain_pp": -4.326301024,
+              "line": [
+                [
+                  "Bard"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Bard",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Bard"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Bard",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 48.404271035,
+              "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+              "rank": 155,
+              "value": -0.063850843
+            },
+            {
+              "class": "in-pool",
+              "d_grade": 0,
+              "d_off": 0,
+              "ends": {
+                "blue_feasible": true,
+                "blue_grade": 0,
+                "blue_off_pool": 0,
+                "kind": "Horizon",
+                "red_feasible": true,
+                "red_grade": 0,
+                "red_off_pool": 0
+              },
+              "gain_logit": -0.2341159,
+              "gain_pp": -5.846136383,
+              "line": [
+                [
+                  "Braum"
+                ]
+              ],
+              "line_side": [
+                {
+                  "champion": "Braum",
+                  "role": "support"
+                }
+              ],
+              "line_steps": [
+                {
+                  "champions": [
+                    "Braum"
+                  ],
+                  "kind": "pick",
+                  "placements": [
+                    {
+                      "champion": "Braum",
+                      "role": "support"
+                    }
+                  ],
+                  "side": "Red"
+                }
+              ],
+              "mover_win_pct": 46.884435676,
+              "option": "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri",
+              "rank": 225,
+              "value": -0.12478424
+            }
+          ],
+          "searched": 382,
+          "top_set": 1
+        }
+      ],
+      "review": "2026-10-04 user (scored read, role maps): stay.",
+      "slot": 9,
+      "verdicts": [
+        {
+          "finished": "2026-11-09T14:12:41Z",
+          "fm_version": "fm-2026-09-01-6880daa",
+          "from": {
+            "rev": 17,
+            "run": "2026-11-09T14:03:22Z"
+          },
+          "labels": {
+            "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+            "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+          },
+          "mode": "blind",
+          "note": "Syndra mid is not this team.",
+          "positions_patch": "16.19",
+          "started": "2026-11-09T14:10:05Z",
+          "would_pick": [
+            "MonkeyKing",
+            "Galio"
+          ]
+        },
+        {
+          "finished": "2026-11-09T14:33:18Z",
+          "fm_version": "fm-2026-09-01-6880daa",
+          "from": {
+            "rev": 31,
+            "run": "2026-11-09T14:03:22Z"
+          },
+          "labels": {
+            "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": "play",
+            "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "maybe"
+          },
+          "line": {
+            "line": "Zyra",
+            "ok": false,
+            "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio"
+          },
+          "mode": "scored",
+          "positions_patch": "16.19",
+          "started": "2026-11-09T14:31:00Z"
+        }
+      ],
+      "warnings": [],
+      "would_pick": {
+        "blind": [
+          "Galio",
+          "MonkeyKing"
+        ],
+        "current": [
+          "Galio",
+          "MonkeyKing"
+        ]
+      }
+    }
+  ],
+  "run": {
+    "arms": [
+      {
+        "id": "pool_or_roster",
+        "rule": "pool_or_roster"
+      },
+      {
+        "id": "roster:0.02:0",
+        "p": 0.02,
+        "q": 0.0,
+        "rule": "roster"
+      },
+      {
+        "id": "roster:0.1:0",
+        "p": 0.1,
+        "q": 0.0,
+        "rule": "roster"
+      },
+      {
+        "id": "roster:0.02:0.05",
+        "p": 0.02,
+        "q": 0.05,
+        "rule": "roster"
+      },
+      {
+        "id": "roster:0.1:0.05",
+        "p": 0.1,
+        "q": 0.05,
+        "rule": "roster"
+      }
+    ],
+    "data": {
+      "fm_version": "fm-2026-09-01-6880daa",
+      "meta_version": "16.13.1",
+      "positions_patch": "16.19"
+    },
+    "engine": {
+      "commit": "test",
+      "dirty": false,
+      "name": "reference"
+    },
+    "id": "2026-11-09T00:00:00Z",
+    "k": 3,
+    "margin": 0.01,
+    "reference_arm": "roster:0.1:0.05",
+    "search": {
+      "horizon": 2,
+      "node_budget": 20000000,
+      "widths": {
+        "pairs": 40,
+        "root_off_pool": 60,
+        "singles": 20
+      }
+    }
+  },
+  "schema": "tier-b-run/1"
+}
