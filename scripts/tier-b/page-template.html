@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tier B review</title>
+<style>
+/* Tokens and layout follow the 2026-10-04 recalibration page; system fonts only, so it works offline. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --panel2:#e6ebf0; --fg:#14202b; --muted:#5b6b7a; --line:#cbd5de;
+  --blue:#0a7c8c; --blue-soft:#d3eef1; --red:#c2412d; --red-soft:#f8ddd7;
+  --gold:#a06b00; --gold-soft:#f6e6bf; --good:#1c7a45; --good-soft:#d6efe0; --need:#b45309; --need-soft:#fdebd0;
+  --font-display:"Arial Narrow","Segoe UI",system-ui,sans-serif; --font-body:system-ui,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1319; --panel:#151d26; --panel2:#1c2732; --fg:#e6edf3; --muted:#8fa1b2; --line:#2b3947;
+  --blue:#3cc4d6; --blue-soft:#123a42; --red:#ff7a63; --red-soft:#43201b;
+  --gold:#e8b445; --gold-soft:#3d2f0e; --good:#4fcf85; --good-soft:#12341f; --need:#f5a94a; --need-soft:#3d2a10; color-scheme:dark}}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.4;margin:0;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1240px;margin-inline:auto}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+h1{font-family:var(--font-display);font-size:24px;margin:0;letter-spacing:.02em;text-transform:uppercase;line-height:1.1}
+.sub{color:var(--muted);font-size:12px;margin:2px 0 0}
+.bar{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}
+.count{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600}
+.notice{background:var(--need-soft);color:var(--need);border:1px solid var(--need);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.55}
+button:focus-visible,input:focus-visible,.o:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.btn{background:var(--fg);color:var(--bg);border:0;border-radius:6px;padding:7px 14px;font-weight:600}
+.btn.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--line)}
+.filter{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}
+section.draft{margin-top:26px}
+.dhead{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--line);padding-bottom:4px}
+.dhead h2{font-family:var(--font-display);font-size:28px;text-transform:uppercase;letter-spacing:.04em;margin:0}
+.dprog{color:var(--muted);font-variant-numeric:tabular-nums;font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;margin-top:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card.blue{border-top:4px solid var(--blue)}.card.red{border-top:4px solid var(--red)}
+.card.done{opacity:.8}
+.card[hidden]{display:none}
+.chead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.chead h3{margin:0;font-family:var(--font-display);font-size:20px;letter-spacing:.02em;overflow-wrap:anywhere}
+.mover{font-weight:600;font-size:13px;padding:3px 9px;border-radius:99px}
+.mover.blue{background:var(--blue-soft);color:var(--blue)}.mover.red{background:var(--red-soft);color:var(--red)}
+.lbl{font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--muted);margin:0 0 5px;font-weight:700}
+.side{display:flex;flex-wrap:wrap;gap:3px 8px;align-items:flex-start;padding:4px 6px;border-radius:6px}
+.side.blue{background:var(--blue-soft)}.side.red{background:var(--red-soft)}
+.side .who{font-family:var(--font-display);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em;width:100%}
+.side.blue .who{color:var(--blue)}.side.red .who{color:var(--red)}
+.boards{display:flex;flex-direction:column;gap:4px}
+.row{display:flex;flex-wrap:wrap;gap:3px;align-items:flex-start;min-width:0}
+.sep{width:1px;align-self:stretch;background:var(--muted);opacity:.5;margin-inline:3px}
+.tile{width:42px;display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center}
+.tile .nm{font-size:9px;line-height:1.05;overflow-wrap:anywhere}
+.ic{display:block;width:30px;height:30px;border-radius:5px;object-fit:cover;background:var(--panel2)}
+.init{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);border:1px dashed var(--muted);font-size:12px}
+.tile.ban .ic{filter:grayscale(1) brightness(.75);opacity:.7}
+.tile.ban .nm{text-decoration:line-through;color:var(--muted)}
+.role{display:grid;grid-template-columns:62px 1fr;gap:6px;padding:5px 6px;border-radius:6px;background:var(--need-soft);outline:2px solid var(--need);align-items:start;margin-bottom:4px}
+.role .rn{font-family:var(--font-display);text-transform:uppercase;font-weight:700;letter-spacing:.06em;font-size:14px;padding-top:5px;color:var(--need)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.chip{display:flex;align-items:center;gap:5px;border-radius:6px;padding:2px 7px 2px 2px;border:1px solid var(--line);background:var(--panel);font-size:12px;font-weight:600;line-height:1.1;min-width:0}
+.chip .ic,.chip .init{width:24px;height:24px;border-radius:4px}
+.chip.av{border-color:var(--good)}.chip.av .st{color:var(--good)}
+.chip.bn{opacity:.55;background:var(--panel2);text-decoration:line-through;color:var(--muted)}
+.chip.bn .ic{filter:grayscale(1)}
+.chip.us{background:var(--gold-soft);border-color:var(--gold);color:var(--gold);border-style:dashed}
+.chip.th{background:var(--panel2);border-color:var(--muted);border-style:dotted;color:var(--muted)}
+.chip .st{font-size:9px;font-weight:700;letter-spacing:.06em;text-decoration:none}
+.stage{border-top:1px solid var(--line);padding-top:10px}
+.pickrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pickrow input[type=text]{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;min-width:0;flex:1 1 140px}
+.pickrow input.bad{border-color:var(--red)}
+.perr{color:var(--red);font-size:12px;margin-top:4px;min-height:1em}
+.locked{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.locked b{font-size:15px}
+.note{font-size:12px;color:var(--muted)}
+.opts{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.o{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line)}
+.o:last-child{border-bottom:0}
+.o.labelled{background:var(--panel2)}
+.o .who2{display:flex;flex-wrap:wrap;gap:6px;min-width:0;align-items:center}
+.o .ics{display:flex;gap:3px}
+.o .words{font-size:13px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.tag{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:3px;padding:1px 4px;line-height:1.2;display:inline-block;margin-left:6px;vertical-align:1px}
+.tag.in{background:var(--good-soft);color:var(--good);border:1px solid var(--good)}
+.tag.off{background:var(--need-soft);color:var(--need);border:1px solid var(--need)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--panel2);color:var(--fg);border:0;padding:7px 12px;font-weight:600;min-width:58px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.seg button .k{font-size:10px;opacity:.6;margin-right:4px}
+@media(max-width:460px){.o{grid-template-columns:minmax(0,1fr)}}
+.dfoot{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:flex-end;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div><h1>Tier B review</h1><p class="sub" id="runline"></p></div>
+  <div class="bar">
+    <span class="count" id="count-rows"></span>
+    <span class="count" id="count-cards"></span>
+    <label class="filter"><input type="checkbox" id="unfinished"> Unfinished cards only</label>
+    <span class="notice" id="storage-notice" hidden></span>
+    <span class="notice" id="load-errors" hidden></span>
+    <span class="note">keys 1 2 3 = play, maybe, never</span>
+    <button class="btn" type="button" id="copy" disabled title="The export arrives with the reveal.">Copy verdicts</button>
+    <button class="btn ghost" type="button" id="download" disabled title="The export arrives with the reveal.">Download</button>
+  </div>
+</header>
+<main id="root"></main>
+</div>
+<script id="page-data" type="application/json">@@DATA@@</script>
+<script>
+/*@@LOGIC@@*/
+</script>
+<script>
+"use strict";
+const T0 = performance.now();
+const DATA = JSON.parse(document.getElementById("page-data").textContent);
+const NAMES = DATA.names;
+const ICONS = DATA.icons;
+const NAME_INDEX = buildNameIndex(NAMES);
+const ROLE_ORDER = ["top", "jungle", "mid", "adc", "support"];
+const KEY_LABEL = { "1": "play", "2": "maybe", "3": "never" };
+const STORE_KEY = "tier-b-review/" + DATA.run.id;
+const DN = (c) => dn(NAMES, c);
+
+// ---- storage: every read and write guarded, the header says when it does not hold ----
+const store = makeStorage(() => localStorage, STORE_KEY);
+const state = restoreState(DATA, store.read());
+function persist() {
+  store.write(JSON.stringify(state));
+  showNotice();
+}
+function showNotice() {
+  const n = document.getElementById("storage-notice");
+  n.hidden = store.available();
+  n.textContent = store.available() ? "" : "Progress is not being saved in this browser: finish in one sitting, or it is lost on reload.";
+  const e = document.getElementById("load-errors");
+  const errs = DATA.load_errors;
+  e.hidden = errs.length === 0;
+  e.textContent = errs.length === 0 ? "" : errs.length + " fixture" + (errs.length === 1 ? "" : "s") + " failed to load and " + (errs.length === 1 ? "is" : "are") + " not on this page: " + errs.join(" | ");
+}
+
+// ---- small helpers ----
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function icon(c) {
+  if (ICONS[c]) {
+    const i = el("img", "ic");
+    i.src = "data:image/webp;base64," + ICONS[c];
+    i.alt = DN(c);
+    return i;
+  }
+  const d = el("div", "ic init", DN(c).slice(0, 2));
+  d.title = DN(c);
+  return d;
+}
+function tile(c, extra) {
+  const t = el("div", "tile " + (extra || ""));
+  t.title = DN(c);
+  t.appendChild(icon(c));
+  t.appendChild(el("span", "nm", DN(c)));
+  return t;
+}
+const now = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
+
+const CARDS = new Map();
+for (const draft of DATA.drafts) for (const card of draft.cards) CARDS.set(card.id, { draft, card });
+
+// ---- the board and the pool ----
+function boardSide(card, side) {
+  const w = el("div", "side " + side.toLowerCase());
+  w.appendChild(el("div", "who", side + " bans | picks"));
+  const r = el("div", "row");
+  for (const kind of ["ban", "pick"]) {
+    if (kind === "pick") r.appendChild(el("span", "sep"));
+    for (const x of card.board.filter((b) => b.side === side && b.kind === kind)) {
+      r.appendChild(tile(x.champion, kind === "ban" ? "ban" : ""));
+    }
+  }
+  w.appendChild(r);
+  return w;
+}
+const STATUS_TEXT = { av: "OPEN", bn: "BAN", us: "OURS", th: "THEIRS" };
+function chipState(card, c) {
+  const b = card.board.find((x) => x.champion === c);
+  if (!b) return "av";
+  if (b.kind === "ban") return "bn";
+  return b.side === card.mover ? "us" : "th";
+}
+function chip(card, c) {
+  const s = chipState(card, c);
+  const e = el("span", "chip " + s);
+  e.appendChild(icon(c));
+  e.appendChild(el("span", "", DN(c)));
+  e.appendChild(el("span", "st", STATUS_TEXT[s]));
+  e.title = DN(c) + " - " + STATUS_TEXT[s];
+  return e;
+}
+function poolBlock(card) {
+  const wrap = el("div", "");
+  const roles = ROLE_ORDER.filter((r) => card.open_roles.some((set) => set.includes(r)));
+  const map = Array.isArray(card.pool) ? null : card.pool;
+  wrap.appendChild(el("p", "lbl", "Your pool" + (map && roles.length ? " for the open role" + (roles.length > 1 ? "s" : "") : "")));
+  if (!map) {
+    const row = el("div", "role");
+    row.appendChild(el("div", "rn", "pool"));
+    const ch = el("div", "chips");
+    for (const c of card.pool) ch.appendChild(chip(card, c));
+    row.appendChild(ch);
+    wrap.appendChild(row);
+    return wrap;
+  }
+  for (const r of roles.length ? roles : ROLE_ORDER) {
+    const row = el("div", "role");
+    row.appendChild(el("div", "rn", r));
+    const ch = el("div", "chips");
+    for (const c of map[r] || []) ch.appendChild(chip(card, c));
+    row.appendChild(ch);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+// ---- stage 1: the own pick, before any engine row is on screen ----
+function stageOne(draft, card) {
+  const ps = state.positions[card.id];
+  const wrap = el("div", "stage");
+  wrap.appendChild(el("p", "lbl", "1. My " + (card.kind === "ban" ? "ban" : "pick")));
+  if (pickAnswered(ps)) {
+    const l = el("div", "locked");
+    l.appendChild(el("b", "", pickText(ps.pick.current, NAMES)));
+    const revealed = draftRevealState(draft, state) === "revealed";
+    l.appendChild(el("span", "note", revealed ? "given blind; locked until the reveal view" : "locked: given before any engine option was shown"));
+    wrap.appendChild(l);
+    return wrap;
+  }
+  if (draftRevealState(draft, state) === "revealed" || Object.keys(ps.labels).length > 0) {
+    wrap.appendChild(el("p", "note", "No own pick is recorded for this card."));
+    return wrap;
+  }
+  const n = card.kind === "pair" ? 2 : 1;
+  const row = el("div", "pickrow");
+  const inputs = [];
+  for (let i = 0; i < n; i++) {
+    const inp = el("input", "");
+    inp.type = "text";
+    inp.setAttribute("list", "roster");
+    inp.placeholder = n === 2 ? "Champion " + (i + 1) : "Champion";
+    inp.setAttribute("aria-label", "My pick" + (n === 2 ? " " + (i + 1) : "") + " on " + card.id);
+    inp.autocomplete = "off";
+    inputs.push(inp);
+    row.appendChild(inp);
+  }
+  const err = el("div", "perr", "");
+  const lock = el("button", "btn", "Lock my pick");
+  lock.type = "button";
+  const submit = () => {
+    const ids = inputs.map((inp) => parseNameInput(inp.value, NAME_INDEX));
+    inputs.forEach((inp, i) => inp.classList.toggle("bad", ids[i] === null && inp.value.trim() !== ""));
+    const problem = pickProblem(card, ids, NAMES);
+    if (problem) { err.textContent = problem; return; }
+    changed(() => setPick(state, draft, card.id, n === 2 ? ids : ids[0], now()), card.id);
+  };
+  lock.onclick = submit;
+  inputs.forEach((inp) => inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") submit(); }));
+  const nv = el("button", "btn ghost", "No view");
+  nv.type = "button";
+  nv.title = "I would not pick anything here before seeing options.";
+  nv.onclick = () => changed(() => setPick(state, draft, card.id, null, now()), card.id);
+  row.appendChild(lock);
+  row.appendChild(nv);
+  wrap.appendChild(row);
+  wrap.appendChild(err);
+  wrap.appendChild(el("p", "note", "Once locked the pick cannot be changed before the reveal, and the options appear. Name it first: nothing from the engine is shown until you do."));
+  return wrap;
+}
+
+// ---- stage 2: the card's blind rows, shuffled, no scores ----
+function optionRow(draft, card, option, idx) {
+  const ps = state.positions[card.id];
+  const cur = currentLabel(state, card.id, option.id);
+  const r = el("div", "o" + (cur ? " labelled" : ""));
+  r.tabIndex = 0;
+  r.dataset.card = card.id;
+  r.dataset.idx = String(idx);
+  const view = rowView(option, NAMES);
+  const who = el("div", "who2");
+  const ics = el("div", "ics");
+  for (const c of view.icons) ics.appendChild(icon(c));
+  who.appendChild(ics);
+  const words = el("div", "words", view.text);
+  if (view.tag) words.appendChild(el("span", "tag " + view.tag, view.tag === "in" ? "in pool" : "off pool"));
+  who.appendChild(words);
+  r.appendChild(who);
+  const seg = el("div", "seg");
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "Label for " + view.text);
+  LABELS.forEach((lab, i) => {
+    const b = el("button", "");
+    b.type = "button";
+    b.appendChild(el("span", "k", String(i + 1)));
+    b.appendChild(document.createTextNode(lab));
+    b.setAttribute("aria-pressed", String(cur === lab));
+    b.tabIndex = -1;
+    b.onclick = () => labelRow(draft, card, option, lab, idx, false);
+    seg.appendChild(b);
+  });
+  r.appendChild(seg);
+  if (ps.labels[option.id] && ps.labels[option.id].via === "own-pick") r.title = "Pre-set to play: this is your own pick.";
+  return r;
+}
+function labelRow(draft, card, option, lab, idx, advance) {
+  changed(() => setLabel(state, draft, card.id, option.id, lab, now()), card.id);
+  const focusAt = advance ? Math.min(idx + 1, cardRows(draft, card, state).length - 1) : idx;
+  const target = document.querySelector('.o[data-card="' + CSS.escape(card.id) + '"][data-idx="' + focusAt + '"]');
+  if (target) target.focus();
+}
+function stageTwo(draft, card, rows) {
+  const wrap = el("div", "stage");
+  const ps = state.positions[card.id];
+  const done = rows.filter((o) => ps.labels[o.id] !== undefined).length;
+  wrap.appendChild(el("p", "lbl", "2. Options (shuffled, no scores) - " + done + " / " + rows.length + " labelled"));
+  const box = el("div", "opts");
+  rows.forEach((o, i) => box.appendChild(optionRow(draft, card, o, i)));
+  wrap.appendChild(box);
+  wrap.appendChild(el("p", "note", "Play: happy to pick this here (off the pool: I would leave it for this). Maybe: defensible, with a caveat. Never: in the pool, I would not pick it here; off the pool, absurd in that role or not worth leaving for. Early slots: assume competent follow-up from this pool."));
+  return wrap;
+}
+
+// ---- cards, drafts, header ----
+function slotText(card) {
+  if (card.kind === "pair") return "pair, slots " + card.slot + "+" + (card.slot + 1);
+  return (card.kind === "ban" ? "ban" : "single pick") + ", slot " + card.slot;
+}
+function buildCard(draft, card, hideDone) {
+  const mc = card.mover.toLowerCase();
+  const done = cardDone(card, state);
+  const c = el("div", "card " + mc + (done ? " done" : ""));
+  c.id = "c-" + card.id;
+  const h = el("div", "chead");
+  h.appendChild(el("h3", "", card.id));
+  h.appendChild(el("span", "mover " + mc, card.mover + " moves - " + slotText(card) + " - open: " + card.open_roles.map((set) => set.join(" + ")).join(" or ")));
+  c.appendChild(h);
+  const bw = el("div", "boards");
+  bw.appendChild(boardSide(card, "Blue"));
+  bw.appendChild(boardSide(card, "Red"));
+  c.appendChild(bw);
+  c.appendChild(poolBlock(card));
+  c.appendChild(stageOne(draft, card));
+  const rows = cardRows(draft, card, state);
+  if (rows.length > 0) c.appendChild(stageTwo(draft, card, rows));
+  // The filter applies when it is toggled and on load, never to a card the reader is still working in.
+  c.hidden = hideDone && done;
+  return c;
+}
+function draftHead(draft) {
+  const done = draft.cards.filter((c) => cardDone(c, state)).length;
+  const h = el("div", "dhead");
+  h.appendChild(el("h2", "", draft.title));
+  h.appendChild(el("span", "dprog", done + " of " + draft.cards.length + " cards done"));
+  return h;
+}
+function draftFoot(draft) {
+  const f = el("div", "dfoot");
+  const rs = draftRevealState(draft, state);
+  const left = draft.cards.reduce((n, c) => n + blindRows(c).filter((o) => state.positions[c.id].labels[o.id] === undefined).length, 0);
+  const msg = rs === "revealed" ? "Revealed in an earlier sitting." : rs === "ready" ? "Every blind row of this draft is labelled." : left + " blind row" + (left === 1 ? "" : "s") + " left in this draft.";
+  f.appendChild(el("span", "", msg));
+  const b = el("button", "btn", "Reveal the " + draft.title.replace(/ draft$/, "") + " draft");
+  b.type = "button";
+  b.disabled = true;
+  b.title = rs === "ready" ? "The reveal view is not built yet." : "Label every blind row of this draft first.";
+  f.appendChild(b);
+  return f;
+}
+function updateHeader() {
+  const p = progress(DATA, state);
+  document.getElementById("count-rows").textContent = p.blindDone + " / " + p.blindTotal + " blind";
+  document.getElementById("count-cards").textContent = p.cardsDone + " / " + p.cardsTotal + " cards";
+}
+const EL = new Map();
+function refresh(cardId) {
+  const { draft, card } = CARDS.get(cardId);
+  const e = EL.get(cardId);
+  const fresh = buildCard(draft, card);
+  e.card.replaceWith(fresh);
+  e.card = fresh;
+  const d = EL.get("draft:" + draft.id);
+  const head = draftHead(draft);
+  d.head.replaceWith(head);
+  d.head = head;
+  const foot = draftFoot(draft);
+  d.foot.replaceWith(foot);
+  d.foot = foot;
+  updateHeader();
+}
+// Run a state change; persist and redraw only when it recorded something.
+function changed(fn, cardId) {
+  let did = false;
+  try { did = fn(); } catch (e) { console.error(e); return; }
+  if (did) { persist(); refresh(cardId); }
+}
+function render() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  const list = document.createElement("datalist");
+  list.id = "roster";
+  for (const id of Object.keys(NAMES).sort((a, b) => (DN(a) < DN(b) ? -1 : DN(a) > DN(b) ? 1 : 0))) {
+    const o = document.createElement("option");
+    o.value = DN(id);
+    list.appendChild(o);
+  }
+  root.appendChild(list);
+  for (const draft of DATA.drafts) {
+    const s = el("section", "draft");
+    const head = draftHead(draft);
+    s.appendChild(head);
+    const cs = el("div", "cards");
+    for (const card of draft.cards) {
+      const ce = buildCard(draft, card, document.getElementById("unfinished").checked);
+      EL.set(card.id, { card: ce });
+      cs.appendChild(ce);
+    }
+    s.appendChild(cs);
+    const foot = draftFoot(draft);
+    s.appendChild(foot);
+    EL.set("draft:" + draft.id, { head, foot });
+    root.appendChild(s);
+  }
+  updateHeader();
+}
+
+// ---- keys 1 / 2 / 3 label the focused row and advance ----
+document.addEventListener("keydown", (ev) => {
+  const lab = KEY_LABEL[ev.key];
+  if (!lab || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const t = ev.target;
+  if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
+  const row = t instanceof Element ? t.closest(".o") : null;
+  if (!row) return;
+  ev.preventDefault();
+  const { draft, card } = CARDS.get(row.dataset.card);
+  const idx = Number(row.dataset.idx);
+  labelRow(draft, card, cardRows(draft, card, state)[idx], lab, idx, true);
+});
+document.getElementById("unfinished").addEventListener("change", () => {
+  for (const [id, { card }] of EL) if (!id.startsWith("draft:")) card.hidden = cardDone(CARDS.get(id).card, state) && document.getElementById("unfinished").checked;
+});
+
+document.getElementById("runline").textContent =
+  "run " + DATA.run.id + " - " + DATA.run.engine.name + " " + (DATA.run.engine.commit || "?") + " - positions patch " + DATA.run.data.positions_patch;
+showNotice();
+render();
+document.body.dataset.loadMs = String(Math.round(performance.now() - T0));
+</script>
+</body>
+</html>
