@@ -34,6 +34,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -84,6 +85,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -132,6 +134,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -182,6 +185,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -230,6 +234,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -280,6 +285,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -328,6 +334,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -378,6 +385,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -426,6 +434,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -476,6 +485,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -524,6 +534,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -574,6 +585,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -622,6 +634,7 @@ expression: text
             "off_pool_base": 0,
             "off_pool_graded": 0
           },
+          "no_line": 0,
           "no_play": [
             0,
             0,
@@ -672,6 +685,7 @@ expression: text
           "near_3": [],
           "never_1": [],
           "never_3": [],
+          "no_line_1": [],
           "not_speaking": [],
           "pick_3": [],
           "pick_3_out": [
@@ -791,24 +805,29 @@ expression: text
       "leave_out": [
         {
           "draft": "labelled-position",
-          "pick": null
+          "pick": null,
+          "readable": 0
         }
       ],
       "margins": [
         {
           "margin": 0.005,
-          "pick": null
+          "pick": null,
+          "readable": 0
         },
         {
           "margin": 0.02,
-          "pick": null
+          "pick": null,
+          "readable": 0
         }
       ]
     },
     "worklist": {
       "lines_at": "roster:0.1:0.05",
+      "not_judgeable": 0,
       "unjudged_lines": [
         {
+          "judgeable": true,
           "line": "Bard",
           "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
           "position": "labelled-position"

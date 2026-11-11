@@ -984,6 +984,11 @@ function renderResults() {
   beside.appendChild(ft);
   side.appendChild(beside);
   t.appendChild(side);
+  const ub = upperBoundLines(M);
+  if (ub.length > 0) {
+    t.appendChild(el("p", "lbl", "Upper bounds for the ≥ cells (never + unjudged, at k = 1 / k = 3)"));
+    lines(t, ub, "note");
+  }
   t.appendChild(el("p", "note", "Cards show the arm chosen here and only on revealed drafts."));
   const sel = el("p", "ln", selectionNote(DATA, state, viewArm));
   sel.id = "selnote";
@@ -1039,8 +1044,8 @@ function renderResults() {
   const wl = rsec("Worklist");
   lines(wl, [(M.rule.readable === 0 ? "No arm is readable: this is what is left to judge. " : "") + "Unlabelled rows are listed for revealed drafts only" + (w.hiddenRows > 0 ? "; " + w.hiddenRows + " more in drafts not yet revealed (not listed)" : "") + "."]);
   for (const e of w.unlabelled) lines(wl, [e.position + ": " + e.rows.length + " unlabelled rows - " + e.rows.join(" | ")], "note");
-  lines(wl, ["#1 lines at " + (w.linesAt === null || w.linesAt === undefined ? "-" : w.linesAt) + " with no verdict: " + (w.unjudgedLines.length === 0 ? "none named" : "") + (w.hiddenLines > 0 ? (w.unjudgedLines.length ? "; " : "") + w.hiddenLines + " in drafts not yet revealed (not named)" : "")]);
-  for (const l of w.unjudgedLines) lines(wl, [l.position + ": " + l.option + " (" + l.line + ")"], "note");
+  lines(wl, [linesHeader(w) + (w.hiddenLines > 0 ? ". " + w.hiddenLines + " in drafts not yet revealed (not named)" : "")]);
+  for (const l of w.unjudgedLines) lines(wl, [l.position + ": " + l.option + " - " + l.line + (l.judgeable === false ? NOT_JUDGEABLE : "")], "note");
   root.appendChild(wl);
 }
 

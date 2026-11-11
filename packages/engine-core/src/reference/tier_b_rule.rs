@@ -221,6 +221,9 @@ pub struct Metrics {
     /// A #1 line with a verdict. `bad_line` of `judged_line` is the printed form.
     pub judged_line: usize,
     pub unjudged_line: usize,
+    /// Speaking positions whose #1 has no line to judge (an empty continuation, slot 19): in none of
+    /// the three line counts above.
+    pub no_line: usize,
 }
 
 fn median(mut values: Vec<f64>) -> Option<f64> {
@@ -244,7 +247,7 @@ impl Metrics {
         for row in rows {
             m.positions += 1;
             match row.line {
-                LineState::None => {}
+                LineState::None => m.no_line += usize::from(row.score.is_some()),
                 LineState::Unjudged => m.unjudged_line += 1,
                 LineState::Good => m.judged_line += 1,
                 LineState::Bad => {
@@ -301,12 +304,20 @@ pub struct ArmScore {
     pub spec: ArmSpec,
     pub rows: Vec<PositionRow>,
     pub all: Metrics,
+    /// Floor rows: kept options holding an off-pool placement of unknown share ratio, summed over the
+    /// positions (`ArmInput.unknown_r_kept`). Zero for an ordinary arm.
+    pub unknown_r_kept: usize,
 }
 
 impl ArmScore {
     pub fn new(spec: ArmSpec, rows: Vec<PositionRow>) -> ArmScore {
         let all = Metrics::sum(&rows);
-        ArmScore { spec, rows, all }
+        ArmScore {
+            spec,
+            rows,
+            all,
+            unknown_r_kept: 0,
+        }
     }
 
     /// Selectable by the rule: a roster arm where every position speaks and neither `unjudged@1` nor
@@ -321,14 +332,17 @@ impl ArmScore {
     }
 
     pub fn without_draft(&self, draft: &str) -> ArmScore {
-        ArmScore::new(
-            self.spec.clone(),
-            self.rows
-                .iter()
-                .filter(|r| r.draft != draft)
-                .cloned()
-                .collect(),
-        )
+        ArmScore {
+            unknown_r_kept: self.unknown_r_kept,
+            ..ArmScore::new(
+                self.spec.clone(),
+                self.rows
+                    .iter()
+                    .filter(|r| r.draft != draft)
+                    .cloned()
+                    .collect(),
+            )
+        }
     }
 
     pub fn metrics_where(&self, keep: impl Fn(&PositionRow) -> bool) -> Metrics {
@@ -371,7 +385,8 @@ fn row_of(pos: &PositionInput, spec: &ArmSpec, fold: FoldKind, margin: f64) -> P
         in_pool,
         margin,
     ));
-    if let Some(top) = &input.top_line {
+    // An empty line is no line (the runner already leaves it out; kept here for any other producer).
+    if let Some(top) = input.top_line.as_ref().filter(|t| !t.line.is_empty()) {
         row.line = match pos.lines.get(&(top.option.clone(), top.line.clone())) {
             None => LineState::Unjudged,
             Some(true) => LineState::Good,
@@ -392,8 +407,14 @@ pub fn read_arms(
 ) -> Vec<ArmScore> {
     specs
         .iter()
-        .map(|spec| {
-            ArmScore::new(
+        .map(|spec| ArmScore {
+            unknown_r_kept: positions
+                .iter()
+                .flat_map(|p| p.arms.iter())
+                .filter(|a| a.id == spec.id)
+                .map(|a| a.unknown_r_kept)
+                .sum(),
+            ..ArmScore::new(
                 spec.clone(),
                 positions
                     .iter()
@@ -483,7 +504,8 @@ pub struct RuleOutcome {
     pub receipt: Option<Receipt>,
 }
 
-fn axes(arms: &[ArmScore]) -> (Vec<f64>, Vec<f64>) {
+/// The grid's axes: the sorted, distinct P and Q of the roster arms.
+pub fn grid_axes(arms: &[ArmScore]) -> (Vec<f64>, Vec<f64>) {
     let sorted = |f: fn(&ArmSpec) -> Option<f64>| {
         let mut v: Vec<f64> = arms
             .iter()
@@ -533,7 +555,7 @@ pub fn choose_arm(arms: &[ArmScore], reference: &str) -> RuleOutcome {
         .copied()
         .filter(|a| key(a) == best)
         .collect();
-    let (ps, qs) = axes(arms);
+    let (ps, qs) = grid_axes(arms);
     let reference_arm = arms.iter().find(|a| a.spec.id == reference);
     let from = reference_arm.map(|a| {
         (
@@ -660,6 +682,10 @@ fn receipt(reference: &ArmScore, pick: &ArmScore) -> Receipt {
 pub struct Sensitivity {
     pub margins: Vec<(f64, Option<String>)>,
     pub leave_out: Vec<(String, Option<String>)>,
+    /// How many arms were readable in each re-read, in the order of the two lists above: a shrunken
+    /// readable set would move the pick silently.
+    pub margins_readable: Vec<usize>,
+    pub leave_out_readable: Vec<usize>,
 }
 
 /// The rule on the current fold, flagged when its pick differs from the blind fold's.
@@ -697,6 +723,10 @@ pub struct UnjudgedLine {
     pub position: String,
     pub option: String,
     pub line: String,
+    /// The page offers a line verdict only on the reference arm's #1 line (design § 1). False where the
+    /// pick's #1 option or line differs from the reference arm's at this position: no verdict given on
+    /// the page can clear it.
+    pub judgeable: bool,
 }
 
 /// What is left to do: the unlabelled rows per position, and the #1 lines at the rule's pick (the
@@ -706,6 +736,13 @@ pub struct Worklist {
     pub unlabelled_rows: Vec<(String, Vec<String>)>,
     pub lines_at: Option<String>,
     pub unjudged_lines: Vec<UnjudgedLine>,
+}
+
+impl Worklist {
+    /// Listed lines no verdict on the page can clear.
+    pub fn not_judgeable(&self) -> usize {
+        self.unjudged_lines.iter().filter(|l| !l.judgeable).count()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -742,6 +779,17 @@ pub fn never_everywhere(arms: &[ArmScore]) -> Vec<String> {
         .collect()
 }
 
+/// The reference arm's #1 line at a position: the only one the page can judge.
+fn reference_top<'a>(arms: &'a [ArmScore], reference: &str, position: &str) -> Option<&'a TopLine> {
+    arms.iter()
+        .find(|a| a.spec.id == reference)?
+        .rows
+        .iter()
+        .find(|r| r.id == position)?
+        .top_line
+        .as_ref()
+}
+
 /// Everything of design § 4 over the corpus. `specs` lists the arms then the floor rows; `reference` is
 /// the reference arm's id; `margin` is ε.
 pub fn read_run(
@@ -753,21 +801,20 @@ pub fn read_run(
     let arms = read_arms(positions, specs, FoldKind::Rule, margin);
     let rule = choose_arm(&arms, reference);
 
-    let margins = SENSITIVITY_MARGINS
-        .iter()
-        .map(|m| {
-            let rescored = read_arms(positions, specs, FoldKind::Rule, *m);
-            (*m, choose_arm(&rescored, reference).pick)
-        })
-        .collect();
+    let (mut margins, mut margins_readable) = (Vec::new(), Vec::new());
+    for m in SENSITIVITY_MARGINS {
+        let again = choose_arm(&read_arms(positions, specs, FoldKind::Rule, m), reference);
+        margins.push((m, again.pick));
+        margins_readable.push(again.readable);
+    }
     let drafts: BTreeSet<&str> = positions.iter().map(|p| p.draft.as_str()).collect();
-    let leave_out = drafts
-        .iter()
-        .map(|d| {
-            let kept: Vec<ArmScore> = arms.iter().map(|a| a.without_draft(d)).collect();
-            (d.to_string(), choose_arm(&kept, reference).pick)
-        })
-        .collect();
+    let (mut leave_out, mut leave_out_readable) = (Vec::new(), Vec::new());
+    for d in &drafts {
+        let kept: Vec<ArmScore> = arms.iter().map(|a| a.without_draft(d)).collect();
+        let again = choose_arm(&kept, reference);
+        leave_out.push((d.to_string(), again.pick));
+        leave_out_readable.push(again.readable);
+    }
 
     let current = choose_arm(
         &read_arms(positions, specs, FoldKind::Current, margin),
@@ -829,6 +876,7 @@ pub fn read_run(
                         position: r.id.clone(),
                         option: t.option_id.clone(),
                         line: t.line.clone(),
+                        judgeable: reference_top(&arms, reference, &r.id) == Some(t),
                     })
                 })
                 .collect()
@@ -852,7 +900,12 @@ pub fn read_run(
         },
         arms,
         rule,
-        sensitivity: Sensitivity { margins, leave_out },
+        sensitivity: Sensitivity {
+            margins,
+            leave_out,
+            margins_readable,
+            leave_out_readable,
+        },
         second_line,
         r_by_label,
         reveal_changes: reveal,

@@ -2864,6 +2864,7 @@ fn arm_with(spec: ArmSpec, never_1: usize, never_3: usize, pick_3: usize) -> Arm
             pick: [0, pick_3, 0, 0],
             ..Metrics::default()
         },
+        unknown_r_kept: 0,
     }
 }
 
@@ -4618,6 +4619,18 @@ fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() 
             .map(|a| a.unknown_r_kept)
             .sum();
         assert_wire_arm(w, arm, unknown);
+        assert_eq!(arm.unknown_r_kept, unknown, "the ArmScore carries the sum");
+    }
+    for (kind, got) in [
+        ("margins", &read.sensitivity.margins_readable),
+        ("leave_out", &read.sensitivity.leave_out_readable),
+    ] {
+        let wired: Vec<u64> = array(&wire["sensitivity"][kind], kind)
+            .iter()
+            .map(|e| e["readable"].as_u64().expect("readable"))
+            .collect();
+        let want: Vec<u64> = got.iter().map(|n| *n as u64).collect();
+        assert_eq!(wired, want, "{kind}: readable arms per re-read");
     }
     assert_eq!(wire["rule"]["pick"], ARM_A);
     assert_eq!(wire["second_line"]["differs"], true);
@@ -4625,4 +4638,166 @@ fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() 
         wire["rule"]["receipt"]["pick"],
         wire["rule"]["receipt"]["reference"]
     );
+}
+
+fn top(option: u8, line: &str) -> Option<TopLine> {
+    Some(TopLine {
+        option: opt(option),
+        option_id: format!("c{option}"),
+        line: line.to_string(),
+    })
+}
+
+/// An empty continuation (slot 19) is no line: not unjudged, not in the worklist, counted as "with no
+/// line" in `bad_line@1`, and on the wire.
+/// Kills: an empty line read as an unjudged line (the page refuses a verdict on it, so it could never
+/// clear); the count of no-line #1s dropped.
+#[test]
+fn an_empty_continuation_is_no_line_not_unjudged() {
+    let mut p = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, &GOOD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+    );
+    p.arms[0].top_line = top(1, "");
+    p.arms[1].top_line = top(1, "");
+    let ps = [p];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let m = &read.arms[0].all;
+    assert_eq!(
+        (m.no_line, m.unjudged_line, m.judged_line, m.bad_line),
+        (1, 0, 0, 0)
+    );
+    assert_eq!(read.arms[0].rows[0].line, LineState::None);
+    assert!(read.worklist.unjudged_lines.is_empty());
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(
+        text.contains("0 bad of 0 judged, 0 unjudged, 1 with no line"),
+        "{text}"
+    );
+    let wire = engine_core::reference::tier_b_summary::metrics_of(
+        &test_header(&[ARM_A, ARM_B]),
+        &read,
+        &inputs,
+    )
+    .expect("labelled");
+    assert_eq!(wire["arms"][0]["metrics"]["no_line"], 1);
+    assert_eq!(
+        wire["arms"][0]["positions"]["no_line_1"],
+        json!(["2026-10-01-a"])
+    );
+}
+
+/// The runner leaves a slot-19 #1 with no line at every arm that speaks.
+/// Kills: `top_line_of` returning an empty line.
+#[test]
+fn the_runner_gives_a_slot_19_number_one_no_line() {
+    let run = run_of(&[por_only_fixture()], &supp_config(), &live());
+    let arms: Vec<_> = run.positions[0]
+        .scoring
+        .arms
+        .iter()
+        .filter(|a| a.speaks)
+        .collect();
+    assert!(!arms.is_empty());
+    for a in arms {
+        assert!(a.top_line.is_none(), "{}: {:?}", a.id, a.top_line);
+    }
+}
+
+/// A pick #1 line the page cannot judge (its option or line differs from the reference arm's at that
+/// position) is listed marked, and counted; the same line at both arms is judgeable.
+/// Kills: a worklist that lists unclearable lines unmarked; the marker on a judgeable line.
+#[test]
+fn a_pick_line_the_page_cannot_judge_is_marked() {
+    let mk = |id: &str, draft: &str, line_b: &str| {
+        let mut p = rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        );
+        p.arms[0].top_line = top(0, "Zyra");
+        p.arms[1].top_line = top(1, line_b);
+        p
+    };
+    // p1: the pick's #1 is another option than the reference's; p2: the same option and line.
+    let mut p2 = mk("2026-10-02-b", "2026-10-02", "Zyra");
+    p2.arms[1].top_line = top(0, "Zyra");
+    let ps = [mk("2026-10-01-a", "2026-10-01", "Karma"), p2];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_B), "the premise");
+    let lines = &read.worklist.unjudged_lines;
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines
+            .iter()
+            .map(|l| (l.position.as_str(), l.judgeable))
+            .collect::<Vec<_>>(),
+        [("2026-10-01-a", false), ("2026-10-02-b", true)]
+    );
+    assert_eq!(read.worklist.not_judgeable(), 1);
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(
+        text.contains("with no line verdict: 2 (1 not judgeable on the page"),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("[not judgeable on the page]").count(),
+        1,
+        "{text}"
+    );
+    let wire = engine_core::reference::tier_b_summary::metrics_of(
+        &test_header(&[ARM_A, ARM_B]),
+        &read,
+        &inputs,
+    )
+    .expect("labelled");
+    assert_eq!(wire["worklist"]["not_judgeable"], 1);
+    assert_eq!(wire["worklist"]["unjudged_lines"][0]["judgeable"], false);
+    assert_eq!(wire["worklist"]["unjudged_lines"][1]["judgeable"], true);
+}
+
+/// A floor row's `≥` cell gets its upper bound under the table like an arm's.
+/// Kills: floors left out of the upper-bound block.
+#[test]
+fn a_floor_rows_unjudged_cell_gets_an_upper_bound() {
+    // c5 is unlabelled and first: read as `never` it is clear at one, as a play it is not.
+    const C5_FIRST: [(u8, f64); 6] = [(5, 1.0), (1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6), (0, 0.1)];
+    let labels: Vec<(u8, Label)> = LABELS.iter().copied().filter(|(c, _)| *c != 5).collect();
+    let p = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        None,
+        &labels,
+        Some(2),
+        &[
+            (ARM_A, &GOOD_C2_AT_2),
+            (ARM_B, &GOOD_C2_AT_2),
+            ("floor:0.1", &C5_FIRST),
+        ],
+    );
+    let mut specs = specs_ab();
+    specs.push(ArmSpec {
+        id: "floor:0.1".to_string(),
+        role: ArmRole::Floor,
+        p: None,
+        q: None,
+    });
+    let ps = [p];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(text.contains("floor:0.1  r < 0.1  ≥0/"), "{text}");
+    assert!(text.contains("  floor:0.1  ≤1 / "), "{text}");
 }

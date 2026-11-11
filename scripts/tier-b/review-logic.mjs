@@ -919,7 +919,10 @@ function hoverLines(arm, visible) {
     "pick@3 holds at: " + named("pick_3"),
     "own pick outside the top 3 at: " + named("pick_3_out"),
     "positions that do not speak: " + named("not_speaking"),
+    "own pick median rank " + rankText(m) + " (absent " + m.pick_absent + " of " + m.with_pick + "), median regret " + regretText(m) + ", opp_charge_lead " + m.opp_charge_lead,
+    "bad_line@1 " + m.bad_line + " bad of " + m.judged_line + " judged, " + m.unjudged_line + " unjudged, " + m.no_line + " with no line",
   ];
+  if (m.unjudged[0] > 0 || m.unjudged[1] > 0) lines.splice(3, 0, "upper bounds (never + unjudged): ≤" + (m.never[0] + m.unjudged[0]) + " / ≤" + (m.never[1] + m.unjudged[1]));
   if (!arm.readable) lines.splice(1, 0, "not readable: a position does not speak, or a count is unjudged at k = 1 or 3");
   return lines;
 }
@@ -943,6 +946,23 @@ function arrow(a, b) {
   return a + " → " + b;
 }
 
+// The median own-pick rank as the summary spells it: a number, `∞` when every own pick is absent, `none` with no own pick.
+function rankText(m) {
+  if (m.pick_median_rank_absent) return "∞";
+  return m.pick_median_rank === null || m.pick_median_rank === undefined ? "none" : String(m.pick_median_rank);
+}
+function regretText(m) {
+  return m.pick_median_regret === null || m.pick_median_regret === undefined ? "none" : m.pick_median_regret.toFixed(3);
+}
+
+// The receipt's second line (summary.txt prints the same words).
+function receiptAlso(f, t) {
+  return "also near@3 " + arrow(f.near[1], t.near[1]) + ", play@1 " + arrow(f.play[0], t.play[0]) + ", play@3 " + arrow(f.play[1], t.play[1]) +
+    ", no_play@3 " + arrow(f.no_play[1], t.no_play[1]) + " (neither " + arrow(f.neither_play[1], t.neither_play[1]) + "), own pick median rank " +
+    rankText(f) + " → " + rankText(t) + " (absent " + f.pick_absent + " of " + f.with_pick + " → " + t.pick_absent + " of " + t.with_pick +
+    "), median regret " + regretText(f) + " → " + regretText(t) + ", opp_charge_lead " + arrow(f.opp_charge_lead, t.opp_charge_lead);
+}
+
 function receiptLines(r, visible) {
   const f = r.from;
   const t = r.to;
@@ -953,6 +973,7 @@ function receiptLines(r, visible) {
       ", never@3 " + arrow(f.never[1], t.never[1]) + ", pick@3 " + arrow(f.pick[1], t.pick[1]) +
       ", pick_off@3 " + f.pick_off[1] + " of " + f.pick_off_eligible + " → " + t.pick_off[1] + " of " + t.pick_off_eligible +
       ", top in-pool " + arrow(f.top_in_pool, t.top_in_pool),
+    receiptAlso(f, t),
     "own pick leaves the top 3 at: " + namedPositions(r.leaves_top_3, visible),
     "own pick enters the top 3 at: " + namedPositions(r.enters_top_3, visible),
   ];
@@ -973,9 +994,10 @@ function ruleLine(rule) {
 }
 
 function sensitivityLines(s) {
+  const tail = (x) => (x.pick === null || x.pick === undefined ? "no pick" : x.pick) + " (" + x.readable + " readable)";
   return [
-    ...s.margins.map((x) => "ε " + x.margin + ": " + pickWords(x.pick)),
-    ...s.leave_out.map((x) => "without " + x.draft + ": " + pickWords(x.pick)),
+    ...s.margins.map((x) => "ε " + x.margin + ": " + tail(x)),
+    ...s.leave_out.map((x) => "without " + x.draft + ": " + tail(x)),
   ];
 }
 
@@ -987,7 +1009,7 @@ function secondLine(sl) {
 // `bad_line@1` as "bad of judged", for the reference arm and the rule's pick.
 function badLineLines(metrics) {
   const byId = (id) => metrics.arms.find((a) => a.id === id);
-  const text = (a) => a.id + ": " + a.metrics.bad_line + " bad of " + a.metrics.judged_line + " judged, " + a.metrics.unjudged_line + " unjudged";
+  const text = (a) => a.id + ": " + a.metrics.bad_line + " bad of " + a.metrics.judged_line + " judged, " + a.metrics.unjudged_line + " unjudged, " + a.metrics.no_line + " with no line";
   const ref = byId(metrics.reference);
   const pick = metrics.rule.pick === null ? undefined : byId(metrics.rule.pick);
   const out = [];
@@ -1027,7 +1049,24 @@ function worklistView(w, visible) {
     linesAt: w.lines_at,
     unjudgedLines: lines,
     hiddenLines: w.unjudged_lines.length - lines.length,
+    totalLines: w.unjudged_lines.length,
+    notJudgeable: w.not_judgeable,
   };
+}
+
+// The worklist's #1-lines header, as summary.txt words it.
+function linesHeader(w) {
+  return "#1 lines at " + (w.linesAt === null || w.linesAt === undefined ? "-" : w.linesAt) + " with no line verdict: " + w.totalLines + " (" + w.notJudgeable +
+    " not judgeable on the page: it offers a verdict only on the reference arm's #1 line)";
+}
+const NOT_JUDGEABLE = "  [not judgeable on the page]";
+
+// The `≥` cells are lower bounds: never + unjudged is the upper end, for every arm that has an unjudged position
+// (floor rows included), as summary.txt lists them.
+function upperBoundLines(metrics) {
+  return metrics.arms
+    .filter((a) => a.metrics.unjudged[0] > 0 || a.metrics.unjudged[1] > 0)
+    .map((a) => a.id + "  ≤" + (a.metrics.never[0] + a.metrics.unjudged[0]) + " / ≤" + (a.metrics.never[1] + a.metrics.unjudged[1]));
 }
 
 function labelsLine(l) {
@@ -1035,4 +1074,4 @@ function labelsLine(l) {
     " scored only), " + l.own_picks + " own picks (" + l.blind_picks + " blind). Read from the current fold, no blind answer: " + l.fallback_labels + " labels, " + l.fallback_picks + " own picks.";
 }
 
-export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen, HEAT_STEPS, heatLegend, revealChangesView, armChoice, badLineLines, cellModel, countText, gridModel, heatStep, hoverLines, labelsLine, namedPositions, neverEverywhereLine, positionVisible, rByLabelRows, receiptLines, revealChangesLine, ruleLine, secondLine, selectionNote, sensitivityLines, worklistView };
+export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen, HEAT_STEPS, linesHeader, NOT_JUDGEABLE, upperBoundLines, heatLegend, revealChangesView, armChoice, badLineLines, cellModel, countText, gridModel, heatStep, hoverLines, labelsLine, namedPositions, neverEverywhereLine, positionVisible, rByLabelRows, receiptLines, revealChangesLine, ruleLine, secondLine, selectionNote, sensitivityLines, worklistView };

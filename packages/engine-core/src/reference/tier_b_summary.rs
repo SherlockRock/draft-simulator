@@ -9,8 +9,8 @@
 
 use super::tier_b_review::{OwnPick, PositionScore, ReviewRun, RunHeader, SCORE_KS};
 use super::tier_b_rule::{
-    ArmRole, ArmScore, Axis, Edge, EdgeSide, LineState, Metrics, PositionInput, RBucket, Read,
-    Receipt, RuleOutcome, Split, FLOOR_RATIOS,
+    grid_axes, ArmRole, ArmScore, Axis, Edge, EdgeSide, LineState, Metrics, PositionInput, RBucket,
+    Read, Receipt, RuleOutcome, Split, FLOOR_RATIOS,
 };
 use serde_json::{json, Value};
 
@@ -84,6 +84,7 @@ fn metrics_json(m: &Metrics) -> Value {
         "bad_line": m.bad_line,
         "judged_line": m.judged_line,
         "unjudged_line": m.unjudged_line,
+        "no_line": m.no_line,
     })
 }
 
@@ -95,7 +96,7 @@ fn role_name(role: ArmRole) -> &'static str {
     }
 }
 
-fn arm_json(arm: &ArmScore, unknown_r_kept: usize) -> Value {
+fn arm_json(arm: &ArmScore) -> Value {
     let by_line = |state: LineState| -> Vec<&str> {
         arm.rows
             .iter()
@@ -109,7 +110,7 @@ fn arm_json(arm: &ArmScore, unknown_r_kept: usize) -> Value {
         "p": arm.spec.p,
         "q": arm.spec.q,
         "readable": arm.readable(),
-        "unknown_r_kept": unknown_r_kept,
+        "unknown_r_kept": arm.unknown_r_kept,
         "metrics": metrics_json(&arm.all),
         // The positions behind the counts, by id, for the page's hover. `_1` / `_3` read k = 1 / 3.
         "positions": {
@@ -126,6 +127,8 @@ fn arm_json(arm: &ArmScore, unknown_r_kept: usize) -> Value {
             "not_speaking": arm.rows.iter().filter(|r| r.score.is_none()).map(|r| r.id.as_str()).collect::<Vec<_>>(),
             "bad_line_1": by_line(LineState::Bad),
             "unjudged_line_1": by_line(LineState::Unjudged),
+            // The #1 has no line to judge (slot 19).
+            "no_line_1": arm.rows.iter().filter(|r| r.score.is_some() && r.line == LineState::None).map(|r| r.id.as_str()).collect::<Vec<_>>(),
         },
     })
 }
@@ -176,14 +179,6 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
     if counts.labelled_positions == 0 {
         return None;
     }
-    let unknown_r = |id: &str| -> usize {
-        inputs
-            .iter()
-            .flat_map(|p| p.arms.iter())
-            .filter(|a| a.id == id)
-            .map(|a| a.unknown_r_kept)
-            .sum()
-    };
     let r_by_label: Vec<Value> = RBucket::ALL
         .iter()
         .enumerate()
@@ -209,13 +204,14 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
             "fallback_labels": read.fallbacks.labels,
             "fallback_picks": read.fallbacks.picks,
         },
-        "arms": read.arms.iter().map(|a| arm_json(a, unknown_r(&a.spec.id))).collect::<Vec<_>>(),
+        "arms": read.arms.iter().map(arm_json).collect::<Vec<_>>(),
         "rule": outcome_json(&read.rule),
         "sensitivity": {
-            "margins": read.sensitivity.margins.iter()
-                .map(|(m, p)| json!({"margin": m, "pick": p})).collect::<Vec<_>>(),
-            "leave_out": read.sensitivity.leave_out.iter()
-                .map(|(d, p)| json!({"draft": d, "pick": p})).collect::<Vec<_>>(),
+            // `readable`: arms readable in that re-read.
+            "margins": read.sensitivity.margins.iter().zip(&read.sensitivity.margins_readable)
+                .map(|((m, p), n)| json!({"margin": m, "pick": p, "readable": n})).collect::<Vec<_>>(),
+            "leave_out": read.sensitivity.leave_out.iter().zip(&read.sensitivity.leave_out_readable)
+                .map(|((d, p), n)| json!({"draft": d, "pick": p, "readable": n})).collect::<Vec<_>>(),
         },
         "second_line": {
             "differs": read.second_line.differs,
@@ -240,9 +236,11 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
             "unlabelled_rows": read.worklist.unlabelled_rows.iter()
                 .map(|(p, rows)| json!({"position": p, "rows": rows})).collect::<Vec<_>>(),
             "lines_at": read.worklist.lines_at,
+            // `judgeable`: the page offers a verdict only on the reference arm's #1 line.
             "unjudged_lines": read.worklist.unjudged_lines.iter()
-                .map(|l| json!({"position": l.position, "option": l.option, "line": l.line}))
+                .map(|l| json!({"position": l.position, "option": l.option, "line": l.line, "judgeable": l.judgeable}))
                 .collect::<Vec<_>>(),
+            "not_judgeable": read.worklist.not_judgeable(),
         },
     }))
 }
@@ -289,6 +287,26 @@ fn arrow(a: usize, b: usize) -> String {
     format!("{a} → {b}")
 }
 
+fn rank_text(m: &Metrics) -> String {
+    match m.pick_median_rank {
+        None => "none".to_string(),
+        Some(r) if r.is_infinite() => "∞".to_string(),
+        Some(r) => r.to_string(),
+    }
+}
+
+fn rank_arrow(f: &Metrics, t: &Metrics) -> String {
+    format!("{} → {}", rank_text(f), rank_text(t))
+}
+
+fn regret_arrow(f: &Metrics, t: &Metrics) -> String {
+    let text = |m: &Metrics| {
+        m.pick_median_regret
+            .map_or("none".to_string(), |r| format!("{r:.3}"))
+    };
+    format!("{} → {}", text(f), text(t))
+}
+
 fn receipt_text(r: &Receipt) -> Vec<String> {
     let (f, t) = (&r.from, &r.to);
     let mut out = vec![format!(
@@ -306,6 +324,21 @@ fn receipt_text(r: &Receipt) -> Vec<String> {
         t.pick_off_eligible,
         arrow(f.top_in_pool, t.top_in_pool),
     )];
+    out.push(format!(
+        "also near@3 {}, play@1 {}, play@3 {}, no_play@3 {} (neither {}), own pick median rank {} (absent {} of {} → {} of {}), median regret {}, opp_charge_lead {}",
+        arrow(f.near[1], t.near[1]),
+        arrow(f.play[0], t.play[0]),
+        arrow(f.play[1], t.play[1]),
+        arrow(f.no_play[1], t.no_play[1]),
+        arrow(f.neither_play[1], t.neither_play[1]),
+        rank_arrow(f, t),
+        f.pick_absent,
+        f.with_pick,
+        t.pick_absent,
+        t.with_pick,
+        regret_arrow(f, t),
+        arrow(f.opp_charge_lead, t.opp_charge_lead),
+    ));
     out.push(format!(
         "own pick leaves the top 3 at: {}",
         list(&r.leaves_top_3)
@@ -329,15 +362,15 @@ fn receipt_text(r: &Receipt) -> Vec<String> {
     out
 }
 
-fn pick_text(p: &Option<String>) -> &str {
+fn pick_or_none(p: &Option<String>) -> &str {
     p.as_deref().unwrap_or("none readable")
 }
 
 fn bad_line_text(arm: &ArmScore) -> String {
     let m = &arm.all;
     format!(
-        "{}: {} bad of {} judged, {} unjudged",
-        arm.spec.id, m.bad_line, m.judged_line, m.unjudged_line
+        "{}: {} bad of {} judged, {} unjudged, {} with no line",
+        arm.spec.id, m.bad_line, m.judged_line, m.unjudged_line, m.no_line
     )
 }
 
@@ -404,13 +437,7 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         .iter()
         .filter(|a| a.spec.role == ArmRole::Roster)
         .collect();
-    let axis = |f: fn(&ArmScore) -> Option<f64>| {
-        let mut v: Vec<f64> = roster.iter().filter_map(|a| f(a)).collect();
-        v.sort_by(f64::total_cmp);
-        v.dedup();
-        v
-    };
-    let (ps, qs) = (axis(|a| a.spec.p), axis(|a| a.spec.q));
+    let (ps, qs) = grid_axes(&read.arms);
     let grid_cell = |p: f64, q: f64| -> String {
         roster
             .iter()
@@ -470,9 +497,7 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
     let unjudged_arms: Vec<&ArmScore> = read
         .arms
         .iter()
-        .filter(|a| {
-            a.spec.role != ArmRole::Floor && (a.all.unjudged[0] > 0 || a.all.unjudged[1] > 0)
-        })
+        .filter(|a| a.all.unjudged[0] > 0 || a.all.unjudged[1] > 0)
         .collect();
     if !unjudged_arms.is_empty() {
         out.push(String::new());
@@ -499,19 +524,13 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         .filter(|a| a.spec.role == ArmRole::Floor)
         .zip(FLOOR_RATIOS)
     {
-        let unknown: usize = inputs
-            .iter()
-            .flat_map(|p| p.arms.iter())
-            .filter(|a| a.id == row.spec.id)
-            .map(|a| a.unknown_r_kept)
-            .sum();
         out.push(format!(
             "  {}  r < {ratio}  {}  non-speaking {} of {}, unknown r kept {}",
             row.spec.id,
             cell(&row.all),
             row.all.positions - row.all.speaking,
             row.all.positions,
-            unknown
+            row.unknown_r_kept
         ));
     }
 
@@ -528,7 +547,7 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
             "The rule: {} of {} arms readable. Pick: {}{}",
             rule.readable,
             rule.roster_arms,
-            pick_text(&rule.pick),
+            pick_or_none(&rule.pick),
             if rule.ties.len() > 1 {
                 format!(" (tied on the three keys: {})", rule.ties.join(", "))
             } else {
@@ -544,18 +563,25 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         out.extend(receipt_text(r).into_iter().map(|l| format!("  {l}")));
     }
     out.push("Sensitivity (the pick at other margins, and with each draft left out):".to_string());
-    for (m, p) in &read.sensitivity.margins {
-        out.push(format!("  ε {m}: {}", pick_text(p)));
+    let sens = &read.sensitivity;
+    for ((m, p), n) in sens.margins.iter().zip(&sens.margins_readable) {
+        out.push(format!(
+            "  ε {m}: {} ({n} readable)",
+            p.as_deref().unwrap_or("no pick")
+        ));
     }
-    for (d, p) in &read.sensitivity.leave_out {
-        out.push(format!("  without {d}: {}", pick_text(p)));
+    for ((d, p), n) in sens.leave_out.iter().zip(&sens.leave_out_readable) {
+        out.push(format!(
+            "  without {d}: {} ({n} readable)",
+            p.as_deref().unwrap_or("no pick")
+        ));
     }
     let second = &read.second_line;
     out.push(format!(
         "Second line (the rule on the current fold): {} of {} arms readable, pick {}{}",
         second.outcome.readable,
         second.outcome.roster_arms,
-        pick_text(&second.outcome.pick),
+        pick_or_none(&second.outcome.pick),
         if second.differs {
             "  ** DIFFERS from the blind read **"
         } else {
@@ -620,12 +646,23 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         out.extend(rows.iter().map(|r| format!("      {r}")));
     }
     out.push(format!(
-        "  #1 lines at {} with no line verdict: {}",
+        "  #1 lines at {} with no line verdict: {} ({} not judgeable on the page: it offers a verdict only on the reference arm's #1 line)",
         read.worklist.lines_at.as_deref().unwrap_or("-"),
-        read.worklist.unjudged_lines.len()
+        read.worklist.unjudged_lines.len(),
+        read.worklist.not_judgeable()
     ));
     for l in &read.worklist.unjudged_lines {
-        out.push(format!("    {}: {} — {}", l.position, l.option, l.line));
+        out.push(format!(
+            "    {}: {} — {}{}",
+            l.position,
+            l.option,
+            l.line,
+            if l.judgeable {
+                ""
+            } else {
+                "  [not judgeable on the page]"
+            }
+        ));
     }
     out.join("\n") + "\n"
 }

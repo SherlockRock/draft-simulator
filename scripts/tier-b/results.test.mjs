@@ -14,7 +14,10 @@ import {
   countText,
   draftRevealState,
   gridModel,
+  NOT_JUDGEABLE,
   heatLegend,
+  linesHeader,
+  upperBoundLines,
   heatStep,
   revealChangesView,
   hoverLines,
@@ -41,10 +44,11 @@ const E = "2026-10-07-synth-dme-adc-pinch-slot-19"; // revealed by its seed (hol
 function mx(over = {}) {
   const base = {
     positions: 5, speaking: 5, non_speaking: 0,
-    never: [0, 0, 0, 0], near: [0, 0, 0, 0], unjudged: [0, 0, 0, 0], play: [0, 0, 0, 0], no_play: 0, neither_play: 0,
+    never: [0, 0, 0, 0], near: [0, 0, 0, 0], unjudged: [0, 0, 0, 0], play: [0, 0, 0, 0], no_play: [0, 0, 0, 0], neither_play: [0, 0, 0, 0],
     pick: [0, 0, 0, 0], pick_off: [0, 0, 0, 0], with_pick: 4, pick_off_eligible: 2,
     never_1_by_class: { in_pool: 0, off_pool_base: 0, off_pool_graded: 0 }, top_in_pool: 3,
-    bad_line: 0, judged_line: 0, unjudged_line: 0,
+    pick_median_rank: 3, pick_median_rank_absent: false, pick_absent: 0, pick_median_regret: 0.15, opp_charge_lead: 0,
+    bad_line: 0, judged_line: 0, unjudged_line: 0, no_line: 0,
   };
   return { ...base, ...over };
 }
@@ -68,7 +72,7 @@ function metrics(over = {}) {
       arm("floor:0.1", "floor", null, null, { never: [1, 2, 0, 0] }, {}, { unknown_r_kept: 2 }),
     ],
     rule: outcome(),
-    sensitivity: { margins: [{ margin: 0.005, pick: "roster:0.1:0.15" }, { margin: 0.02, pick: null }], leave_out: [{ draft: "supp", pick: "roster:0.1:0.05" }] },
+    sensitivity: { margins: [{ margin: 0.005, pick: "roster:0.1:0.15", readable: 48 }, { margin: 0.02, pick: null, readable: 0 }], leave_out: [{ draft: "supp", pick: "roster:0.1:0.05", readable: 47 }] },
     second_line: { differs: false, outcome: outcome() },
     never_everywhere: [],
     r_by_label: [{ bucket: "r < 0.1", play: 0, maybe: 1, never: 2 }],
@@ -226,17 +230,18 @@ test("the rule line says N of M readable, or that no arm is readable and what fo
 });
 
 test("sensitivity, the second line, bad_line@1 and reveal_changes say what the tool states", () => {
-  assert.deepEqual(sensitivityLines(metrics().sensitivity), ["ε 0.005: roster:0.1:0.15", "ε 0.02: none readable", "without supp: roster:0.1:0.05"]);
+  assert.deepEqual(sensitivityLines(metrics().sensitivity), ["ε 0.005: roster:0.1:0.15 (48 readable)", "ε 0.02: no pick (0 readable)", "without supp: roster:0.1:0.05 (47 readable)"]);
   assert.match(secondLine({ differs: true, outcome: outcome() }), /DIFFERS from the blind read/);
   assert.match(secondLine({ differs: false, outcome: outcome({ readable: 0, roster_arms: 6, pick: null }) }), /0 of 6 arms readable, pick none readable \(same as the blind read\)/);
   const m = metrics();
   find(m, "roster:0.1:0.05").metrics.bad_line = 2;
   find(m, "roster:0.1:0.05").metrics.judged_line = 5;
   find(m, "roster:0.1:0.05").metrics.unjudged_line = 3;
-  assert.deepEqual(badLineLines(m), ["reference = pick, roster:0.1:0.05: 2 bad of 5 judged, 3 unjudged"]);
+  find(m, "roster:0.1:0.05").metrics.no_line = 1;
+  assert.deepEqual(badLineLines(m), ["reference = pick, roster:0.1:0.05: 2 bad of 5 judged, 3 unjudged, 1 with no line"]);
   m.rule.pick = "roster:0.1:0.15";
   assert.equal(badLineLines(m).length, 2);
-  assert.match(badLineLines(m)[1], /^pick, roster:0\.1:0\.15: 0 bad of 0 judged, 0 unjudged$/);
+  assert.match(badLineLines(m)[1], /^pick, roster:0\.1:0\.15: 0 bad of 0 judged, 0 unjudged, 0 with no line$/);
   assert.match(revealChangesLine(metrics().reveal_changes), /^0 of 18 blind labels and 0 of 3 blind picks changed after the reveal; drafts revealed: synth-dme-adc; reveals with no change: none$/);
 });
 
@@ -260,4 +265,35 @@ test("reveal_changes on the tab keeps only visible positions", () => {
 
 test("the worklist keeps lines_at as given, null included", () => {
   assert.equal(worklistView({ lines_at: null, unlabelled_rows: [], unjudged_lines: [] }, () => true).linesAt, null);
+});
+
+test("the receipt's second line is the summary's, word for word (the Rust readable-run snapshot's numbers)", () => {
+  const from = mx({ near: [0, 0, 0, 0], play: [1, 2, 0, 0], no_play: [0, 0, 0, 0], neither_play: [0, 0, 0, 0], pick_median_rank: 3.5, pick_absent: 0, with_pick: 2, pick_median_regret: 0.45, opp_charge_lead: 0 });
+  const to = mx({ near: [0, 0, 0, 0], play: [2, 2, 0, 0], no_play: [0, 0, 0, 0], neither_play: [0, 0, 0, 0], pick_median_rank: 2, pick_absent: 0, with_pick: 2, pick_median_regret: 0.1, opp_charge_lead: 0 });
+  const r = { reference: "a", pick: "b", from, to, leaves_top_3: [], enters_top_3: [], unstable: { positions: [], from, to }, stable: { positions: [], from, to } };
+  const lines = receiptLines(r, () => true);
+  assert.equal(lines[1], "also near@3 0 → 0, play@1 1 → 2, play@3 2 → 2, no_play@3 0 → 0 (neither 0 → 0), own pick median rank 3.5 → 2 (absent 0 of 2 → 0 of 2), median regret 0.450 → 0.100, opp_charge_lead 0 → 0");
+  assert.match(lines[0], /^never@1 /);
+  assert.match(lines[2], /^own pick leaves the top 3 at: none$/, "the existing lines keep their place after it");
+  const inf = receiptLines({ ...r, from: { ...from, pick_median_rank: null, pick_median_rank_absent: true }, to: { ...to, pick_median_rank: null, with_pick: 0, pick_median_regret: null } }, () => true)[1];
+  assert.match(inf, /own pick median rank ∞ → none \(absent 0 of 2 → 0 of 0\), median regret 0\.450 → none/);
+});
+
+test("the worklist header says how many lines the page cannot judge, and the marker is per line; both stay behind positionVisible", () => {
+  const w = worklistView({
+    lines_at: "roster:0.15:0.05", unlabelled_rows: [], not_judgeable: 1,
+    unjudged_lines: [{ position: A, option: "o", line: "L", judgeable: true }, { position: E, option: "o2", line: "L2", judgeable: false }],
+  }, (id) => id === E);
+  assert.equal(linesHeader(w), "#1 lines at roster:0.15:0.05 with no line verdict: 2 (1 not judgeable on the page: it offers a verdict only on the reference arm's #1 line)");
+  assert.deepEqual(w.unjudgedLines.map((l) => [l.position, l.judgeable]), [[E, false]]);
+  assert.equal(NOT_JUDGEABLE, "  [not judgeable on the page]");
+  assert.equal(JSON.stringify(w).includes('"o"'), false);
+});
+
+test("the ≥ upper bounds list every arm with an unjudged position, floor rows included", () => {
+  const m = metrics();
+  find(m, "floor:0.1").metrics.unjudged = [2, 0, 0, 0];
+  find(m, "roster:0.15:0.05").metrics.unjudged = [2, 1, 0, 0];
+  assert.deepEqual(upperBoundLines(m), ["roster:0.15:0.05  ≤3 / ≤2", "floor:0.1  ≤3 / ≤2"]);
+  assert.match(hoverLines(find(m, "floor:0.1"), () => true).join("\n"), /upper bounds \(never \+ unjudged\): ≤3 \/ ≤2/);
 });

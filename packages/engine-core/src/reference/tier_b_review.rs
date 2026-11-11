@@ -1438,8 +1438,8 @@ pub struct ScoredAction {
     pub action: Action,
     pub value: f64,
     pub option: Option<OptionKey>,
-    /// Must agree with `own_pick_in_pool` for the own pick's entry (debug-asserted); Task 10's floor
-    /// rows and `top_in_pool` read it.
+    /// Must agree with `own_pick_in_pool` for the own pick's entry (debug-asserted there; nothing else
+    /// reads it: the floor rows read the traced sides and `top_in_pool` reads `class`).
     pub in_pool: bool,
     pub class: TopClassName,
     pub opponent_charge: f64,
@@ -1654,13 +1654,14 @@ fn silent(id: &str) -> ArmInput {
     }
 }
 
-fn top_line_of(key: &OptionKey, ranked: &RankedAction, u: &Universe) -> TopLine {
+/// The #1's line, or `None` where the continuation is empty (slot 19: no line to judge, design § 1).
+fn top_line_of(key: &OptionKey, ranked: &RankedAction, u: &Universe) -> Option<TopLine> {
     let turns: Vec<Vec<String>> = ranked.continuation.iter().map(|a| ids(*a, u)).collect();
-    TopLine {
+    (!turns.is_empty()).then(|| TopLine {
         option: key.clone(),
         option_id: key.id(u),
         line: line_text(&turns),
-    }
+    })
 }
 
 /// Traces `arrangement` for every action of the arm's whole ranking at the arm's price, so the class,
@@ -1703,7 +1704,10 @@ fn arm_data(
         keys.push(key);
         sides.push(side);
     }
-    let top_line = outcome.ranked.first().map(|r| top_line_of(&keys[0], r, u));
+    let top_line = outcome
+        .ranked
+        .first()
+        .and_then(|r| top_line_of(&keys[0], r, u));
     ArmData {
         input: ArmInput {
             id: arm.id.clone(),
@@ -1721,9 +1725,6 @@ fn arm_data(
     }
 }
 
-/// The reference ranking with every option holding an off-pool placement below share ratio `ratio`
-/// removed (root-only, no re-search): a moved locked pick counts, a placement of unknown ratio is kept
-/// and counted.
 /// Which options a floor keeps: the indices of those whose sides hold no off-pool placement of known
 /// share ratio below `ratio` (a moved locked pick included), and how many kept ones hold an off-pool
 /// placement of unknown ratio. `r_of` reads a placement's ratio.
@@ -1745,6 +1746,9 @@ pub fn floor_keep(
     (kept, unknown)
 }
 
+/// The reference ranking with every option holding an off-pool placement below share ratio `ratio`
+/// removed (root-only, no re-search): a moved locked pick counts, a placement of unknown ratio is kept
+/// and counted.
 fn floor_input(ratio: f64, reference: &ArmData, outcome: &SearchOutcome, u: &Universe) -> ArmInput {
     let (kept, unknown) = floor_keep(&reference.sides, ratio, |p| {
         share_ratio(u, p.champion, p.role)
@@ -1760,7 +1764,7 @@ fn floor_input(ratio: f64, reference: &ArmData, outcome: &SearchOutcome, u: &Uni
         own_in_pool: reference.input.own_in_pool.clone(),
         top_line: kept
             .first()
-            .map(|i| top_line_of(&reference.keys[*i], &outcome.ranked[*i], u)),
+            .and_then(|i| top_line_of(&reference.keys[*i], &outcome.ranked[*i], u)),
         unknown_r_kept: unknown,
     }
 }

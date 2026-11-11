@@ -549,9 +549,9 @@ test("M5: a re-read page shows the earlier line verdict as pressed and the earli
 // ---- the results tab ----
 function glueMetrics() {
   const mx = (over) => ({
-    positions: 5, speaking: 5, non_speaking: 0, never: [0, 0, 0, 0], near: [0, 0, 0, 0], unjudged: [0, 0, 0, 0], play: [0, 0, 0, 0], no_play: 0, neither_play: 0,
+    positions: 5, speaking: 5, non_speaking: 0, never: [0, 0, 0, 0], near: [0, 0, 0, 0], unjudged: [0, 0, 0, 0], play: [0, 0, 0, 0], no_play: [0, 0, 0, 0], neither_play: [0, 0, 0, 0],
     pick: [0, 0, 0, 0], pick_off: [0, 0, 0, 0], with_pick: 4, pick_off_eligible: 2, never_1_by_class: { in_pool: 0, off_pool_base: 0, off_pool_graded: 0 },
-    top_in_pool: 3, bad_line: 0, judged_line: 0, unjudged_line: 0, ...over,
+    top_in_pool: 3, pick_median_rank: 3, pick_median_rank_absent: false, pick_absent: 0, pick_median_regret: 0.15, opp_charge_lead: 0, bad_line: 0, judged_line: 0, unjudged_line: 0, no_line: 0, ...over,
   });
   const none = Object.fromEntries(["never_1", "never_3", "near_1", "near_3", "unjudged_1", "unjudged_3", "pick_3", "pick_3_out", "not_speaking", "bad_line_1", "unjudged_line_1"].map((k) => [k, []]));
   const arm = (id, role, p, q, m, positions = {}) => ({ id, role, p, q, readable: true, unknown_r_kept: 0, metrics: mx(m), positions: { ...none, ...positions } });
@@ -568,12 +568,12 @@ function glueMetrics() {
       arm("floor:0.1", "floor", null, null, { never: [1, 2, 0, 0] }),
     ],
     rule: outcome,
-    sensitivity: { margins: [], leave_out: [] },
+    sensitivity: { margins: [{ margin: 0.02, pick: null, readable: 0 }], leave_out: [] },
     second_line: { differs: false, outcome },
     never_everywhere: [A, B],
     r_by_label: [{ bucket: "r < 0.1", play: 0, maybe: 0, never: 0 }],
     reveal_changes: { blind_labels: 2, blind_picks: 1, labels: [{ position: A, option: "SECRET-OPTION-RC", blind: "never", current: "play" }], picks: [{ position: B, blind: ["Ahri"], current: null }], drafts_revealed: [], reveals_without_change: [] },
-    worklist: { lines_at: "roster:0.1:0.05", unlabelled_rows: [{ position: A, rows: ["UNLABELLED-ROW-A"] }], unjudged_lines: [{ position: A, option: "SECRET-OPTION", line: "SECRET-LINE" }] },
+    worklist: { lines_at: "roster:0.1:0.05", not_judgeable: 1, unlabelled_rows: [{ position: A, rows: ["UNLABELLED-ROW-A"] }], unjudged_lines: [{ position: A, option: "SECRET-OPTION", line: "SECRET-LINE", judgeable: false }] },
   };
 }
 const evalIn = (ctx, code) => vm.runInContext(code, ctx);
@@ -698,4 +698,15 @@ test("results: hover and focus on the pool_or_roster cell and a floor row show t
   const detail = walk(doc.fixed.results, (n) => n.id === "detail")[0];
   assert.match(detail.textContent, /never@3 \d/, "never@3 and pick@3 are on the page without the tooltip");
   assert.match(detail.textContent, /pick@3 \d+ of 4/);
+});
+
+test("results: the page prints the receipt's second line, no-line counts, readable counts and the not-judgeable header", () => {
+  const { doc } = loadPage({ run: { ...RUN, metrics: glueMetrics() }, localStorage: () => memoryStorage().api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  const t = doc.fixed.results.textContent;
+  assert.match(t, /also near@3 0 → 0, play@1 0 → 0, play@3 0 → 0, no_play@3 0 → 0 \(neither 0 → 0\), own pick median rank 3 → 3/);
+  assert.match(t, /ε 0\.02: no pick \(0 readable\)/);
+  assert.match(t, /0 unjudged, 0 with no line/);
+  assert.match(t, /#1 lines at roster:0\.1:0\.05 with no line verdict: 1 \(1 not judgeable on the page/);
+  assert.equal(t.includes("SECRET-LINE"), false);
 });
