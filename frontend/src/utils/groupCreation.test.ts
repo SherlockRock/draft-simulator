@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     NEW_GROUP_DRAFT_MODE,
+    NEW_GROUP_GRID_ROWS,
     newGroupDimensions,
     newGroupGridSettings,
     resolveNewGroupMetadata
@@ -25,14 +26,20 @@ describe("new-group creation defaults", () => {
         expect(NEW_GROUP_DRAFT_MODE).toBe("fearless");
     });
 
-    it("starts the grid form at DEFAULT_GRID_COLS/ROWS with no labels", () => {
+    it("starts the grid form as a 3x3 with no labels", () => {
         expect(newGroupGridSettings()).toEqual({
-            gridCols: DEFAULT_GRID_COLS,
-            gridRows: DEFAULT_GRID_ROWS,
+            gridCols: 3,
+            gridRows: 3,
             rowLabels: [],
             colLabels: []
         });
         expect(DEFAULT_GRID_COLS).toBe(3);
+        expect(NEW_GROUP_GRID_ROWS).toBe(3);
+    });
+
+    it("leaves the absent-gridRows reading at one row for legacy grids", () => {
+        // A new group's 3 rows must not leak into how a grid with no stored
+        // `gridRows` is read, or every pre-setting grid grows on next measure.
         expect(DEFAULT_GRID_ROWS).toBe(1);
     });
 
