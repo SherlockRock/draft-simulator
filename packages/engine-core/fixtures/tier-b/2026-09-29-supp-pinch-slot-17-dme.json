@@ -222,5 +222,41 @@
   "verdict": {
     "off_pool": true
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:39:02Z",
+      "finished": "2026-11-11T03:40:05Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "Yunara",
+        "Lulu"
+      ],
+      "labels": {
+        "Ahri+Ziggs|top=Camille,jungle=LeeSin,mid=Ahri,adc=Ziggs,support=Galio": "never",
+        "Alistar+Syndra|top=Camille,jungle=LeeSin,mid=Galio,adc=Syndra,support=Alistar": "play",
+        "Graves+Zyra|top=Camille,jungle=Graves,mid=Galio,adc=Zyra,support=LeeSin": "never",
+        "Janna+Syndra|top=Camille,jungle=LeeSin,mid=Galio,adc=Syndra,support=Janna": "maybe",
+        "Janna+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Janna": "maybe",
+        "Lulu+Zeri|top=Camille,jungle=LeeSin,mid=Galio,adc=Zeri,support=Lulu": "play",
+        "Lulu+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Lulu": "never",
+        "Morgana+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Morgana": "maybe",
+        "Nami+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Nami": "maybe",
+        "Renata+Syndra|top=Camille,jungle=LeeSin,mid=Galio,adc=Syndra,support=Renata": "never",
+        "Renata+Zeri|top=Camille,jungle=LeeSin,mid=Galio,adc=Zeri,support=Renata": "play",
+        "Renata+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Renata": "maybe",
+        "Senna+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Senna": "play",
+        "Seraphine+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Seraphine": "maybe",
+        "Syndra+Ziggs|top=Camille,jungle=LeeSin,mid=Syndra,adc=Ziggs,support=Galio": "never",
+        "Syndra+Zyra|top=Camille,jungle=LeeSin,mid=Galio,adc=Syndra,support=Zyra": "never",
+        "Ziggs+Zyra|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Zyra": "never"
+      }
+    }
+  ],
   "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Galio at support, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool."
 }

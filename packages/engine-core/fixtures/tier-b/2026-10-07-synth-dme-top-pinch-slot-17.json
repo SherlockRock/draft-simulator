@@ -230,5 +230,38 @@
     ],
     "ok": true
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:50:46Z",
+      "finished": "2026-11-11T03:51:51Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "Lulu",
+        "Vayne"
+      ],
+      "labels": {
+        "Ahri+Lulu|top=Locke,jungle=Naafiri,mid=Ahri,adc=Yunara,support=Lulu": "never",
+        "Fiddlesticks+Lulu|top=Fiddlesticks,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Fiddlesticks+Nami|top=Fiddlesticks,jungle=Naafiri,mid=Locke,adc=Yunara,support=Nami": "play",
+        "Gangplank+Lulu|top=Gangplank,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Katarina+Lulu|top=Katarina,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "never",
+        "Kayle+Lulu|top=Kayle,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Kennen+Lulu|top=Kennen,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Lulu+Nasus|top=Nasus,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Lulu+Neeko|top=Neeko,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "never",
+        "Lulu+Olaf|top=Olaf,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Lulu+Pantheon|top=Pantheon,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "maybe",
+        "Lulu+Teemo|top=Teemo,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "never",
+        "Lulu+Tristana|top=Tristana,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "play",
+        "Lulu+Velkoz|top=Velkoz,jungle=Naafiri,mid=Locke,adc=Yunara,support=Lulu": "never"
+      }
+    }
+  ],
   "review": "The engine's roster top at Q = 0: Fiddlesticks at top (grade 82, r 0.18) beside Lulu; Olaf top (off-pool base) overtakes him between Q = 0.10 and 0.12. 2026-10-08 user (scored read, 16.19 table, P = 0.105): ok — with a caveat: the pick is fairly difficult, the player would need experience on the champion to play it well; assuming that, a valid pick."
 }

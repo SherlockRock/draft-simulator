@@ -230,5 +230,50 @@
     ],
     "ok": true
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:48:07Z",
+      "finished": "2026-11-11T03:48:47Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "KogMaw",
+        "Lulu"
+      ],
+      "labels": {
+        "Ahri+Lulu|top=Rumble,jungle=Naafiri,mid=Ahri,adc=Locke,support=Lulu": "never",
+        "Ashe+Leona|top=Rumble,jungle=Naafiri,mid=Locke,adc=Ashe,support=Leona": "play",
+        "Ashe+Lulu|top=Rumble,jungle=Naafiri,mid=Locke,adc=Ashe,support=Lulu": "play",
+        "Ashe+Nami|top=Rumble,jungle=Naafiri,mid=Locke,adc=Ashe,support=Nami": "play",
+        "Ekko+Lulu|top=Rumble,jungle=Naafiri,mid=Locke,adc=Ekko,support=Lulu": "never",
+        "Katarina+Lulu|top=Rumble,jungle=Naafiri,mid=Locke,adc=Katarina,support=Lulu": "maybe",
+        "Leona+Zyra|top=Rumble,jungle=Naafiri,mid=Locke,adc=Zyra,support=Leona": "play",
+        "Lulu+Tristana|top=Rumble,jungle=Naafiri,mid=Locke,adc=Tristana,support=Lulu": "play",
+        "Lulu+Vayne|top=Rumble,jungle=Naafiri,mid=Locke,adc=Vayne,support=Lulu": "play",
+        "Lulu+Xayah|top=Rumble,jungle=Naafiri,mid=Locke,adc=Xayah,support=Lulu": "play",
+        "Lulu+Zyra|top=Rumble,jungle=Naafiri,mid=Locke,adc=Zyra,support=Lulu": "never",
+        "Tristana+Zilean|top=Rumble,jungle=Naafiri,mid=Locke,adc=Tristana,support=Zilean": "play",
+        "Vayne+Zilean|top=Rumble,jungle=Naafiri,mid=Locke,adc=Vayne,support=Zilean": "maybe",
+        "Zilean+Zyra|top=Rumble,jungle=Naafiri,mid=Locke,adc=Zyra,support=Zilean": "maybe"
+      }
+    },
+    {
+      "started": "2026-11-11T03:52:00Z",
+      "finished": "2026-11-11T03:52:00Z",
+      "mode": "scored",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "labels": {}
+    }
+  ],
   "review": "The engine's roster top at Q = 0: Katarina at adc (grade 85, r 0.15) beside Lulu; Vayne adc (off-pool base) overtakes her between Q = 0.12 and 0.15. 2026-10-08 user (scored read, 16.19 table, P = 0.105): ok — with a caveat: the pick is fairly difficult, the player would need experience on the champion to play it well; assuming that, a valid pick."
 }
