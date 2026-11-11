@@ -234,5 +234,30 @@
   "verdict": {
     "off_pool": true
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:30:37Z",
+      "finished": "2026-11-11T03:30:47Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": "Caitlyn",
+      "labels": {
+        "Ashe|top=KSante,jungle=Vi,mid=Locke,adc=Ashe,support=Bard": "play",
+        "Caitlyn|top=KSante,jungle=Vi,mid=Locke,adc=Caitlyn,support=Bard": "play",
+        "Jinx|top=KSante,jungle=Vi,mid=Locke,adc=Jinx,support=Bard": "play",
+        "Karthus|top=KSante,jungle=Vi,mid=Locke,adc=Karthus,support=Bard": "play",
+        "KogMaw|top=KSante,jungle=Vi,mid=Locke,adc=KogMaw,support=Bard": "maybe",
+        "Syndra|top=KSante,jungle=Vi,mid=Locke,adc=Syndra,support=Bard": "play",
+        "Viktor|top=KSante,jungle=Vi,mid=Locke,adc=Viktor,support=Bard": "play",
+        "Xayah|top=KSante,jungle=Vi,mid=Locke,adc=Xayah,support=Bard": "play",
+        "Ziggs|top=KSante,jungle=Vi,mid=Locke,adc=Ziggs,support=Bard": "play"
+      }
+    }
+  ],
   "review": "2026-09-29 PARKED, no verdict: the engine's best in-pool action puts Syndra in the ADC slot, in the pool as a set but off-role for the player who pilots it (pools were sets, not roles). Role maps since 2026-10-02: that fill is now off-pool; the verdict is due at recalibration. 2026-10-04 user (scored read, role maps; verdict on the board as recorded): leave the pool."
 }

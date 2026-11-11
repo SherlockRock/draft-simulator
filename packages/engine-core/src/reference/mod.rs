@@ -29,5 +29,6 @@ pub mod oracle;
 pub mod search;
 pub mod state;
 pub mod tier_b;
+pub mod tier_b_review;
 pub mod transposition;
 pub mod universe;

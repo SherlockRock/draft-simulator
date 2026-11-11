@@ -231,6 +231,28 @@
     }
   },
   "our_side": "Red",
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:34:53Z",
+      "finished": "2026-11-11T03:35:01Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": "Ryze",
+      "labels": {
+        "Annie|top=KSante,jungle=JarvanIV,mid=Annie,adc=Ezreal,support=Rakan": "play",
+        "Karthus|top=KSante,jungle=JarvanIV,mid=Karthus,adc=Ezreal,support=Rakan": "maybe",
+        "Lissandra|top=KSante,jungle=JarvanIV,mid=Lissandra,adc=Ezreal,support=Rakan": "play",
+        "Syndra|top=KSante,jungle=JarvanIV,mid=Syndra,adc=Ezreal,support=Rakan": "play",
+        "Vex|top=KSante,jungle=JarvanIV,mid=Vex,adc=Ezreal,support=Rakan": "maybe",
+        "Viktor|top=KSante,jungle=JarvanIV,mid=Viktor,adc=Ezreal,support=Rakan": "play"
+      }
+    }
+  ],
   "review": "2026-09-29 user: leave the pool \u2014 Annie / Lissandra are strong champions and really good for this draft; the only stop where leaving felt compelling.",
   "verdict": {
     "off_pool": true

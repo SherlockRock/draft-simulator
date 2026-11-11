@@ -6,18 +6,19 @@
 
 use super::entries::{
     pool_form, pool_set, role_key, spec_to_action, spec_to_entries, spec_to_pools, ActionSpec,
-    EntrySpec, PoolForm, PoolsSpec, ROLE_KEYS,
+    EntrySpec, PoolForm, PoolsSpec, SpecError, ROLE_KEYS,
 };
 use super::feasibility::{FeasibilityMemo, FeasibilityRule, Price};
-use super::format::Format;
+use super::format::{Format, Slot};
 use super::live::{LiveError, LiveRoot, LiveUniverse};
 use super::node::legal_actions_under;
 use super::state::{Action, Entry, Pools, Position, PositionError};
-use super::universe::{ChampionIdx, ChampionSet};
+use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
 use crate::feasibility::ROLES;
 use crate::pools::Role;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 /// D7's tags, plus B-proper's calibration subset.
@@ -66,6 +67,488 @@ pub struct RoleVerdict {
     pub ok: bool,
 }
 
+/// The reader's judgement on one option (review-tool design § 1, Definitions): `play`, `maybe`,
+/// `never`, for this team with these pools, ignoring P, Q and the engine's line.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Label {
+    Play,
+    Maybe,
+    Never,
+}
+
+impl Label {
+    pub const NAMES: [&'static str; 3] = ["play", "maybe", "never"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Label::Play => "play",
+            Label::Maybe => "maybe",
+            Label::Never => "never",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Label::Play, Label::Maybe, Label::Never]
+            .into_iter()
+            .find(|l| l.name() == name)
+    }
+}
+
+/// How an entry was written: `blind` before anything of the engine's was shown on the draft,
+/// `scored` after (design § 1: blind means the draft had never been revealed).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VerdictMode {
+    Blind,
+    Scored,
+}
+
+impl VerdictMode {
+    pub const NAMES: [&'static str; 2] = ["blind", "scored"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            VerdictMode::Blind => "blind",
+            VerdictMode::Scored => "scored",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        [VerdictMode::Blind, VerdictMode::Scored]
+            .into_iter()
+            .find(|m| m.name() == name)
+    }
+}
+
+/// An option (design Definitions): an action and, where role information exists, the mover's whole
+/// side in the cheapest arrangement. `comp` is in `ROLES` order, `None` for a role the side has not
+/// filled yet.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OptionKey {
+    pub action: Action,
+    pub comp: Option<[Option<ChampionIdx>; 5]>,
+}
+
+impl OptionKey {
+    /// Reads an option id, e.g. `Renata+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Renata`.
+    /// The action's ids are sorted, the comp's roles in `ROLE_KEYS` order, and the comp's champions
+    /// are exactly `mover_picks` (the mover's locked picks at `root`) plus the action, each once.
+    pub fn parse(
+        id: &str,
+        root: Slot,
+        mover_picks: &[ChampionIdx],
+        universe: &Universe,
+    ) -> Result<Self, SpecError> {
+        Self::parse_at("option", id, root, mover_picks, universe)
+    }
+
+    /// `parse`, with the error's field named by the caller.
+    fn parse_at(
+        field: &str,
+        id: &str,
+        root: Slot,
+        mover_picks: &[ChampionIdx],
+        universe: &Universe,
+    ) -> Result<Self, SpecError> {
+        let bad = |reason: String| SpecError::Invalid {
+            field: field.to_string(),
+            reason,
+        };
+        let (left, right) = match id.split_once('|') {
+            Some((left, right)) => (left, Some(right)),
+            None => (id, None),
+        };
+        let names: Vec<&str> = left.split('+').collect();
+        let spec = match names.as_slice() {
+            [a] => ActionSpec::Single(a.to_string()),
+            [a, b] => ActionSpec::Pair([a.to_string(), b.to_string()]),
+            _ => {
+                return Err(bad(format!(
+                    "{left:?} is not one champion or two joined by '+'"
+                )))
+            }
+        };
+        let action = spec_to_action(&spec, root, field, universe)?;
+        // Mover's picks plus the action, each once: the action cannot re-pick a locked champion.
+        if let Some(c) = action.champions().find(|c| mover_picks.contains(c)) {
+            return Err(bad(format!(
+                "{} is already one of the side's locked picks; the action must add new champions",
+                universe.id(c)
+            )));
+        }
+        if let [a, b] = names.as_slice() {
+            if a > b {
+                return Err(bad(format!(
+                    "the pair is not sorted by id: write {b}+{a}, the one spelling of an option"
+                )));
+            }
+        }
+        let Some(right) = right else {
+            return Ok(OptionKey { action, comp: None });
+        };
+        if right.is_empty() {
+            return Err(bad(
+                "an empty comp after '|'; leave the '|' off to give the action alone".into(),
+            ));
+        }
+        let mut comp = [None; 5];
+        let mut last_role: Option<usize> = None;
+        for part in right.split(',') {
+            let (key, champion) = part
+                .split_once('=')
+                .ok_or_else(|| bad(format!("comp entry {part:?} is not role=champion")))?;
+            let role = ROLE_KEYS.iter().position(|k| *k == key).ok_or_else(|| {
+                bad(format!(
+                    "unknown role key {key:?}; the keys are {}",
+                    ROLE_KEYS.join(", ")
+                ))
+            })?;
+            if last_role.is_some_and(|last| role <= last) {
+                return Err(bad(format!(
+                    "the comp's roles must be in the order {}, each once; {key:?} is out of place",
+                    ROLE_KEYS.join(", ")
+                )));
+            }
+            last_role = Some(role);
+            let c = universe
+                .index(champion)
+                .ok_or_else(|| SpecError::UnknownChampion {
+                    field: field.to_string(),
+                    id: champion.to_string(),
+                })?;
+            comp[role] = Some(c);
+        }
+        let listed: Vec<ChampionIdx> = comp.iter().flatten().copied().collect();
+        for (i, c) in listed.iter().enumerate() {
+            if listed[..i].contains(c) {
+                return Err(bad(format!("the comp lists {} twice", universe.id(*c))));
+            }
+        }
+        for c in mover_picks {
+            if !listed.contains(c) {
+                return Err(bad(format!(
+                    "the comp is missing {}, a pick the side has already locked",
+                    universe.id(*c)
+                )));
+            }
+        }
+        for c in action.champions() {
+            if !listed.contains(&c) {
+                return Err(bad(format!(
+                    "the comp is missing {}, a champion of the action",
+                    universe.id(c)
+                )));
+            }
+        }
+        for c in &listed {
+            if !mover_picks.contains(c) && !action.champions().any(|a| a == *c) {
+                return Err(bad(format!(
+                    "the comp has {}, who is neither a locked pick nor in the action",
+                    universe.id(*c)
+                )));
+            }
+        }
+        Ok(OptionKey {
+            action,
+            comp: Some(comp),
+        })
+    }
+
+    /// The option's one spelling: the action's ids sorted and joined with `+`, then `|` and the comp's
+    /// `role=id` pairs in `ROLE_KEYS` order, when there is a comp.
+    pub fn id(&self, universe: &Universe) -> String {
+        let mut names: Vec<&str> = self.action.champions().map(|c| universe.id(c)).collect();
+        names.sort_unstable();
+        let mut id = names.join("+");
+        if let Some(comp) = &self.comp {
+            let roles: Vec<String> = ROLE_KEYS
+                .iter()
+                .zip(comp)
+                .filter_map(|(key, c)| c.map(|c| format!("{key}={}", universe.id(c))))
+                .collect();
+            id.push('|');
+            id.push_str(&roles.join(","));
+        }
+        id
+    }
+}
+
+/// The page state that wrote an entry (design § 3b): the run's timestamp and the page's revision.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct EntrySource {
+    pub run: String,
+    pub rev: u64,
+}
+
+/// The reader's verdict on the reference #1's line (design § 1): `ok` or not, keyed by the option
+/// and the line's text. Never enters the rule.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LineVerdict {
+    pub option: OptionKey,
+    pub line: String,
+    pub ok: bool,
+}
+
+/// One appended sitting-slice of verdicts (design § 1). An entry holds only what it adds or changes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerdictEntry {
+    pub started: String,
+    pub finished: String,
+    pub mode: VerdictMode,
+    pub from: EntrySource,
+    pub fm_version: String,
+    pub positions_patch: String,
+    /// Outer `None`: not answered in this entry. `Some(None)`: answered "no view".
+    pub would_pick: Option<Option<Action>>,
+    pub labels: Vec<(OptionKey, Label)>,
+    pub line: Option<LineVerdict>,
+    pub note: Option<String>,
+}
+
+/// The two folds over a fixture's entries, in file order (design § 1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedVerdicts {
+    /// The last label written for each option in a `blind` entry.
+    pub blind: HashMap<OptionKey, Label>,
+    /// The last label written for each option, in any mode.
+    pub current: HashMap<OptionKey, Label>,
+    /// The own pick, folded the same two ways. Outer `None`: never answered.
+    pub blind_pick: Option<Option<Action>>,
+    pub current_pick: Option<Option<Action>>,
+    /// Line verdicts: the last write for each (option, line), in the file order of that write.
+    pub lines: Vec<LineVerdict>,
+    /// Any entry is `scored`.
+    pub revealed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LineVerdictSpec {
+    option: String,
+    line: serde_json::Value,
+    ok: bool,
+}
+
+/// `would_pick`: absent is `None`, `null` is `Some(None)`, an action is `Some(Some(_))`.
+fn double_option<'de, D>(deserializer: D) -> Result<Option<Option<ActionSpec>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<ActionSpec>::deserialize(deserializer).map(Some)
+}
+
+/// The text fields stay raw values and `labels` stay strings here, so a bad one (a `null`
+/// `positions_patch`, an array `line.line`, an unknown `mode`) is named by its field
+/// (`verdicts[1].mode`), not by serde's position in the text. A missing field is serde's, which
+/// names it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerdictEntrySpec {
+    started: serde_json::Value,
+    finished: serde_json::Value,
+    mode: serde_json::Value,
+    from: EntrySource,
+    fm_version: serde_json::Value,
+    positions_patch: serde_json::Value,
+    #[serde(default, deserialize_with = "double_option")]
+    would_pick: Option<Option<ActionSpec>>,
+    #[serde(default)]
+    labels: BTreeMap<String, String>,
+    #[serde(default)]
+    line: Option<LineVerdictSpec>,
+    #[serde(default)]
+    note: Option<String>,
+}
+
+/// `YYYY-MM-DDTHH:MM:SS[.f…]Z`: ISO-8601 UTC, the page's `toISOString` with or without the fraction.
+fn is_utc_timestamp(s: &str) -> bool {
+    let number = |part: Option<&str>, width: usize| -> Option<u32> {
+        let part = part?;
+        if part.len() == width && part.bytes().all(|b| b.is_ascii_digit()) {
+            part.parse().ok()
+        } else {
+            None
+        }
+    };
+    let Some(body) = s.strip_suffix('Z') else {
+        return false;
+    };
+    let (whole, fraction) = match body.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (body, None),
+    };
+    if fraction.is_some_and(|f| f.is_empty() || !f.bytes().all(|b| b.is_ascii_digit())) {
+        return false;
+    }
+    let Some((date, time)) = whole.split_once('T') else {
+        return false;
+    };
+    let mut date = date.split('-');
+    let (Some(year), Some(month), Some(day), None) = (
+        number(date.next(), 4),
+        number(date.next(), 2),
+        number(date.next(), 2),
+        date.next(),
+    ) else {
+        return false;
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    let mut time = time.split(':');
+    let (Some(hour), Some(minute), Some(second), None) = (
+        number(time.next(), 2),
+        number(time.next(), 2),
+        number(time.next(), 2),
+        time.next(),
+    ) else {
+        return false;
+    };
+    (1..=days).contains(&day) && hour < 24 && minute < 60 && second < 60
+}
+
+/// Resolves a file's `verdicts` against the root: every id through `OptionKey`, every action through
+/// `spec_to_action`, each mistake named by its field.
+fn resolve_verdicts(
+    id: &str,
+    specs: &[VerdictEntrySpec],
+    root: Slot,
+    mover_picks: &[ChampionIdx],
+    universe: &Universe,
+) -> Result<Vec<VerdictEntry>, TierBError> {
+    let invalid = |field: String, reason: String| TierBError::Invalid {
+        id: id.to_string(),
+        field,
+        reason,
+    };
+    let spec_err = |e: SpecError| {
+        let (field, reason) = e.field_and_reason();
+        TierBError::Invalid {
+            id: id.to_string(),
+            field,
+            reason,
+        }
+    };
+    let text = |field: String, value: &serde_json::Value| -> Result<String, TierBError> {
+        value
+            .as_str()
+            .map(String::from)
+            .ok_or_else(|| invalid(field, format!("must be a string, got {value}")))
+    };
+    let mut revealed = false;
+    let mut entries = Vec::with_capacity(specs.len());
+    for (i, spec) in specs.iter().enumerate() {
+        let at = |name: &str| format!("verdicts[{i}].{name}");
+        let started = text(at("started"), &spec.started)?;
+        let finished = text(at("finished"), &spec.finished)?;
+        for (name, value) in [("started", &started), ("finished", &finished)] {
+            if !is_utc_timestamp(value) {
+                return Err(invalid(
+                    at(name),
+                    format!("{value:?} is not an ISO-8601 UTC timestamp like 2026-11-09T14:10:05Z"),
+                ));
+            }
+        }
+        let mode_name = text(at("mode"), &spec.mode)?;
+        let mode = VerdictMode::from_name(&mode_name).ok_or_else(|| {
+            invalid(
+                at("mode"),
+                format!(
+                    "unknown mode {mode_name:?}; the modes are {}",
+                    VerdictMode::NAMES.join(", ")
+                ),
+            )
+        })?;
+        let fm_version = text(at("fm_version"), &spec.fm_version)?;
+        let positions_patch = text(at("positions_patch"), &spec.positions_patch)?;
+        // Blind means the draft had never been revealed: after a scored entry, the file is wrong.
+        if mode == VerdictMode::Blind && revealed {
+            return Err(invalid(
+                at("mode"),
+                "a blind entry after a scored one; once a position has been revealed every later label is scored"
+                    .into(),
+            ));
+        }
+        revealed |= mode == VerdictMode::Scored;
+        let would_pick = match &spec.would_pick {
+            None => None,
+            Some(None) => Some(None),
+            Some(Some(action)) => Some(Some(
+                spec_to_action(action, root, &at("would_pick"), universe).map_err(spec_err)?,
+            )),
+        };
+        let mut labels = Vec::with_capacity(spec.labels.len());
+        for (option, name) in &spec.labels {
+            let field = at(&format!("labels[{option}]"));
+            let key = OptionKey::parse_at(&field, option, root, mover_picks, universe)
+                .map_err(spec_err)?;
+            let label = Label::from_name(name).ok_or_else(|| {
+                invalid(
+                    field,
+                    format!(
+                        "unknown label {name:?}; the labels are {}",
+                        Label::NAMES.join(", ")
+                    ),
+                )
+            })?;
+            labels.push((key, label));
+        }
+        let line = match &spec.line {
+            None => None,
+            // The engine's line is shown only at reveal: a blind entry cannot judge it.
+            Some(_) if mode == VerdictMode::Blind => {
+                return Err(invalid(
+                    at("line"),
+                    "a line verdict in a blind entry; the line is shown only at reveal".into(),
+                ));
+            }
+            Some(line) => Some(LineVerdict {
+                option: OptionKey::parse_at(
+                    &at("line.option"),
+                    &line.option,
+                    root,
+                    mover_picks,
+                    universe,
+                )
+                .map_err(spec_err)?,
+                line: text(at("line.line"), &line.line)?,
+                ok: line.ok,
+            }),
+        };
+        entries.push(VerdictEntry {
+            started,
+            finished,
+            mode,
+            from: spec.from.clone(),
+            fm_version,
+            positions_patch,
+            would_pick,
+            labels,
+            line,
+            note: spec.note.clone(),
+        });
+    }
+    Ok(entries)
+}
+
+/// Why `action` is not among the legal actions: the champion's state on the board.
+fn why_illegal(action: Action, on_board: ChampionSet, excluded: ChampionSet) -> &'static str {
+    if action.champions().any(|c| on_board.contains(c)) {
+        "already on the board"
+    } else if action.champions().any(|c| excluded.contains(c)) {
+        "excluded"
+    } else {
+        "not generated at this root"
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
@@ -101,6 +584,9 @@ struct TierBFile {
     verdict: Option<Verdict>,
     #[serde(default)]
     role_verdict: Option<RoleVerdictSpec>,
+    /// Graded verdicts, appended and never rewritten (review-tool design § 1).
+    #[serde(default)]
+    verdicts: Vec<VerdictEntrySpec>,
     /// The raw captured request (the wire `EngineRequest`, when the capture button exists), kept
     /// opaque so nothing the loader does not model (display pools, tiers) is lost. Must be an object
     /// with a string `protocolVersion`; the top-level fields win when the two disagree (warned).
@@ -148,8 +634,26 @@ pub struct TierBFixture {
     pub verdict: Option<Verdict>,
     /// Engine-role-grade § 6: the verdict on a graded top, when the user has given one.
     pub role_verdict: Option<RoleVerdict>,
+    /// Review-tool design § 1: the graded verdict history, in file order; fold with `resolved`.
+    /// Empty at a ban root, where it is not read.
+    pub verdicts: Vec<VerdictEntry>,
+    /// The file's `verdicts` entries exactly as written, all of them, also at a ban root where
+    /// `verdicts` is empty: what the run JSON echoes, and what `base` counts (apply's staleness check).
+    pub verdicts_raw: Vec<serde_json::Value>,
+    /// The file's `pools` as written (list or role map, authored order), `None` where absent: what the
+    /// run JSON echoes. `root.pools` is the resolved form.
+    pub pools_raw: Option<serde_json::Value>,
     pub capture: Option<serde_json::Value>,
     pub path: Option<PathBuf>,
+}
+
+/// A second, lenient read of the file for its `verdicts` and `pools`, kept as written.
+#[derive(Deserialize)]
+struct RawFields {
+    #[serde(default)]
+    verdicts: Vec<serde_json::Value>,
+    #[serde(default)]
+    pools: Option<serde_json::Value>,
 }
 
 /// A loaded fixture plus the non-fatal findings (data-version mismatches, an illegal `actual_next`)
@@ -164,6 +668,44 @@ pub struct Loaded {
 }
 
 impl TierBFixture {
+    /// The two folds over `verdicts`, in file order (design § 1). Current is the last label written
+    /// for each option in any mode; blind is the last written in a `blind` entry, so a `scored` entry
+    /// never changes it. The own pick folds the same way, and an entry without `would_pick` leaves it
+    /// alone while `would_pick: null` ("no view") replaces it.
+    pub fn resolved(&self) -> ResolvedVerdicts {
+        let mut resolved = ResolvedVerdicts {
+            blind: HashMap::new(),
+            current: HashMap::new(),
+            blind_pick: None,
+            current_pick: None,
+            lines: Vec::new(),
+            revealed: false,
+        };
+        for entry in &self.verdicts {
+            let blind = entry.mode == VerdictMode::Blind;
+            resolved.revealed |= !blind;
+            for (option, label) in &entry.labels {
+                resolved.current.insert(option.clone(), *label);
+                if blind {
+                    resolved.blind.insert(option.clone(), *label);
+                }
+            }
+            if let Some(pick) = entry.would_pick {
+                resolved.current_pick = Some(pick);
+                if blind {
+                    resolved.blind_pick = Some(pick);
+                }
+            }
+            if let Some(line) = &entry.line {
+                resolved
+                    .lines
+                    .retain(|l| !(l.option == line.option && l.line == line.line));
+                resolved.lines.push(line.clone());
+            }
+        }
+        resolved
+    }
+
     pub fn load_file(path: &Path, live: &LiveUniverse) -> Result<Loaded, TierBError> {
         let raw = std::fs::read_to_string(path).map_err(|source| TierBError::Io {
             path: path.to_path_buf(),
@@ -195,6 +737,13 @@ impl TierBFixture {
 
     pub fn from_json(raw: &str, label: &str, live: &LiveUniverse) -> Result<Loaded, TierBError> {
         let file: TierBFile = serde_json::from_str(raw).map_err(|source| TierBError::Json {
+            label: label.to_string(),
+            source,
+        })?;
+        let RawFields {
+            verdicts: verdicts_raw,
+            pools: pools_raw,
+        } = serde_json::from_str::<RawFields>(raw).map_err(|source| TierBError::Json {
             label: label.to_string(),
             source,
         })?;
@@ -378,13 +927,7 @@ impl TierBFixture {
             );
             if !legal.contains(&action) {
                 let names: Vec<&str> = action.champions().map(|c| universe.id(c)).collect();
-                let why = if action.champions().any(|c| on_board.contains(c)) {
-                    "already on the board"
-                } else if action.champions().any(|c| excluded.contains(c)) {
-                    "excluded"
-                } else {
-                    "not generated at this root"
-                };
+                let why = why_illegal(action, on_board, excluded);
                 warnings.push(format!(
                     "{id}: actual_next {} is not a legal action here ({why})",
                     names.join("+")
@@ -402,6 +945,44 @@ impl TierBFixture {
                 "{id}: role_verdict: no role question at a ban root; the report skips it"
             ));
         }
+        // The graded verdicts. At a ban root there is no option to judge: warned, not read (a ban
+        // inside the horizon ties on the board, review design D3 iii).
+        let verdicts = if file.verdicts.is_empty() {
+            Vec::new()
+        } else if root.action == ActionType::Ban {
+            warnings.push(format!(
+                "{id}: verdicts: no options to judge at a ban root; not read"
+            ));
+            Vec::new()
+        } else {
+            let mover_picks = position.picks(root.side);
+            let entries = resolve_verdicts(&id, &file.verdicts, root, mover_picks, universe)?;
+            // An own pick the reference would never generate is still what the reader said.
+            let mut legal = None;
+            for (i, entry) in entries.iter().enumerate() {
+                let Some(Some(action)) = entry.would_pick else {
+                    continue;
+                };
+                let legal = legal.get_or_insert_with(|| {
+                    legal_actions_under(
+                        &position,
+                        universe,
+                        &pools,
+                        FeasibilityRule::Roster,
+                        &mut FeasibilityMemo::new(Price::ZERO),
+                    )
+                });
+                if !legal.contains(&action) {
+                    let names: Vec<&str> = action.champions().map(|c| universe.id(c)).collect();
+                    warnings.push(format!(
+                        "{id}: verdicts[{i}].would_pick {} is not a legal action here ({})",
+                        names.join("+"),
+                        why_illegal(action, on_board, excluded)
+                    ));
+                }
+            }
+            entries
+        };
         // `capture` is provenance; the top-level fields are the position. Say so when they disagree.
         if let Some(capture) = &file.capture {
             let list = |path: &[&str]| -> Option<Vec<String>> {
@@ -482,6 +1063,9 @@ impl TierBFixture {
                 review: file.review,
                 verdict: file.verdict,
                 role_verdict,
+                verdicts,
+                verdicts_raw,
+                pools_raw,
                 capture: file.capture,
                 path: None,
             },

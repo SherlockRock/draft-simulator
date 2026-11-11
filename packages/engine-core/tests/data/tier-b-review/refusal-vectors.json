@@ -1,0 +1,311 @@
+[
+  {
+    "name": "a blind entry after a scored one",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+        }
+      }
+    ],
+    "field": "verdicts[1].mode"
+  },
+  {
+    "name": "an undated empty reveal: no started or finished",
+    "entries": [
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {}
+      }
+    ],
+    "field": "started"
+  },
+  {
+    "name": "a half pair would_pick at the pair root",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": "Galio"
+      }
+    ],
+    "field": "verdicts[0].would_pick"
+  },
+  {
+    "name": "the same champion twice in would_pick",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Galio",
+          "Galio"
+        ]
+      }
+    ],
+    "field": "verdicts[0].would_pick"
+  },
+  {
+    "name": "an unknown champion in would_pick",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Galio",
+          "Nobody"
+        ]
+      }
+    ],
+    "field": "verdicts[0].would_pick"
+  },
+  {
+    "name": "a comp missing the locked pick",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "field": "verdicts[0].labels[Galio+MonkeyKing|jungle=MonkeyKing,mid=Galio]"
+  },
+  {
+    "name": "an action champion that is already a locked pick",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+Rumble|top=Rumble,mid=Galio": "play"
+        }
+      }
+    ],
+    "field": "verdicts[0].labels[Galio+Rumble|top=Rumble,mid=Galio]"
+  },
+  {
+    "name": "a line verdict in a blind entry",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        },
+        "line": {
+          "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+          "line": "Zyra",
+          "ok": true
+        }
+      }
+    ],
+    "field": "verdicts[0].line"
+  },
+  {
+    "name": "positions_patch null",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": null,
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "field": "verdicts[0].positions_patch"
+  },
+  {
+    "name": "line.line given as an array",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "line": {
+          "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+          "line": [
+            [
+              "Zyra"
+            ]
+          ],
+          "ok": true
+        }
+      }
+    ],
+    "field": "verdicts[1].line.line"
+  },
+  {
+    "name": "an unsorted pair in a label",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "MonkeyKing+Galio|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "field": "verdicts[0].labels[MonkeyKing+Galio|top=Rumble,jungle=MonkeyKing,mid=Galio]"
+  },
+  {
+    "name": "an unknown label",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "good"
+        }
+      }
+    ],
+    "field": "verdicts[0].labels[Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio]"
+  },
+  {
+    "name": "a timestamp that is not UTC",
+    "entries": [
+      {
+        "started": "2026-11-09T14:00:00+01:00",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "field": "verdicts[0].started"
+  }
+]

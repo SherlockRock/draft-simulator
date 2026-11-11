@@ -163,5 +163,38 @@
     "KSante",
     "JarvanIV"
   ],
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:31:57Z",
+      "finished": "2026-11-11T03:32:37Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "Vi",
+        "Locke"
+      ],
+      "labels": {
+        "Alistar+Syndra|mid=Syndra,support=Alistar": "play",
+        "Ashe+Bard|adc=Ashe,support=Bard": "maybe",
+        "Bard+Galio|mid=Galio,support=Bard": "play",
+        "Bard+MonkeyKing|jungle=MonkeyKing,support=Bard": "play",
+        "Bard+Renekton|top=Renekton,support=Bard": "maybe",
+        "Bard+Shyvana|jungle=Shyvana,support=Bard": "play",
+        "Bard+Singed|top=Singed,support=Bard": "maybe",
+        "Bard+Viktor|mid=Viktor,support=Bard": "play",
+        "Bard+Vi|jungle=Vi,support=Bard": "play",
+        "Braum+Chogath|mid=Chogath,support=Braum": "never",
+        "Braum+Ornn|top=Ornn,support=Braum": "never",
+        "Ornn+Rakan|top=Ornn,support=Rakan": "play",
+        "Rakan+Viktor|mid=Viktor,support=Rakan": "play",
+        "Syndra+Vi|jungle=Vi,mid=Syndra": "play"
+      }
+    }
+  ],
   "review": "2026-10-04 user (scored read, role maps): leave the pool. 2026-10-04: verdict DROPPED by the user after the sweep \u2014 the engine keeps Bard + Vi at every P from 0.05 up once Blue's reply is charged (the P = 0 gain of 1.6 pp is the scored read's, not the search's), so 'leave' would need P below 0.03 and contradict every other position; kept in the corpus without a verdict key."
 }

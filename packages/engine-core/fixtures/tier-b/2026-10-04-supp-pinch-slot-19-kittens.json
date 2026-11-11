@@ -234,5 +234,28 @@
   "verdict": {
     "off_pool": false
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:42:09Z",
+      "finished": "2026-11-11T03:42:15Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": "Jhin",
+      "labels": {
+        "Anivia|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Anivia,support=Alistar": "play",
+        "Ashe|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Ashe,support=Alistar": "play",
+        "Jinx|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Jinx,support=Alistar": "play",
+        "Kaisa|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Kaisa,support=Alistar": "play",
+        "Sivir|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Sivir,support=Alistar": "play",
+        "Zeri|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Zeri,support=Alistar": "play",
+        "Zyra|top=Renekton,jungle=MonkeyKing,mid=Orianna,adc=Zyra,support=Alistar": "play"
+      }
+    }
+  ],
   "review": "2026-10-04: continuation re-derived under role maps (slot 16 Rakan -> Alistar; slots 17-18 Ahri + Syndra -> Renata + Ziggs), user-vetted; supersedes 2026-09-29-supp-pinch-slot-19-kittens for the recalibration read (that file stays as the slice's test artefact). 2026-10-04 user (scored read, role maps): stay."
 }

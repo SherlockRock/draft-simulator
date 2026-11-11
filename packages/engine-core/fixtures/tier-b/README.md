@@ -41,6 +41,7 @@ The search is shortlisted (B-proper § 2): at an interior pick node the best `si
 | `actual_next` | id, `[a, b]` at a pair start, or absent | what was actually played next — the soft comparison point, never truth; the report says whether it was in the pool |
 | `review` | string, default `""` | rubric verdicts in prose, appended per reading |
 | `verdict` | `{ "off_pool": true \| false }`, optional | **would you leave the pool here** — the one structured verdict, read by the calibration summary (below); meaningful at a pick root only |
+| `verdicts` | `[entry]`, optional, **append-only** | the graded verdicts of the review tool (below). Written only by `pnpm tier-b:apply`, never by hand; at a ban root it is a warning and is not read. Sits immediately before `review` |
 | `capture` | object with a string `protocolVersion`, optional | the raw captured request (the wire `EngineRequest` once the capture button exists), kept opaque so nothing the loader does not model (display pools, tiers) is lost. **Provenance only: the top-level `pools` / `exclusions` are the position**; when the capture's search pools or `crossGameExclusions` differ from them the loader warns and uses the top-level fields. A role-map side is compared with the capture's `display` map, role by role; a list side with its `search` list |
 
 Unknown fields are rejected (`deny_unknown_fields`), inside `verdict` too. Ids are the champion aliases of `champion-meta.json` (`Fiddlesticks`, `MonkeyKing`, `TwistedFate`); an id the current data does not know is an error in EVERY list here, including `exclusions` (the live converter reports such ids instead — a hand-authored file is expected to be current). An exclusion that names a champion already on the board loads with a warning.
@@ -66,6 +67,62 @@ A role map lists a side's champions under the role its player pilots them in:
 ### Graded off-role cost (engine slice 8, `roster` only)
 
 Under `roster` a champion placed outside its pool entries pays P, and — in a secondary meta role — a further `grade · Q / 100`, where `grade = round(100 · (1 − share(role) / share(primary)))` from the Master+ play shares the positions refresh ships beside `positions` as `positionShares` (0 at the primary, 100 at a role never played, 0 everywhere for a champion whose shares are unknown). Q is `engine_core::reference::universe::DEFAULT_OFF_ROLE_COST` (0.05 logits, an assumption pending the sweep below; `TIER_B_Q` sweeps it). What the grade never touches: legality, the pool test and the `[in-pool]` / `[off-pool n]` class read today's unweighted arrangement; a pool entry is never graded, whatever role it lists (an entry under a non-meta role is in-role for that side); a board pick the map omits is never charged; the forced term (picks still to come the pool cannot fill in-role) is P each at grade 0 — a lower bound; `pool_or_roster` charges Q = 0 and a list-form side is never graded. At Q = 0 every `roster` number is slice 7's bit for bit. The leaf charges the least TOTAL over the arrangements of the side's picks — one comparator, price first — and reports that arrangement's own split (`made`, `grade`, `forced`), so `made` can exceed today's count at Q > 0: the cheapest completion places a locked pick off-role to avoid a grade. The marker adds ` · grade g` when the key's grade delta is non-zero and, per off-pool champion of the action, ` as adc r 0.29` — the role the KEY priced (the cheapest arrangement of the locked picks plus the action) with `r = share(role) / share(primary)`; the leaf's arrangement can differ wherever picks remain (they coincide on a complete five-pick side).
+
+## The graded review (the review tool)
+
+Design `docs/designs/tier-b-review-tool-design.md`, plan `docs/plans/2026-11-08-tier-b-review-tool-plan.md`. It replaces the one-bit read (`verdict.off_pool`, `role_verdict.ok`) with a label per option, over the options the reference engine puts in view. **The old report, `verdict`, `role_verdict` and the interval they give stand as history, reading the frozen fields: the tool never writes or derives them, and the old command still prints the interval** (on the `playable` mask it reads EMPTY, see 2026-10-12 above).
+
+### The loop
+
+```
+pnpm tier-b:review                              # run -> page: docs/plans/<date>-tier-b-review/<run id, colons as dashes>/{run.json,review.html}
+  ... open review.html, label blind, reveal a draft, Copy verdicts (or Download) ...
+pnpm tier-b:apply <verdicts.json>               # write the export into the fixtures, then run tier-b:review again
+pnpm test:tier-b                                # the Node tests
+```
+
+`tier-b:review` takes `--fixtures <dir>` (a copy of the corpus; `tier-b:apply` forwards it to its rerun, so a temp-corpus apply never reruns the real corpus). `tier-b:apply` also takes `--no-review`; it prints per position what it did (`wrote …`, `replay`, `older`, `stale`, `refused`) and exits non-zero if any position was refused. Apply the page's export at the end of each sitting: every export is cumulative and the newest supersedes the rest, a replay writes nothing, and an older export of the same run is not applied (apply keeps a run-wide high-water mark: the highest `rev` of that run already written on any position, so it holds even for a position whose own last change was reverted; the one gap is an applied export that wrote nothing anywhere, which leaves no mark, so apply only your newest export), and an export from a page built before another run's entries landed is refused as stale (build a fresh page). Every entry is checked against the loader's rules before anything is written; a position that would fail is refused by name and left byte-identical.
+
+**Continue on the new page.** After an apply, work on the NEW page the apply prints, never the old one: an old page cannot know that a draft was revealed elsewhere, so a blind label made there after a reveal elsewhere is refused (or, on another card, would not really be blind). "Copy verdicts" puts the export on the clipboard; save it to a file before `tier-b:apply`, which has no stdin. The Download button is the simpler habit. A relative export path (and `--fixtures`) is read from the directory you ran `pnpm` in. Each rerun keeps its run directory under `docs/plans/` (about 50 MB, mostly `run.json`, the record of what the page showed) and prints its size; nothing deletes it.
+
+### `verdicts`
+
+An entry holds only what it adds or changes; entries are read in file order.
+
+| key | type | meaning |
+|---|---|---|
+| `started`, `finished` | ISO-8601 UTC | wall-clock bounds of the changes in this mode (a span includes any break) |
+| `mode` | `blind` \| `scored` | `blind`: the draft had never been revealed. Once any card of a draft holds a `scored` entry, every later label on that draft is `scored`; a `blind` entry after a `scored` one fails the load |
+| `from` | `{ run, rev }` | the page state that wrote it: the run id and the page's revision counter (apply's replay and staleness checks) |
+| `fm_version`, `positions_patch` | string | the data the page was built on (from the export, never the current files) |
+| `would_pick` | id, `[a, b]` at a pair root, or `null` | the reader's own pick, given before seeing the engine. **Absent leaves the pick as it was; `null` is an answer ("no view")**. A pair compares as a set |
+| `labels` | `{ <option id>: play \| maybe \| never }` | the labels this entry adds or changes. Empty on an entry that carries only an own pick, a line verdict or a note; an empty `scored` entry with none of those is the record of a reveal that changed nothing, written once |
+| `line` | `{ option, line, ok }`, `scored` only | the verdict on the reference #1's line (one `ok` / not click at reveal; the `line` text is the run's, verbatim). Never enters the rule |
+| `note` | string | the card's free-text note |
+
+**Option id**: the action's champion ids sorted (byte order) and joined with `+`, then `|` and the mover's whole side as `role=id` pairs in the order top, jungle, mid, adc, support: `Renata+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Renata`. The comp is the mover's locked picks plus the action, each once; where no role information exists the id is the action alone. Ids are copied from the run, never built by hand.
+
+**Two folds.** *Current* is the last label written for each option in any mode; *blind* is the last written in a `blind` entry (a `scored` entry never changes it). The own pick folds the same two ways. A line verdict folds by (option, line text), last write winning. The folds exist twice, in the loader and in `scripts/tier-b/apply-verdicts.mjs`; `tests/data/tier-b-review/fold-vectors.json` is read by both test suites.
+
+### The labels (the rubric)
+
+A label judges a side on this board, **for this team with these pools**, ignoring P, Q and the engine's line.
+
+- `play`: happy to pick this here. On an off-pool option: I would leave the pool for this here.
+- `maybe`: defensible, with a caveat. On an off-pool option: I could leave the pool for this, with a caveat.
+- `never`: on an in-pool option, I would not pick this here, even though we can play it. On an off-pool option, absurd in that role, or not worth leaving the pool.
+- At early slots the side is incomplete: assume competent follow-up from this pool, and judge a flex on the champion, not on the role shown.
+- The **own pick** is what you would play, given before seeing anything from the engine; `null` ("no view") is an answer.
+
+D7 asks for a rubric written before reviewing; its three questions map onto the tool like this:
+
+| D7 question | where it is answered |
+|---|---|
+| Is the top action defensible? | the label on the engine's #1: `never@1` |
+| Is anything absurd in the top three? | the labels on the top three: `never@3` |
+| Does the continuation read like a draft? | the line verdict on the reference #1 (`ok` / not), at reveal; slot 19 has none |
+
+Slice 2 of the plan adds the results table and the pre-registered rule that read these labels; until then the page is the product.
 
 ## What the report prints
 

@@ -1,0 +1,170 @@
+{
+  "id": "2026-10-04-top-pinch-slot-7-kittens",
+  "category": "off-pool",
+  "notes": "User's 'top pinch' draft (canvas SMOKE-viewport-perf), DME Blue vs Kittens Red. Kittens (Red) pair at slot 7; the board is as played (dev DB), actual_next is the pick made. Engine-selected 2026-10-04 for the recalibration (an off-pool option tempts at P = 0); verdict read blind.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-10-04"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zilean"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Qiyana"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zaahen"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Naafiri"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Ivern"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ambessa"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "LeeSin"
+    }
+  ],
+  "pools": {
+    "blue": {
+      "top": [
+        "Rumble",
+        "Riven",
+        "Camille",
+        "Ambessa",
+        "KSante",
+        "Aurora",
+        "Zaahen",
+        "Yone"
+      ],
+      "jungle": [
+        "Naafiri",
+        "Qiyana",
+        "LeeSin",
+        "JarvanIV",
+        "MonkeyKing",
+        "XinZhao",
+        "Vi",
+        "Shyvana"
+      ],
+      "mid": [
+        "Locke",
+        "Syndra",
+        "Nasus",
+        "Ahri",
+        "Galio",
+        "Cassiopeia",
+        "Orianna",
+        "Ryze"
+      ],
+      "adc": [
+        "Yunara",
+        "Ziggs",
+        "Aphelios",
+        "Ezreal",
+        "Kaisa",
+        "Kalista",
+        "Lucian",
+        "Zeri"
+      ],
+      "support": [
+        "Bard",
+        "Alistar",
+        "Lulu",
+        "Milio",
+        "Nautilus",
+        "Nami",
+        "Leona",
+        "Renata"
+      ]
+    },
+    "red": {
+      "top": [
+        "Sion",
+        "KSante",
+        "Zaahen",
+        "Ornn",
+        "DrMundo",
+        "Aatrox",
+        "Malphite",
+        "Renekton"
+      ],
+      "jungle": [
+        "JarvanIV",
+        "Ivern",
+        "Shyvana",
+        "XinZhao",
+        "Vi",
+        "MonkeyKing",
+        "Zaahen",
+        "Aatrox"
+      ],
+      "mid": [
+        "Zilean",
+        "Locke",
+        "Galio",
+        "Chogath",
+        "Orianna",
+        "Ryze",
+        "Syndra",
+        "Viktor"
+      ],
+      "adc": [
+        "Ezreal",
+        "Caitlyn",
+        "Jhin",
+        "Jinx",
+        "Kaisa",
+        "Ashe",
+        "Sivir",
+        "Varus"
+      ],
+      "support": [
+        "Bard",
+        "Neeko",
+        "Seraphine",
+        "Rakan",
+        "Amumu",
+        "Alistar",
+        "Braum",
+        "Nami"
+      ]
+    }
+  },
+  "our_side": "Red",
+  "actual_next": [
+    "Caitlyn",
+    "Bard"
+  ],
+  "verdict": {
+    "off_pool": false
+  },
+  "review": "2026-10-04 user (scored read, role maps): stay."
+}

@@ -755,6 +755,42 @@ pub fn placements(
     universe: &Universe,
     action: Action,
 ) -> Vec<Placement> {
+    arrangement(memo, side, position, pools, universe, action)
+        .into_iter()
+        .filter(|p| !p.locked)
+        .map(|p| Placement {
+            champion: p.champion,
+            role: p.role,
+            grade: p.grade,
+            in_pool: p.in_pool,
+        })
+        .collect()
+}
+
+/// One pick of the whole side in the arrangement the key priced (review tool design T6, F5): the
+/// locked picks are in it too, since the cheapest arrangement of a side can move one of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SidePlacement {
+    pub champion: ChampionIdx,
+    pub role: Role,
+    /// The charged grade, as `Placement::grade` defines it: 0 in-pool, else `Universe::grades`.
+    pub grade: u8,
+    pub in_pool: bool,
+    /// A pick already on the board, not one of the action's.
+    pub locked: bool,
+}
+
+/// Every pick of `side` — the locked picks first, then `action`'s — in the cheapest arrangement at the
+/// memo's price: the same trace `placements` reads, which is this list's suffix after the locked
+/// picks. Empty where `placements` is empty (a list-form side, a ban, an unarrangeable child).
+pub fn arrangement(
+    memo: &mut FeasibilityMemo,
+    side: Side,
+    position: &Position<'_>,
+    pools: &Pools,
+    universe: &Universe,
+    action: Action,
+) -> Vec<SidePlacement> {
     let Some(tags) = live_tags(side, position, pools) else {
         return Vec::new();
     };
@@ -762,6 +798,7 @@ pub fn placements(
         return Vec::new();
     }
     let price = memo.price;
+    let locked = position.picks(side).len();
     let picks: Vec<ChampionIdx> = position
         .picks(side)
         .iter()
@@ -779,24 +816,84 @@ pub fn placements(
     let Some(bits) = traced.arrangement(price) else {
         return Vec::new();
     };
-    let locked = position.picks(side).len();
-    picks[locked..]
+    picks
         .iter()
-        .zip(&bits[locked..])
-        .map(|(c, bit)| {
-            let role = ROLES[*bit];
+        .zip(&bits)
+        .enumerate()
+        .map(|(i, (c, bit))| {
             let in_pool = tags.mask(*c) >> bit & 1 == 1;
-            Placement {
+            SidePlacement {
                 champion: *c,
-                role,
+                role: ROLES[*bit],
                 grade: if in_pool {
                     0
                 } else {
                     universe.grades(*c)[*bit]
                 },
                 in_pool,
+                locked: i < locked,
             }
         })
+        .collect()
+}
+
+/// The role sets `side`'s locked picks can leave open: over every arrangement onto distinct roles each
+/// pick can play (`playable`), those with the most in-role placements (a role its pool lists), each
+/// distinct set of roles left empty, in `ROLES` order, the sets sorted. No picks: all five roles as one
+/// set. Empty for a list-form side (and where no arrangement exists). What `scored_options_roles.py`'s
+/// `open_roles` computed, on the live masks.
+pub fn open_roles(
+    side: Side,
+    position: &Position<'_>,
+    pools: &Pools,
+    universe: &Universe,
+) -> Vec<Vec<Role>> {
+    let Some(tags) = live_tags(side, position, pools) else {
+        return Vec::new();
+    };
+    let picks = position.picks(side);
+    let mut best: Option<usize> = None;
+    let mut opens: std::collections::BTreeSet<Vec<usize>> = std::collections::BTreeSet::new();
+    // (pick index, roles taken, in-role count so far)
+    fn walk(
+        picks: &[ChampionIdx],
+        tags: &RoleSets,
+        universe: &Universe,
+        taken: usize,
+        in_role: usize,
+        best: &mut Option<usize>,
+        opens: &mut std::collections::BTreeSet<Vec<usize>>,
+    ) {
+        let Some((c, rest)) = picks.split_first() else {
+            if best.is_none_or(|b| in_role > b) {
+                *best = Some(in_role);
+                opens.clear();
+            }
+            if *best == Some(in_role) {
+                opens.insert((0..ROLES.len()).filter(|b| taken >> b & 1 == 0).collect());
+            }
+            return;
+        };
+        let (can, listed) = (playable(tags, universe, *c), tags.mask(*c));
+        for bit in 0..ROLES.len() {
+            if usize::from(can) >> bit & 1 == 1 && taken >> bit & 1 == 0 {
+                let here = usize::from(usize::from(listed) >> bit & 1 == 1);
+                walk(
+                    rest,
+                    tags,
+                    universe,
+                    taken | 1 << bit,
+                    in_role + here,
+                    best,
+                    opens,
+                );
+            }
+        }
+    }
+    walk(picks, tags, universe, 0, 0, &mut best, &mut opens);
+    opens
+        .into_iter()
+        .map(|set| set.into_iter().map(|bit| ROLES[bit]).collect())
         .collect()
 }
 

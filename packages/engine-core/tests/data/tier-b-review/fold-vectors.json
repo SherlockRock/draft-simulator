@@ -1,0 +1,643 @@
+[
+  {
+    "name": "no entries",
+    "entries": [],
+    "blind": {},
+    "current": {},
+    "lines": [],
+    "revealed": false
+  },
+  {
+    "name": "blind, last write wins",
+    "note": "The same option written twice in blind entries: the later one holds in both folds.",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "never"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "never"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "never"
+    },
+    "revealed": false
+  },
+  {
+    "name": "a scored entry never changes blind",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "never"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "never"
+    },
+    "revealed": true
+  },
+  {
+    "name": "blind play, scored maybe, scored play",
+    "note": "The last write equals the blind value and differs from the fold just before it.",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+        }
+      },
+      {
+        "started": "2026-11-09T14:03:00Z",
+        "finished": "2026-11-09T14:03:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 3
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "revealed": true
+  },
+  {
+    "name": "an empty scored entry is a reveal that changed nothing",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+          "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {}
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+      "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+      "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+    },
+    "revealed": true
+  },
+  {
+    "name": "a scored entry with no labels key at all",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19"
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+    },
+    "revealed": true
+  },
+  {
+    "name": "options accumulate across entries; a scored option has no blind label",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+        }
+      },
+      {
+        "started": "2026-11-09T14:03:00Z",
+        "finished": "2026-11-09T14:03:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 3
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": "maybe",
+          "Galio+LeeSin": "never"
+        }
+      },
+      {
+        "started": "2026-11-09T14:04:00Z",
+        "finished": "2026-11-09T14:04:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 4
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Ezreal+Renata|top=Rumble,adc=Ezreal,support=Renata": "play"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+      "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+      "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never",
+      "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": "maybe",
+      "Galio+LeeSin": "never",
+      "Ezreal+Renata|top=Rumble,adc=Ezreal,support=Renata": "play"
+    },
+    "revealed": true
+  },
+  {
+    "name": "an entry holds only what it adds: a pick with no labels, then labels with no pick",
+    "note": "Pair actions are unordered: compare them as sets.",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "MonkeyKing",
+          "Galio"
+        ]
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "blind_pick": [
+      "Galio",
+      "MonkeyKing"
+    ],
+    "current_pick": [
+      "Galio",
+      "MonkeyKing"
+    ],
+    "revealed": false
+  },
+  {
+    "name": "would_pick absent leaves the pick alone",
+    "note": "Pair actions are unordered: compare them as sets. A key missing from an expected result means \"not answered\".",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Ahri",
+          "LeeSin"
+        ],
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "maybe"
+    },
+    "blind_pick": [
+      "Ahri",
+      "LeeSin"
+    ],
+    "current_pick": [
+      "Ahri",
+      "LeeSin"
+    ],
+    "revealed": true
+  },
+  {
+    "name": "would_pick null is an answer (\"no view\"), not absence",
+    "note": "null in an entry overwrites an earlier pick in the fold that reads that entry; null in a scored entry leaves blind_pick alone.",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Ahri",
+          "LeeSin"
+        ]
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": null
+      }
+    ],
+    "blind": {},
+    "current": {},
+    "blind_pick": [
+      "Ahri",
+      "LeeSin"
+    ],
+    "current_pick": null,
+    "revealed": true
+  },
+  {
+    "name": "would_pick null in blind, then a scored pick",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": null,
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Ezreal",
+          "Renata"
+        ]
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "blind_pick": null,
+    "current_pick": [
+      "Ezreal",
+      "Renata"
+    ],
+    "revealed": true
+  },
+  {
+    "name": "would_pick last write wins, in blind",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Ahri",
+          "LeeSin"
+        ]
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "would_pick": [
+          "Ezreal",
+          "Renata"
+        ]
+      }
+    ],
+    "blind": {},
+    "current": {},
+    "blind_pick": [
+      "Ezreal",
+      "Renata"
+    ],
+    "current_pick": [
+      "Ezreal",
+      "Renata"
+    ],
+    "revealed": false
+  },
+  {
+    "name": "line verdicts fold by option and line text: two lines on one option are both kept, a repeat is last-wins",
+    "note": "lines is the resolved list: the last write for each (option, line) pair, ordered by where that last write sits in the file.",
+    "entries": [
+      {
+        "started": "2026-11-09T14:01:00Z",
+        "finished": "2026-11-09T14:01:30Z",
+        "mode": "blind",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 1
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "labels": {
+          "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+        }
+      },
+      {
+        "started": "2026-11-09T14:02:00Z",
+        "finished": "2026-11-09T14:02:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 2
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "line": {
+          "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+          "line": "Zyra",
+          "ok": false
+        }
+      },
+      {
+        "started": "2026-11-09T14:03:00Z",
+        "finished": "2026-11-09T14:03:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 3
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "line": {
+          "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+          "line": "Lux",
+          "ok": true
+        }
+      },
+      {
+        "started": "2026-11-09T14:04:00Z",
+        "finished": "2026-11-09T14:04:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 4
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "line": {
+          "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+          "line": "Zyra",
+          "ok": false
+        }
+      },
+      {
+        "started": "2026-11-09T14:05:00Z",
+        "finished": "2026-11-09T14:05:30Z",
+        "mode": "scored",
+        "from": {
+          "run": "2026-11-09T14:00:00Z",
+          "rev": 5
+        },
+        "fm_version": "fm-2026-09-01-6880daa",
+        "positions_patch": "16.19",
+        "line": {
+          "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+          "line": "Zyra",
+          "ok": true
+        }
+      }
+    ],
+    "blind": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "current": {
+      "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play"
+    },
+    "lines": [
+      {
+        "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+        "line": "Lux",
+        "ok": true
+      },
+      {
+        "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+        "line": "Zyra",
+        "ok": false
+      },
+      {
+        "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+        "line": "Zyra",
+        "ok": true
+      }
+    ],
+    "revealed": true
+  }
+]

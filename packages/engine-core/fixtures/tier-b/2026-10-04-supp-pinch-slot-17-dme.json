@@ -233,5 +233,51 @@
     ],
     "ok": false
   },
+  "verdicts": [
+    {
+      "started": "2026-11-11T03:40:32Z",
+      "finished": "2026-11-11T03:41:03Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:01:47Z",
+        "rev": 248
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "Yunara",
+        "Lulu"
+      ],
+      "labels": {
+        "Ahri+Ziggs|top=Camille,jungle=LeeSin,mid=Ahri,adc=Ziggs,support=Galio": "never",
+        "Graves+Seraphine|top=Camille,jungle=Graves,mid=Galio,adc=Seraphine,support=LeeSin": "never",
+        "Graves+Zyra|top=Camille,jungle=Graves,mid=Galio,adc=Zyra,support=LeeSin": "never",
+        "Lulu+Zeri|top=Camille,jungle=LeeSin,mid=Galio,adc=Zeri,support=Lulu": "play",
+        "Lulu+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Lulu": "never",
+        "Morgana+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Morgana": "maybe",
+        "Renata+Syndra|top=Camille,jungle=LeeSin,mid=Galio,adc=Syndra,support=Renata": "never",
+        "Renata+Zeri|top=Camille,jungle=LeeSin,mid=Galio,adc=Zeri,support=Renata": "play",
+        "Renata+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Renata": "never",
+        "Seraphine+Zeri|top=Camille,jungle=LeeSin,mid=Galio,adc=Zeri,support=Seraphine": "play",
+        "Seraphine+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Seraphine": "maybe",
+        "Seraphine+Zyra|top=Camille,jungle=LeeSin,mid=Galio,adc=Zyra,support=Seraphine": "maybe",
+        "Syndra+Ziggs|top=Camille,jungle=LeeSin,mid=Syndra,adc=Ziggs,support=Galio": "never"
+      }
+    },
+    {
+      "started": "2026-11-11T03:58:09Z",
+      "finished": "2026-11-11T03:58:09Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-11T03:54:08Z",
+        "rev": 1
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "labels": {
+        "Janna+Ziggs|top=Camille,jungle=LeeSin,mid=Galio,adc=Ziggs,support=Janna": "maybe"
+      }
+    }
+  ],
   "review": "2026-10-04: continuation re-derived under role maps (slot 16 Rakan -> Alistar), user-vetted; supersedes 2026-09-29-supp-pinch-slot-17-dme for the recalibration read (that file stays as the slice's test artefact). 2026-10-04 user (scored read, role maps): leave the pool."
 }
