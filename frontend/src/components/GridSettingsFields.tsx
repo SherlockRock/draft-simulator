@@ -99,72 +99,44 @@ export const createGridSettingsForm = (): GridSettingsForm => {
 };
 
 /**
- * A FIXED height, not a `max-h`. The dialog is centred vertically, so a list
- * that grew by one input per added column or row re-centred the whole dialog
- * and slid the steppers out from under the cursor — a second click on "+"
- * missed. Fixed, the counts change and nothing else on screen moves. Three
- * inputs fit without scrolling, matching a new group's 3x3.
+ * The editor is a miniature of the grid itself (design option B, 2026-11-10):
+ * column labels across the top, row labels down the left, one cell per slot,
+ * and the + / − for each axis on the edge that axis grows from.
+ *
+ * ⚠️ The board is a FIXED size. The dialog is centred vertically, so anything
+ * that grew with the counts re-centred the dialog and slid the buttons out from
+ * under the cursor — a second click on "+" missed. Cells shrink to fit instead,
+ * down to a floor, after which the lattice scrolls inside the board; the edge
+ * buttons sit outside the scroll region and never move.
+ *
+ * Headers and cells share ONE CSS grid inside one scroll container, so a label
+ * cannot drift out of line with its column or row however far it scrolls; the
+ * label row and column are sticky.
  */
-const LABEL_LIST_CLASS = "custom-scrollbar h-40 space-y-2 overflow-y-auto pr-1";
+const BOARD_CLASS =
+    "grid h-64 grid-cols-[minmax(0,1fr)_2.25rem] grid-rows-[minmax(0,1fr)_2.25rem] gap-1.5";
 
-const LABEL_INPUT_CLASS =
-    "w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 text-sm leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright";
+const LATTICE_SCROLL_CLASS =
+    "custom-scrollbar overflow-auto rounded-md bg-darius-bg p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.6)]";
 
-const STEPPER_BUTTON_CLASS =
-    "flex h-8 w-8 items-center justify-center rounded border border-darius-border bg-darius-card text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary disabled:cursor-not-allowed disabled:opacity-40";
+const HEADER_INPUT_CLASS =
+    "h-full w-full min-w-0 appearance-none rounded border border-darius-border bg-darius-card px-1.5 text-xs text-darius-text-primary placeholder:text-darius-text-secondary/60 focus:border-darius-purple-bright focus:outline-none focus:ring-1 focus:ring-darius-purple-bright";
 
-const NUMBER_INPUT_CLASS =
-    "w-14 appearance-none rounded border border-darius-border bg-darius-card px-2 py-1.5 text-center text-sm leading-tight text-darius-text-primary shadow [appearance:textfield] focus:outline-none focus:ring-2 focus:ring-darius-purple-bright [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+const CELL_CLASS =
+    "rounded border border-darius-border bg-gradient-to-b from-darius-card-hover to-darius-card shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 
-type CountStepperProps = {
-    id: string;
-    label: string;
-    value: () => number;
-    onChange: (value: number) => void;
-};
+/**
+ * A row the container's content occupies beyond the configured count. Shown so
+ * the board matches the group, but dashed: "−" cannot remove it while drafts
+ * sit there.
+ */
+const OVERFLOW_CELL_CLASS = "rounded border border-dashed border-darius-border";
 
-const CountStepper: Component<CountStepperProps> = (props) => {
-    const handleInput = (raw: string) => {
-        const parsed = Number(raw);
-        if (Number.isInteger(parsed) && parsed >= 1) props.onChange(parsed);
-    };
+const EDGE_BUTTON_CLASS =
+    "flex items-center justify-center rounded-md border border-dashed border-darius-purple-bright/40 bg-darius-purple-bright/5 text-darius-purple-bright transition-colors hover:border-solid hover:border-darius-purple-bright hover:bg-darius-purple-bright/20 disabled:cursor-not-allowed disabled:opacity-30";
 
-    return (
-        <div class="flex items-center justify-between gap-3">
-            <label class="text-sm font-medium text-darius-text-secondary" for={props.id}>
-                {props.label}
-            </label>
-            <div class="flex items-center gap-1.5">
-                <button
-                    type="button"
-                    class={STEPPER_BUTTON_CLASS}
-                    onClick={() => props.onChange(props.value() - 1)}
-                    disabled={props.value() <= 1}
-                    aria-label={`Decrease ${props.label.toLowerCase()}`}
-                >
-                    <Minus size={14} />
-                </button>
-                <input
-                    id={props.id}
-                    type="number"
-                    min="1"
-                    value={props.value()}
-                    onInput={(e) => handleInput(e.currentTarget.value)}
-                    onBlur={(e) => (e.currentTarget.value = String(props.value()))}
-                    class={NUMBER_INPUT_CLASS}
-                />
-                <button
-                    type="button"
-                    class={STEPPER_BUTTON_CLASS}
-                    onClick={() => props.onChange(props.value() + 1)}
-                    aria-label={`Increase ${props.label.toLowerCase()}`}
-                >
-                    <Plus size={14} />
-                </button>
-            </div>
-        </div>
-    );
-};
+const EDGE_ADD_CLASS = `${EDGE_BUTTON_CLASS} flex-1`;
+const EDGE_REMOVE_CLASS = `${EDGE_BUTTON_CLASS} basis-[30%] text-darius-text-secondary`;
 
 type GridSettingsFieldsProps = {
     form: GridSettingsForm;
@@ -177,63 +149,139 @@ type GridSettingsFieldsProps = {
     idPrefix: string;
 };
 
-export const GridSettingsFields: Component<GridSettingsFieldsProps> = (props) => (
-    <div class="space-y-4">
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <CountStepper
-                id={`${props.idPrefix}-cols`}
-                label="Columns"
-                value={props.form.cols}
-                onChange={props.form.setCols}
-            />
-            <CountStepper
-                id={`${props.idPrefix}-rows`}
-                label="Rows"
-                value={props.form.rows}
-                onChange={props.form.setRows}
-            />
-        </div>
+export const GridSettingsFields: Component<GridSettingsFieldsProps> = (props) => {
+    const latticeStyle = () => ({
+        "grid-template-columns": `5.25rem repeat(${props.form.cols()}, minmax(3.25rem, 1fr))`,
+        "grid-template-rows": `2.25rem repeat(${props.rowInputCount()}, minmax(1.75rem, 1fr))`
+    });
 
-        <div>
-            <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
-                Column labels
-            </span>
-            <div class={LABEL_LIST_CLASS}>
-                <Index each={Array.from({ length: props.form.cols() })}>
-                    {(_, i) => (
-                        <input
-                            type="text"
-                            placeholder={`Column ${i + 1}`}
-                            value={props.form.colLabels()[i] ?? ""}
-                            onInput={(e) =>
-                                props.form.setColLabel(i, e.currentTarget.value)
-                            }
-                            class={LABEL_INPUT_CLASS}
-                        />
-                    )}
-                </Index>
+    return (
+        <div class="space-y-2">
+            <div class="flex items-center justify-between">
+                <span
+                    id={`${props.idPrefix}-heading`}
+                    class="text-xs font-bold uppercase tracking-wider text-darius-text-secondary"
+                >
+                    Layout
+                </span>
+                <span class="rounded-full border border-darius-purple-bright/45 bg-darius-purple-bright/15 px-2.5 py-0.5 font-mono text-xs font-bold text-darius-text-primary">
+                    {props.form.cols()} × {props.form.rows()}
+                </span>
+            </div>
+
+            <div
+                class={BOARD_CLASS}
+                role="group"
+                aria-labelledby={`${props.idPrefix}-heading`}
+            >
+                <div class={LATTICE_SCROLL_CLASS}>
+                    <div class="grid min-h-full min-w-full gap-1" style={latticeStyle()}>
+                        <div class="sticky left-0 top-0 z-20 bg-darius-bg" />
+                        <Index each={Array.from({ length: props.form.cols() })}>
+                            {(_, c) => (
+                                <div class="sticky top-0 z-10 bg-darius-bg">
+                                    <input
+                                        type="text"
+                                        placeholder={`Col ${c + 1}`}
+                                        aria-label={`Column ${c + 1} label`}
+                                        value={props.form.colLabels()[c] ?? ""}
+                                        onInput={(e) =>
+                                            props.form.setColLabel(
+                                                c,
+                                                e.currentTarget.value
+                                            )
+                                        }
+                                        class={`${HEADER_INPUT_CLASS} text-center`}
+                                    />
+                                </div>
+                            )}
+                        </Index>
+                        <Index each={Array.from({ length: props.rowInputCount() })}>
+                            {(_, r) => (
+                                <>
+                                    <div class="sticky left-0 z-10 bg-darius-bg">
+                                        <input
+                                            type="text"
+                                            placeholder={`Row ${r + 1}`}
+                                            aria-label={`Row ${r + 1} label`}
+                                            value={props.form.rowLabels()[r] ?? ""}
+                                            onInput={(e) =>
+                                                props.form.setRowLabel(
+                                                    r,
+                                                    e.currentTarget.value
+                                                )
+                                            }
+                                            class={HEADER_INPUT_CLASS}
+                                        />
+                                    </div>
+                                    <Index
+                                        each={Array.from({ length: props.form.cols() })}
+                                    >
+                                        {() => (
+                                            <div
+                                                class={
+                                                    r < props.form.rows()
+                                                        ? CELL_CLASS
+                                                        : OVERFLOW_CELL_CLASS
+                                                }
+                                                title={
+                                                    r < props.form.rows()
+                                                        ? undefined
+                                                        : "Kept by drafts already in this row"
+                                                }
+                                            />
+                                        )}
+                                    </Index>
+                                </>
+                            )}
+                        </Index>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <button
+                        type="button"
+                        class={EDGE_ADD_CLASS}
+                        onClick={() => props.form.setCols(props.form.cols() + 1)}
+                        aria-label="Add column"
+                        title="Add column"
+                    >
+                        <Plus size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        class={EDGE_REMOVE_CLASS}
+                        onClick={() => props.form.setCols(props.form.cols() - 1)}
+                        disabled={props.form.cols() <= 1}
+                        aria-label="Remove column"
+                        title="Remove column"
+                    >
+                        <Minus size={14} />
+                    </button>
+                </div>
+
+                <div class="flex gap-1">
+                    <button
+                        type="button"
+                        class={EDGE_ADD_CLASS}
+                        onClick={() => props.form.setRows(props.form.rows() + 1)}
+                        aria-label="Add row"
+                        title="Add row"
+                    >
+                        <Plus size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        class={EDGE_REMOVE_CLASS}
+                        onClick={() => props.form.setRows(props.form.rows() - 1)}
+                        disabled={props.form.rows() <= 1}
+                        aria-label="Remove row"
+                        title="Remove row"
+                    >
+                        <Minus size={14} />
+                    </button>
+                </div>
             </div>
         </div>
-
-        <div>
-            <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
-                Row labels
-            </span>
-            <div class={LABEL_LIST_CLASS}>
-                <Index each={Array.from({ length: props.rowInputCount() })}>
-                    {(_, i) => (
-                        <input
-                            type="text"
-                            placeholder={`Row ${i + 1}`}
-                            value={props.form.rowLabels()[i] ?? ""}
-                            onInput={(e) =>
-                                props.form.setRowLabel(i, e.currentTarget.value)
-                            }
-                            class={LABEL_INPUT_CLASS}
-                        />
-                    )}
-                </Index>
-            </div>
-        </div>
-    </div>
-);
+    );
+};
