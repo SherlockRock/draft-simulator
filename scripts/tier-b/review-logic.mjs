@@ -80,8 +80,9 @@ function newState(data) {
       }
       const wp = card.seed.would_pick;
       if (wp.blind !== undefined || wp.current !== undefined) {
-        const pick = { current: wp.current === undefined ? wp.blind : wp.current, mode: null, t: null };
-        if (wp.blind !== undefined) pick.blind = wp.blind;
+        // The runner writes a single-root pick as a one-element array; the page holds it as the plain id.
+        const pick = { current: plainPick(wp.current === undefined ? wp.blind : wp.current), mode: null, t: null };
+        if (wp.blind !== undefined) pick.blind = plainPick(wp.blind);
         ps.pick = pick;
       }
       const scored = card.seed.verdicts.find((v) => v.mode === "scored");
@@ -118,7 +119,13 @@ function restoreState(data, text) {
           if (known.has(optionId) && validRecord(rec, (v) => LABELS.includes(v))) ps.labels[optionId] = cleanRecord(rec);
         }
       }
-      if (validRecord(sp.pick, validPickValue)) ps.pick = cleanRecord(sp.pick);
+      if (isPlain(sp.pick)) {
+        // A state stored by an earlier page may hold a one-element array: read it as the id.
+        const rec = { ...sp.pick };
+        if (rec.current !== undefined) rec.current = plainPick(rec.current);
+        if (rec.blind !== undefined) rec.blind = plainPick(rec.blind);
+        if (validRecord(rec, validPickValue)) ps.pick = cleanRecord(rec);
+      }
       if (isPlain(sp.span)) {
         const span = {};
         for (const mode of ["blind", "scored"]) {
@@ -143,6 +150,11 @@ function restoreState(data, text) {
 // ISO-8601 UTC with a Z, with or without a fraction: what the Rust loader accepts.
 function isUtc(text) {
   return typeof text === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(text);
+}
+
+// A one-element array is its id; anything else is as it was.
+function plainPick(v) {
+  return Array.isArray(v) && v.length === 1 && typeof v[0] === "string" ? v[0] : v;
 }
 
 function isPlain(x) {
@@ -337,6 +349,15 @@ function cardDone(card, state) {
   return pickAnswered(ps) && rowsLabelled(card, ps);
 }
 
+// For the "unfinished cards only" filter: a card is settled when it is done and, once its draft is revealed,
+// every ranks 6-10 row it holds has a label too. Revealing therefore never hides a card that still has rows to label.
+function cardSettled(draft, card, state) {
+  if (!cardDone(card, state)) return false;
+  if (draftRevealState(draft, state) !== "revealed") return true;
+  const ps = positionState(state, card.id);
+  return laterRows(card).every((o) => ps.labels[o.id] !== undefined);
+}
+
 function progress(data, state) {
   let blindDone = 0;
   let blindTotal = 0;
@@ -450,13 +471,37 @@ function revealDraft(state, draft, now) {
   return true;
 }
 
+// What the fixture's entries already say, as the page's current state on a re-read: the last note written, and
+// the last line verdict for an (option, line). Not exported again unless changed here.
+function seededNote(card) {
+  let note = "";
+  for (const e of card.seed.verdicts) if (typeof e.note === "string") note = e.note;
+  return note;
+}
+
+function seededLineVerdict(card, optionId, line) {
+  let ok;
+  for (const e of card.seed.verdicts) if (e.line && e.line.option === optionId && e.line.line === line) ok = e.line.ok;
+  return ok;
+}
+
+function currentNote(card, ps) {
+  return ps.note ? ps.note.text : seededNote(card);
+}
+
+// The line verdict now standing for the reference #1's line: this page's, else the fixture's, else undefined.
+function currentLineVerdict(card, ps, top) {
+  if (ps.line && ps.line.option === top.option.id && ps.line.line === top.line) return ps.line.ok;
+  return seededLineVerdict(card, top.option.id, top.line);
+}
+
 // The card's note: free text, recorded in the mode it was written in (it dates that mode's span).
 function setNote(state, draft, cardId, text, now) {
   const card = draft.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("card " + cardId + " is not in draft " + draft.id);
   const ps = positionState(state, cardId);
   const next = text.trim();
-  if ((ps.note ? ps.note.text : "") === next) return false;
+  if (currentNote(card, ps) === next) return false;
   const mode = labelMode(draft, state);
   ps.note = { text: next, mode, t: now };
   touch(state, ps, mode, now);
@@ -500,7 +545,7 @@ function setLineVerdict(state, data, draft, cardId, ok, now) {
   const top = referenceTop(data, card);
   if (!top || top.line === null) throw new Error("there is no line to judge on " + cardId);
   const ps = positionState(state, cardId);
-  if (ps.line && ps.line.option === top.option.id && ps.line.line === top.line && ps.line.ok === ok) return false;
+  if (currentLineVerdict(card, ps, top) === ok) return false;
   ps.line = { option: top.option.id, line: top.line, ok, t: now };
   touch(state, ps, "scored", now);
   return true;
@@ -623,10 +668,12 @@ function earlierView(card, names) {
   return { legacy, review, entries };
 }
 
-// A note for the card when the depth check did not hold; null when it held or was not run.
+// A note for the card when the depth check did not hold, or could not be made (absent, or `stable: null` when the
+// deeper search failed or was cut: that is not "changed"); null when it held.
 function depthNote(card, names) {
   const d = card.depth_check;
-  if (!d || d.stable) return null;
+  if (!d || d.stable === null || d.stable === undefined) return "The depth check could not be made for this card (it was off, or the deeper search failed or was cut): whether the #1 holds one ply deeper is unknown.";
+  if (d.stable) return null;
   const top3 = d.top_3.map((a) => a.map((c) => dn(names, c)).join(" + ")).join(" | ");
   return "One ply deeper (horizon " + d.horizon + ") the #1 " + (d.same_first ? "held" : "changed") + " and the top 3 " + (d.same_top_3 ? "held" : "changed") + ". Deeper top 3: " + top3 + ". Read a clear never on this card with care.";
 }
@@ -648,8 +695,9 @@ function laterProgress(data, state) {
 
 // ---- the export (design section 3: tier-b-verdicts/1) ------------------------------------------
 
-function pickToExport(card, value, names) {
-  if (value === null) return { value: null };
+function pickToExport(card, rawValue, names) {
+  if (rawValue === null) return { value: null };
+  const value = card.kind === "pair" ? rawValue : plainPick(rawValue);
   const ids = Array.isArray(value) ? value : [value];
   const problem = pickProblem(card, ids, names);
   if (problem) return { problem };
@@ -742,4 +790,4 @@ function buildExport(state, data) {
   return exportWithProblems(state, data).exported;
 }
 
-export { BLIND_REACH, LABELS, armLabel, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen };
+export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen };

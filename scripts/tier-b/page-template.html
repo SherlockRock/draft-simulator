@@ -307,7 +307,9 @@ function stageOne(draft, card) {
     l.appendChild(el("b", "", pickText(ps.pick.current, NAMES)));
     const text = !revealed
       ? "locked: given before any engine option was shown"
-      : ps.pick.blind !== undefined ? "given blind; a change now is recorded as scored" : "given after the options were shown (scored)";
+      : ps.pick.mode === "scored"
+        ? (ps.pick.blind !== undefined ? "changed after the options were shown (scored); given blind: " + pickText(ps.pick.blind, NAMES) : "given after the options were shown (scored)")
+        : ps.pick.blind !== undefined ? "given blind; a change now is recorded as scored" : "given after the options were shown (scored)";
     l.appendChild(el("span", "note", text));
     wrap.appendChild(l);
     if (revealed) pickForm(draft, card, wrap, true);
@@ -476,7 +478,7 @@ function lineBlock(draft, card) {
   for (const [text, ok] of [["ok", true], ["bad", false]]) {
     const b = el("button", "", text);
     b.type = "button";
-    b.setAttribute("aria-pressed", String(Boolean(ps.line) && ps.line.line === top.line && ps.line.ok === ok));
+    b.setAttribute("aria-pressed", String(currentLineVerdict(card, ps, top) === ok));
     b.onclick = () => changed(() => setLineVerdict(state, DATA, draft, card.id, ok, now()), card.id);
     seg.appendChild(b);
   }
@@ -553,7 +555,7 @@ function noteBlock(draft, card) {
   const wrap = el("div", "stage");
   wrap.appendChild(el("p", "lbl", "Note on this position"));
   const ta = el("textarea", "cardnote");
-  ta.value = state.positions[card.id].note ? state.positions[card.id].note.text : "";
+  ta.value = currentNote(card, state.positions[card.id]);
   ta.setAttribute("aria-label", "Note on " + card.id);
   // The card is not rebuilt: the change fires on blur, often because a label button was pressed, and replacing
   // the card then would swallow that click.
@@ -565,6 +567,7 @@ function noteBlock(draft, card) {
 function buildCard(draft, card, hideDone) {
   const mc = card.mover.toLowerCase();
   const done = cardDone(card, state);
+  const settled = cardSettled(draft, card, state);
   const c = el("div", "card " + mc + (done ? " done" : ""));
   c.id = "c-" + card.id;
   const h = el("div", "chead");
@@ -590,7 +593,7 @@ function buildCard(draft, card, hideDone) {
     }
   }
   // The filter applies when it is toggled and on load, never to a card the reader is still working in.
-  c.hidden = hideDone && done;
+  c.hidden = hideDone && settled;
   return c;
 }
 function draftHead(draft) {
@@ -774,7 +777,7 @@ document.getElementById("download").addEventListener("click", () => {
   }
 });
 document.getElementById("unfinished").addEventListener("change", () => {
-  for (const [id, { card }] of EL) if (!id.startsWith("draft:")) card.hidden = cardDone(CARDS.get(id).card, state) && document.getElementById("unfinished").checked;
+  for (const [id, { card }] of EL) if (!id.startsWith("draft:")) card.hidden = cardSettled(CARDS.get(id).draft, CARDS.get(id).card, state) && document.getElementById("unfinished").checked;
 });
 
 document.getElementById("runline").textContent =

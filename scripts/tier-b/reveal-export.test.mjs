@@ -12,6 +12,10 @@ import {
   cardDone,
   draftRevealState,
   earlierView,
+  cardSettled,
+  currentLineVerdict,
+  currentNote,
+  depthNote,
   exportWithProblems,
   laterRows,
   lineText,
@@ -559,4 +563,96 @@ test("earlierView lists each earlier entry: mode, finished, label count, own pic
   assert.match(v.legacy, /^Old report: off-pool verdict (leave|stay in) the pool; role verdict /);
   assert.match(v.review, /^(Review: |No review text)/);
   assert.deepEqual(earlierView(cardOf(data, B), NAMES).entries, []);
+});
+
+// ---- branch-review fixes ----
+
+const asRunWrites = (run) => {
+  // the runner writes a single-root own pick as a one-element array
+  const p = run.positions.find((q) => q.id === E);
+  p.would_pick = { blind: ["Ahri"], current: ["Ahri"] };
+};
+
+test("I1: a seeded single-root pick (one-element array in the run) is held as its id; a pick changed after the reveal survives a reload and exports as a string", () => {
+  const data = load(asRunWrites);
+  const synth = draftOf(data, "synth-dme-adc");
+  const state = newState(data);
+  assert.equal(state.positions[E].pick.blind, "Ahri");
+  assert.equal(state.positions[E].pick.current, "Ahri");
+  assert.deepEqual(buildExport(state, data).positions, {}, "a seeded pick is not re-exported");
+  assert.equal(setPick(state, synth, E, "Ezreal", T1), true);
+  const back = restoreState(data, JSON.stringify(state));
+  assert.deepEqual(back.positions[E].pick, state.positions[E].pick, "the change is kept on reload");
+  assert.equal(back.positions[E].pick.current, "Ezreal");
+  const x = buildExport(back, data).positions[E];
+  assert.equal(x.scored.would_pick, "Ezreal");
+  assert.equal(typeof x.scored.would_pick, "string");
+});
+
+test("I1: a state stored by an earlier page with a one-element array is read as the id, and a one-element array never exports", () => {
+  const data = load();
+  const stored = newState(data);
+  stored.positions[E].pick = { blind: ["Ahri"], current: ["Ezreal"], mode: "scored", t: T1 };
+  stored.positions[E].span.scored = { first: T1, last: T1 };
+  const back = restoreState(data, JSON.stringify(stored));
+  assert.equal(back.positions[E].pick.current, "Ezreal");
+  const direct = newState(data);
+  direct.positions[E].pick = { blind: "Ahri", current: ["Ezreal"], mode: "scored", t: T1 };
+  direct.positions[E].span.scored = { first: T1, last: T1 };
+  const { exported, problems } = exportWithProblems(direct, data);
+  assert.deepEqual(problems, []);
+  assert.equal(exported.positions[E].scored.would_pick, "Ezreal");
+});
+
+test("M1: a revealed card with ranks 6-10 rows still to label is not settled, so the unfinished filter keeps it; labelling them settles it", () => {
+  const data = load();
+  const state = newState(data);
+  const supp = labelSupp(data, state);
+  const cardA = cardOf(data, A);
+  assert.equal(cardSettled(supp, cardA, state), true, "before the reveal, done is settled");
+  revealDraft(state, supp, T4);
+  assert.ok(laterRows(cardA).length > 0);
+  assert.equal(cardSettled(supp, cardA, state), false);
+  for (const o of laterRows(cardA)) setLabel(state, supp, A, o.id, "maybe", T4);
+  assert.equal(cardSettled(supp, cardA, state), true);
+});
+
+test("M3: a depth check that could not run is not read as changed", () => {
+  const data = load();
+  const card = structuredClone(cardOf(data, A));
+  card.depth_check = { horizon: 3, stable: null, same_first: null, same_top_3: null, top_3: [] };
+  assert.match(depthNote(card, NAMES), /could not be made/);
+  assert.doesNotMatch(depthNote(card, NAMES), /changed/);
+  card.depth_check = null;
+  assert.match(depthNote(card, NAMES), /could not be made/);
+  card.depth_check = { horizon: 3, stable: true, same_first: true, same_top_3: true, top_3: [] };
+  assert.equal(depthNote(card, NAMES), null);
+  card.depth_check = { horizon: 3, stable: false, same_first: false, same_top_3: true, top_3: [["Ahri"]] };
+  assert.match(depthNote(card, NAMES), /#1 changed and the top 3 held/);
+});
+
+test("M5: an earlier line verdict and note are the current ones on a re-read, and are not exported unless changed", () => {
+  const base = load();
+  const top = referenceTop(base, cardOf(base, E));
+  assert.ok(top.line, "E has a line to judge");
+  const data = load((run) => {
+    const p = run.positions.find((q) => q.id === E);
+    const last = p.verdicts[p.verdicts.length - 1];
+    last.line = { option: top.option.id, line: top.line, ok: false };
+    last.note = "an earlier note";
+  });
+  const synth = draftOf(data, "synth-dme-adc");
+  const card = cardOf(data, E);
+  const state = newState(data);
+  assert.equal(currentLineVerdict(card, state.positions[E], top), false);
+  assert.equal(currentNote(card, state.positions[E]), "an earlier note");
+  assert.equal(setLineVerdict(state, data, synth, E, false, T1), false, "the same verdict again is a no-op");
+  assert.equal(setNote(state, synth, E, " an earlier note ", T1), false, "the same note again is a no-op");
+  assert.equal(state.rev, 0);
+  assert.deepEqual(buildExport(state, data).positions, {});
+  assert.equal(setLineVerdict(state, data, synth, E, true, T2), true);
+  assert.equal(currentLineVerdict(card, state.positions[E], top), true);
+  assert.equal(buildExport(state, data).positions[E].scored.line.ok, true);
+  assert.equal(setNote(state, synth, E, "a new note", T3), true);
+  assert.equal(buildExport(state, data).positions[E].note, "a new note");
 });

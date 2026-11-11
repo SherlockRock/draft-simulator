@@ -289,7 +289,7 @@ test("restoreState ignores stored records of the wrong shape and keeps the seed 
     run: data.run.id,
     rev: "many",
     positions: {
-      [B]: { labels: { [rowId]: { current: "play", mode: "weird", t: 5 } }, pick: { current: ["a"], mode: null, t: null }, span: { blind: { first: 1 } }, revealedAt: 7 },
+      [B]: { labels: { [rowId]: { current: "play", mode: "weird", t: 5 } }, pick: { current: ["a", "b", "c"], mode: null, t: null }, span: { blind: { first: 1 } }, revealedAt: 7 },
       [E]: { labels: [], pick: "Ahri", span: [], revealedAt: {} },
       [A]: 12,
     },
@@ -496,4 +496,52 @@ test("the earlier-verdicts block shows each earlier entry, not a count", () => {
   assert.match(t, /Old report: off-pool verdict/);
   assert.match(t, /blind · finished 2026-11-09T14:12:41Z · \d+ labels?/);
   assert.match(t, /scored · finished /);
+});
+
+// ---- branch-review fixes ----
+
+test("M1: with unfinished-only ticked, a draft's cards stay visible after its reveal while ranks 6-10 rows are unlabelled", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ localStorage: () => mem.api });
+  for (const id of SUPP_CARDS) labelCardViaDom(doc, id);
+  doc.fixed.unfinished.checked = true;
+  anyButton(doc, "Reveal the Support draft").onclick();
+  const supp = data.drafts.find((d) => d.id === "supp");
+  for (const card of supp.cards) {
+    const later = card.options.filter((o) => o.row === "later").length;
+    assert.equal(cardEl(doc, card.id).hidden, later === 0, `${card.id} (${later} later rows)`);
+  }
+  assert.ok(supp.cards.some((c) => c.options.some((o) => o.row === "later")));
+});
+
+test("M6: after the reveal a changed pick is not called given blind", () => {
+  const mem = memoryStorage();
+  const { doc } = loadPage({ localStorage: () => mem.api });
+  revealSupp(doc);
+  assert.match(textOf(doc, B), /given blind; a change now is recorded as scored/);
+  walk(cardEl(doc, B), (n) => n.tag === "input").forEach((inp) => (inp.value = "Ashe"));
+  button(doc, B, "Record my pick").onclick();
+  const t = textOf(doc, B);
+  assert.match(t, /changed after the options were shown \(scored\); given blind: no view/);
+  assert.equal(t.includes("given blind; a change now"), false);
+});
+
+test("M5: a re-read page shows the earlier line verdict as pressed and the earlier note in the box", () => {
+  const base = assemblePageData(structuredClone(RUN), { names: NAMES, icons: () => "AAAA" });
+  const E = "2026-10-07-synth-dme-adc-pinch-slot-19";
+  const synthCard = base.drafts.flatMap((d) => d.cards).find((c) => c.id === E);
+  const refIdx = base.run.arms.findIndex((a) => a.id === base.run.reference_arm);
+  const entry = synthCard.readings.find((r) => r.arm === refIdx).ranked.find((e) => e[1] === 1);
+  const optionId = synthCard.options[entry[0]].id;
+  const lineStr = synthCard.blobs[entry[9]].line.map((t) => t.join("+")).join(" > ");
+  const run = structuredClone(RUN);
+  const p = run.positions.find((q) => q.id === E);
+  const last = p.verdicts[p.verdicts.length - 1];
+  last.line = { option: optionId, line: lineStr, ok: false };
+  last.note = "an earlier note";
+  const mem = memoryStorage();
+  const { doc } = loadPage({ run, localStorage: () => mem.api });
+  assert.equal(button(doc, E, "bad").attrs["aria-pressed"], "true");
+  assert.equal(button(doc, E, "ok").attrs["aria-pressed"], "false");
+  assert.equal(walk(cardEl(doc, E), (n) => n.tag === "textarea")[0].value, "an earlier note");
 });

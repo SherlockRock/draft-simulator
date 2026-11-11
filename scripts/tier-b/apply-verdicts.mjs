@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { callerPath } from "./review.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -585,12 +586,12 @@ async function main(argv) {
   try {
     args = parseArgs(argv);
     // A byte-order mark (Notepad's "UTF-8 with BOM") is not part of the JSON.
-    exp = JSON.parse(fs.readFileSync(args.file, "utf8").replace(/^﻿/, ""));
+    exp = JSON.parse(fs.readFileSync(callerPath(args.file), "utf8").replace(/^﻿/, ""));
   } catch (e) {
     console.error(args && args.file ? `${args.file}: ${e.message} (the export must be the page's JSON, UTF-8, as copied or downloaded)` : e.message);
     return 2;
   }
-  const dir = args.fixtures ? path.resolve(args.fixtures) : DEFAULT_FIXTURES;
+  const dir = args.fixtures ? callerPath(args.fixtures) : DEFAULT_FIXTURES;
   let applied;
   try {
     applied = applyExport(exp, dir);

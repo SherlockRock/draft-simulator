@@ -6,7 +6,7 @@ import path from "node:path";
 import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { applyExport, applyPosition, draftOf, foldVerdicts, loadChampionIds, rootOf, samePick, spliceProblem, spliceVerdicts, validateVerdicts } from "./apply-verdicts.mjs";
-import { reviewPaths, runIdFor } from "./review.mjs";
+import { callerPath, dirBytes, reviewPaths, runIdFor } from "./review.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -667,4 +667,34 @@ test("another run's mark does not block a fresh run's export", () => {
   const fresh = "2026-11-12T09:00:00Z";
   const out = applyExport(exportOf(1, { [ID(AD16)]: { base: 0, blind: { ...span("01", "05"), labels: { [ad.option]: "maybe" } } } }, fresh), dir);
   assert.equal(out.results[0].outcome.kind, "applied");
+});
+
+// ---- branch-review fixes: where relative paths resolve, and the run directory's size ------------------------
+
+test("callerPath resolves against INIT_CWD when pnpm sets it, else the working directory; absolute paths stand", () => {
+  assert.equal(callerPath("export.json", { INIT_CWD: "/home/me/dl" }, "/repo"), path.resolve("/home/me/dl", "export.json"));
+  assert.equal(callerPath("export.json", {}, "/repo"), path.resolve("/repo", "export.json"));
+  assert.equal(callerPath("/abs/e.json", { INIT_CWD: "/home/me/dl" }, "/repo"), path.resolve("/abs/e.json"));
+});
+
+test("the command reads a relative export and --fixtures from INIT_CWD, not from where the script runs", () => {
+  const home = scratch();
+  const dir = path.join(home, "corpus");
+  fs.mkdirSync(dir);
+  fs.copyFileSync(path.join(REAL, AD16), path.join(dir, AD16));
+  const { option } = optionFor(text(dir, AD16));
+  fs.writeFileSync(path.join(home, "export.json"), JSON.stringify(exportOf(1, { [ID(AD16)]: { base: 0, blind: { ...span("01", "02"), labels: { [option]: "play" } } } })));
+  const done = spawnSync(process.execPath, [path.join(HERE, "apply-verdicts.mjs"), "export.json", "--fixtures", "corpus", "--no-review"], {
+    encoding: "utf8", cwd: REPO, env: { ...process.env, INIT_CWD: home },
+  });
+  assert.equal(done.status, 0, done.stderr);
+  assert.equal(JSON.parse(text(dir, AD16)).verdicts.length, 1);
+});
+
+test("dirBytes totals the files under a directory, nested ones included", () => {
+  const dir = scratch();
+  fs.mkdirSync(path.join(dir, "a"));
+  fs.writeFileSync(path.join(dir, "x"), "12345");
+  fs.writeFileSync(path.join(dir, "a", "y"), "123");
+  assert.equal(dirBytes(dir), 8);
 });

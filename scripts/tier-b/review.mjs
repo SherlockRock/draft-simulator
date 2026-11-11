@@ -26,6 +26,22 @@ function reviewPaths(runId, repo = REPO) {
   return { dir, runJson: path.join(dir, "run.json"), page: path.join(dir, "review.html") };
 }
 
+// A relative path the user typed is relative to where they typed it: `pnpm` runs scripts from the repo root and
+// says where it was called from in INIT_CWD.
+function callerPath(p, env = process.env, cwd = process.cwd()) {
+  return path.resolve(env.INIT_CWD || cwd, p);
+}
+
+// Total bytes of the files under a directory.
+function dirBytes(dir) {
+  let total = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    total += e.isDirectory() ? dirBytes(p) : fs.statSync(p).size;
+  }
+  return total;
+}
+
 function runStep(command, args, options) {
   const done = spawnSync(command, args, { stdio: "inherit", ...options });
   if (done.error) throw new Error(`${command}: ${done.error.message}`);
@@ -52,6 +68,7 @@ function runReview({ fixtures = null, repo = REPO, now = new Date() } = {}) {
   runStep(process.execPath, [path.join(HERE, "build-review-page.mjs"), paths.runJson, paths.page], { cwd: repo });
   console.log(`run:  ${paths.runJson}`);
   console.log(`page: ${paths.page}`);
+  console.log(`run directory: ${paths.dir} (${(dirBytes(paths.dir) / 1048576).toFixed(1)} MB; kept: the run JSON records what the page showed, and nothing deletes it)`);
   return { runId, ...paths };
 }
 
@@ -67,7 +84,7 @@ function main(argv) {
       throw new Error(`unknown argument ${argv[i]}\nusage: review.mjs [--fixtures <dir>]`);
     }
   }
-  runReview({ fixtures });
+  runReview({ fixtures: fixtures ? callerPath(fixtures) : null });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -79,4 +96,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   }
 }
 
-export { reviewPaths, runIdFor, runReview };
+export { callerPath, dirBytes, reviewPaths, runIdFor, runReview };
