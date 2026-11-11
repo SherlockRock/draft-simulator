@@ -6,6 +6,8 @@ import { ContextMenu } from "./ContextMenu";
 type GroupContextMenuProps = {
     position: { x: number; y: number };
     group: CanvasGroup;
+    /** Custom groups only: a blank draft at the right-clicked point. */
+    onCreateDraft?: () => void;
     onRename?: () => void;
     onSetTeamNames?: () => void;
     onViewSeries?: () => void;
@@ -20,6 +22,15 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
         const menuActions: ContextMenuAction[] = [];
 
         if (props.group.type === "custom") {
+            // First, as on the background menu: right-clicking into a group
+            // used to offer no way to create there at all.
+            if (props.onCreateDraft) {
+                menuActions.push({
+                    label: "Create Draft",
+                    action: () => props.onCreateDraft?.()
+                });
+            }
+
             menuActions.push({
                 label: "Rename",
                 action: () => props.onRename?.()

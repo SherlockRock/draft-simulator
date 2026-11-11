@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CardLayout } from "./canvasCardLayout";
 import type { CanvasAnnotation, CanvasDraft, CanvasGroup } from "./schemas";
-import { resolveCopyPlacement, type CopySubject } from "./copyPlacement";
+import {
+    resolveCopyPlacement,
+    resolveNewDraftPlacement,
+    type CopySubject
+} from "./copyPlacement";
 import {
     cardHeight,
     cardWidth,
@@ -543,5 +547,102 @@ describe("resolveCopyPlacement over a generalised subject", () => {
         });
 
         expect(placement.positionY).toBe(20 + 120 + GRID_CELL_GAP);
+    });
+});
+
+describe("resolveNewDraftPlacement", () => {
+    const cw = cardWidth(layout);
+    const ch = cardHeight(layout);
+    /** The centre of a lattice cell, container-relative — where a user clicks. */
+    const centreOf = (row: number, col: number) => {
+        const topLeft = cellToPosition({ row, col }, layout);
+        return { x: topLeft.x + cw / 2, y: topLeft.y + ch / 2 };
+    };
+    const grid3x3 = () =>
+        groupWith({ id: "g1", type: "custom", layout: "grid", gridCols: 3, gridRows: 3 });
+
+    it("lands in the empty grid cell that was right-clicked", () => {
+        const group = grid3x3();
+        const placement = resolveNewDraftPlacement({
+            group,
+            point: centreOf(1, 2),
+            tree: { groups: [group], drafts: [], annotations: [] },
+            layout
+        });
+        const target = cellToPosition({ row: 1, col: 2 }, layout);
+        expect(placement).toMatchObject({
+            positionX: target.x,
+            positionY: target.y,
+            group_id: group.id
+        });
+        expect(placement.groupMetadata).toBeUndefined();
+    });
+
+    it("targets the cell under the cursor, not the nearest top-left", () => {
+        // A click in the right half of cell (0,0) is nearer col 1's left edge;
+        // centring the card on the point keeps it in the cell clicked.
+        const group = grid3x3();
+        const topLeft = cellToPosition({ row: 0, col: 0 }, layout);
+        const placement = resolveNewDraftPlacement({
+            group,
+            point: { x: topLeft.x + cw - 4, y: topLeft.y + ch - 4 },
+            tree: { groups: [group], drafts: [], annotations: [] },
+            layout
+        });
+        expect(placement.positionX).toBe(topLeft.x);
+        expect(placement.positionY).toBe(topLeft.y);
+    });
+
+    it("moves to the nearest free cell when the clicked one is taken", () => {
+        const group = grid3x3();
+        const occupied = cellToPosition({ row: 0, col: 0 }, layout);
+        const drafts = [draftAt("a", occupied.x, occupied.y, group.id)];
+        const placement = resolveNewDraftPlacement({
+            group,
+            point: centreOf(0, 0),
+            tree: { groups: [group], drafts, annotations: [] },
+            layout
+        });
+        // (0,1) and (1,0) are equally near; reading order breaks the tie.
+        const target = cellToPosition({ row: 0, col: 1 }, layout);
+        expect(placement.positionX).toBe(target.x);
+        expect(placement.positionY).toBe(target.y);
+    });
+
+    it("persists a row added by a click below the configured rows", () => {
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            layout: "grid",
+            gridCols: 3,
+            gridRows: 1
+        });
+        const placement = resolveNewDraftPlacement({
+            group,
+            point: centreOf(1, 0),
+            tree: { groups: [group], drafts: [], annotations: [] },
+            layout
+        });
+        expect(placement.positionY).toBe(cellToPosition({ row: 1, col: 0 }, layout).y);
+        expect(placement.groupMetadata).toEqual({ gridRows: 2 });
+    });
+
+    it("puts the card's top-left at the click in a free-layout group", () => {
+        const group = groupWith({
+            id: "g1",
+            type: "custom",
+            layout: "free",
+            width: 2000,
+            height: 2000,
+            manualWidth: 2000,
+            manualHeight: 2000
+        });
+        const placement = resolveNewDraftPlacement({
+            group,
+            point: { x: 120, y: 340 },
+            tree: { groups: [group], drafts: [], annotations: [] },
+            layout
+        });
+        expect(placement).toEqual({ positionX: 120, positionY: 340, group_id: group.id });
     });
 });

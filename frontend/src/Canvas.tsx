@@ -268,7 +268,11 @@ import {
     type RowMetrics
 } from "./utils/gridRows";
 import { seriesGrowthReflow } from "./utils/seriesGrowthReflow";
-import { resolveCopyPlacement, type CopyPlacement } from "./utils/copyPlacement";
+import {
+    resolveCopyPlacement,
+    resolveNewDraftPlacement,
+    type CopyPlacement
+} from "./utils/copyPlacement";
 import { GroupTeamNamesDialog } from "./components/GroupTeamNamesDialog";
 import {
     DraftPositionsUpdatedSchema,
@@ -5917,6 +5921,64 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         navigateToDraft(pos.x, pos.y);
     };
 
+    /**
+     * A blank draft at a WORLD point — the one path behind both "Create Draft"
+     * entries: the background menu and a custom Group's own menu.
+     *
+     * Inside a Group (the innermost custom one under the point) it goes through
+     * `resolveNewDraftPlacement`, so a grid Group snaps it into the clicked cell
+     * (or the nearest free one) and grows to fit, the same as a copy. The
+     * background menu used to write the raw click offset into a grid Group,
+     * leaving the card off the lattice.
+     */
+    const handleCreateDraftAt = (
+        world: { x: number; y: number },
+        target: CanvasGroup | null = findGroupAtPosition(world.x, world.y)
+    ) => {
+        if (!canEdit()) return;
+        const placement: CopyPlacement = target
+            ? resolveNewDraftPlacement({
+                  group: target,
+                  point: { x: world.x - target.positionX, y: world.y - target.positionY },
+                  tree: canvasTree(),
+                  layout: props.cardLayout()
+              })
+            : { positionX: world.x, positionY: world.y, group_id: null };
+
+        if (target && (placement.groupDims || placement.groupMetadata)) {
+            persistGroupDimensions(
+                target,
+                placement.groupDims ?? {
+                    width: target.width ?? DEFAULT_GROUP_WIDTH,
+                    height: target.height ?? DEFAULT_GROUP_HEIGHT
+                },
+                placement.groupMetadata
+            );
+        }
+
+        if (isLocalMode()) {
+            localNewDraft({
+                name: "New Draft",
+                picks: Array(20).fill(""),
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id
+            });
+            refreshFromLocal();
+            toast.success("Successfully created new draft!");
+        } else {
+            newDraftMutation.mutate({
+                name: "New Draft",
+                picks: Array(20).fill(""),
+                public: false,
+                canvas_id: canvasId(),
+                positionX: placement.positionX,
+                positionY: placement.positionY,
+                group_id: placement.group_id ?? undefined
+            });
+        }
+    };
+
     const handleDraftCopy = (draft: CanvasDraft) => {
         const sourceGroup = draft.group_id
             ? canvasGroups.find((g) => g.id === draft.group_id)
@@ -8219,42 +8281,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             actions={[
                                 {
                                     label: "Create Draft",
-                                    action: () => {
-                                        const worldPos = contextMenuWorldPosition();
-                                        const group = findGroupAtPosition(
-                                            worldPos.x,
-                                            worldPos.y
-                                        );
-                                        const draftX = group
-                                            ? worldPos.x - group.positionX
-                                            : worldPos.x;
-                                        const draftY = group
-                                            ? worldPos.y - group.positionY
-                                            : worldPos.y;
-                                        if (isLocalMode()) {
-                                            localNewDraft({
-                                                name: "New Draft",
-                                                picks: Array(20).fill(""),
-                                                positionX: draftX,
-                                                positionY: draftY,
-                                                group_id: group?.id ?? null
-                                            });
-                                            refreshFromLocal();
-                                            toast.success(
-                                                "Successfully created new draft!"
-                                            );
-                                        } else {
-                                            newDraftMutation.mutate({
-                                                name: "New Draft",
-                                                picks: Array(20).fill(""),
-                                                public: false,
-                                                canvas_id: canvasId(),
-                                                positionX: draftX,
-                                                positionY: draftY,
-                                                group_id: group?.id ?? undefined
-                                            });
-                                        }
-                                    }
+                                    action: () =>
+                                        handleCreateDraftAt(contextMenuWorldPosition())
                                 },
                                 {
                                     label: "Create Group",
@@ -8503,6 +8531,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                         <GroupContextMenu
                             position={menu().position}
                             group={menu().group}
+                            onCreateDraft={() => {
+                                // Into THIS group, at the right-click — not
+                                // re-hit-tested, so a child group overhanging
+                                // the point cannot steal it.
+                                const { x, y } = menu().position;
+                                handleCreateDraftAt(screenToWorld(x, y), menu().group);
+                                closeGroupContextMenu();
+                            }}
                             onRename={() => {
                                 setEditingGroupId(menu().group.id);
                                 closeGroupContextMenu();
