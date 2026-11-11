@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // One command for the loop's run step: the Rust runner, then the page beside its JSON.
 //
-//   node scripts/tier-b/review.mjs [--fixtures <dir>]
+//   node scripts/tier-b/review.mjs [--fixtures <dir>] [--record]
 //
 // Runs `cargo run --release -p engine-core --bin tier_b_review` with TIER_B_JSON under
 // docs/plans/<date>-tier-b-review/<run id, colons as dashes>/run.json, TIER_B_RUN_ID set here (so the directory
 // carries the id the JSON does) and TIER_B_FIXTURES when --fixtures is given; then builds review.html beside it
-// and prints both paths. `--record` is reserved for slice 2.
+// and prints both paths. The runner also writes summary.txt beside the JSON; it is printed here.
+//
+// `--record` then appends exactly one JSON line to history.jsonl in the fixtures directory (the real one, or the
+// --fixtures one): date, commit, data versions, grid, corpus size, label counts, the reference arm's metrics, the
+// rule's pick. It is the last step, so a run that failed anywhere appends nothing, and a run with no labels (no
+// `metrics` in its JSON) refuses to record rather than write an empty line.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,21 +47,95 @@ function dirBytes(dir) {
   return total;
 }
 
+const DEFAULT_FIXTURES = "packages/engine-core/fixtures/tier-b";
+
+// Where --record appends: history.jsonl beside the fixtures (`load_dir` reads *.json only, so it is not loaded).
+function historyPath(fixtures, repo = REPO) {
+  return path.join(fixtures ? path.resolve(fixtures) : path.join(repo, DEFAULT_FIXTURES), "history.jsonl");
+}
+
+// The one line --record appends, from a parsed run JSON. Throws where there is nothing to record.
+function historyLine(run) {
+  const m = run.metrics;
+  if (!m) throw new Error("the run has no labels, so there is nothing to record");
+  const reference = m.arms.find((a) => a.id === m.reference);
+  if (!reference) throw new Error(`the reference arm ${m.reference} is not in the run's metrics`);
+  const roster = run.run.arms.filter((a) => a.p !== undefined && a.q !== undefined);
+  const sorted = (xs) => [...new Set(xs)].sort((a, b) => a - b);
+  return {
+    date: run.run.id.slice(0, 10),
+    run: run.run.id,
+    commit: run.run.engine.commit,
+    dirty: run.run.engine.dirty,
+    data: run.run.data,
+    grid: { p: sorted(roster.map((a) => a.p)), q: sorted(roster.map((a) => a.q)), arms: run.run.arms.length },
+    corpus: { positions: run.positions.length, load_errors: run.load_errors.length },
+    margin: m.margin,
+    labels: m.labels,
+    reference: { arm: reference.id, metrics: reference.metrics },
+    rule: {
+      pick: m.rule.pick,
+      readable: m.rule.readable,
+      roster_arms: m.rule.roster_arms,
+      edge: m.rule.edge.map((e) => e.text),
+      second_line_differs: m.second_line.differs,
+    },
+  };
+}
+
+// Appends one line, on a line of its own even where the file lacks a final newline.
+function appendHistory(file, line) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  let prefix = "";
+  if (fs.existsSync(file)) {
+    const size = fs.statSync(file).size;
+    if (size > 0) {
+      const fd = fs.openSync(file, "r");
+      try {
+        const last = Buffer.alloc(1);
+        fs.readSync(fd, last, 0, 1, size - 1);
+        if (last[0] !== 0x0a) prefix = "\n";
+      } finally {
+        fs.closeSync(fd);
+      }
+    }
+  }
+  fs.appendFileSync(file, `${prefix}${JSON.stringify(line)}\n`);
+}
+
+// The terminal copy of the summary: the worklist collapsed to counts per position (the unlabelled rows and the
+// unjudged #1 lines are listed in full in summary.txt, which the last line names).
+function collapseWorklist(text, summaryPath) {
+  const lines = text.split("\n");
+  const at = lines.indexOf("Worklist");
+  if (at < 0) return text;
+  const out = lines.slice(0, at + 1);
+  let tail = false;
+  for (const line of lines.slice(at + 1)) {
+    if (tail || /^ {6}/.test(line)) continue; // a row id, or the lines listed under "#1 lines"
+    out.push(line);
+    if (/^ {2}#1 lines at /.test(line)) tail = true;
+  }
+  out.push(`  (the rows and lines in full: ${summaryPath})`);
+  return out.join("\n").replace(/\n+$/, "") + "\n";
+}
+
 function runStep(command, args, options) {
   const done = spawnSync(command, args, { stdio: "inherit", ...options });
   if (done.error) throw new Error(`${command}: ${done.error.message}`);
   if (done.status !== 0) throw new Error(`${command} ${args.slice(0, 3).join(" ")} exited with ${done.status}`);
 }
 
-// Runs the runner and builds the page. `fixtures` is a directory or null (the real corpus).
-function runReview({ fixtures = null, repo = REPO, now = new Date() } = {}) {
+// Runs the runner and builds the page. `fixtures` is a directory or null (the real corpus). `exec` is the
+// process runner (injected by tests, which must not build the Rust binary).
+function runReview({ fixtures = null, repo = REPO, now = new Date(), record = false, exec = runStep } = {}) {
   const runId = runIdFor(now);
   const paths = reviewPaths(runId, repo);
   fs.mkdirSync(paths.dir, { recursive: true });
   const env = { ...process.env, TIER_B_JSON: paths.runJson, TIER_B_RUN_ID: runId };
   if (fixtures) env.TIER_B_FIXTURES = path.resolve(fixtures);
   try {
-    runStep("cargo", ["run", "--release", "-p", "engine-core", "--bin", "tier_b_review"], { cwd: repo, env });
+    exec("cargo", ["run", "--release", "-p", "engine-core", "--bin", "tier_b_review"], { cwd: repo, env });
   } catch (e) {
     try {
       fs.rmdirSync(paths.dir); // a failed run leaves no empty directory (rmdir refuses a non-empty one)
@@ -65,26 +144,35 @@ function runReview({ fixtures = null, repo = REPO, now = new Date() } = {}) {
     }
     throw e;
   }
-  runStep(process.execPath, [path.join(HERE, "build-review-page.mjs"), paths.runJson, paths.page], { cwd: repo });
+  exec(process.execPath, [path.join(HERE, "build-review-page.mjs"), paths.runJson, paths.page], { cwd: repo });
+  const summary = path.join(paths.dir, "summary.txt");
+  if (fs.existsSync(summary)) process.stdout.write(collapseWorklist(fs.readFileSync(summary, "utf8"), summary));
   console.log(`run:  ${paths.runJson}`);
   console.log(`page: ${paths.page}`);
   console.log(`run directory: ${paths.dir} (${(dirBytes(paths.dir) / 1048576).toFixed(1)} MB; kept: the run JSON records what the page showed, and nothing deletes it)`);
+  if (record) {
+    // Last, after every step that can fail: a failed run appends nothing.
+    const file = historyPath(fixtures, repo);
+    appendHistory(file, historyLine(JSON.parse(fs.readFileSync(paths.runJson, "utf8"))));
+    console.log(`history: appended one line to ${file}`);
+  }
   return { runId, ...paths };
 }
 
 function main(argv) {
   let fixtures = null;
+  let record = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--fixtures") {
       fixtures = argv[++i];
       if (!fixtures) throw new Error("--fixtures needs a directory");
     } else if (argv[i] === "--record") {
-      throw new Error("--record is reserved for slice 2 and does nothing yet");
+      record = true;
     } else {
-      throw new Error(`unknown argument ${argv[i]}\nusage: review.mjs [--fixtures <dir>]`);
+      throw new Error(`unknown argument ${argv[i]}\nusage: review.mjs [--fixtures <dir>] [--record]`);
     }
   }
-  runReview({ fixtures: fixtures ? callerPath(fixtures) : null });
+  runReview({ fixtures: fixtures ? callerPath(fixtures) : null, record });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -96,4 +184,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   }
 }
 
-export { callerPath, dirBytes, reviewPaths, runIdFor, runReview };
+export { appendHistory, callerPath, collapseWorklist, dirBytes, historyLine, historyPath, reviewPaths, runIdFor, runReview };

@@ -1,0 +1,48 @@
+---
+source: packages/engine-core/tests/tier_b_review.rs
+expression: text
+---
+Tier B review summary: run 2026-11-11T00:00:00Z (engine abc1234, data fm fm-test / meta meta-test / positions patch 16.19)
+2 positions, 2 arms, margin ε 0.01, reference arm roster:0.1:0.05
+labels: 12 options over 2 of 2 positions (0 blind, 12 scored only), 2 own picks (0 blind)
+read from the current fold, no blind answer: 0 labels, 0 own picks
+
+P x Q: never@1 / never@3 / pick@3 (rows P, columns Q)
+  (+n) near ties, not read by the rule; ≥n unjudged, n is the lower bound; * the rule's pick; ^ the reference arm
+          Q=0.05
+P=0.1     1/1/1^
+P=0.15    0/0/2*
+
+Floor rows (the reference ranking with options holding an off-pool placement below r removed; root-only, no re-search; never selectable)
+
+The rule: 2 of 2 arms readable. Pick: roster:0.15:0.05
+  on the grid's edge (P = 0.15): read r_by_label and the floor rows before widening
+Receipt, roster:0.1:0.05 → roster:0.15:0.05:
+  never@1 1 → 0 (in-pool 1 → 0, off-pool base 0 → 0, off-pool graded 0 → 0), near@1 0 → 0, never@3 1 → 0, pick@3 1 → 2, pick_off@3 0 of 0 → 0 of 0, top in-pool 2 → 2
+  own pick leaves the top 3 at: none
+  own pick enters the top 3 at: 2026-10-02-b
+  depth check did not hold (1 positions): never@1 1 → 0, never@3 1 → 0, pick@3 1 → 1
+  the others (1 positions): never@1 0 → 0, never@3 0 → 0, pick@3 0 → 1
+Sensitivity (the pick at other margins, and with each draft left out):
+  ε 0.005: roster:0.15:0.05
+  ε 0.02: roster:0.15:0.05
+  without 2026-10-01: roster:0.15:0.05
+  without 2026-10-02: roster:0.15:0.05
+Second line (the rule on the current fold): 2 of 2 arms readable, pick roster:0.15:0.05 (same as the blind read)
+
+bad_line@1 (bad of judged; an unjudged line is not a good one):
+  reference, roster:0.1:0.05: 0 bad of 0 judged, 0 unjudged
+  pick, roster:0.15:0.05: 0 bad of 0 judged, 0 unjudged
+never_everywhere (a clear never at #1 at every readable arm): none
+r_by_label (options with one off-pool placement; play / maybe / never):
+  r < 0.1    0 / 0 / 0
+  r < 0.25   0 / 0 / 0
+  r < 0.5    0 / 0 / 0
+  r < 1      0 / 0 / 0
+  r = 1      0 / 0 / 0
+  r unknown  0 / 0 / 0
+reveal_changes: 0 of 0 blind labels and 0 of 0 blind picks changed after the reveal; drafts revealed: none; reveals with no change: none
+
+Worklist
+  unlabelled rows: 0 over 0 positions
+  #1 lines at roster:0.15:0.05 with no line verdict: 0

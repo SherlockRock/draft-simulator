@@ -4,6 +4,835 @@ expression: text
 ---
 {
   "load_errors": [],
+  "metrics": {
+    "arms": [
+      {
+        "id": "pool_or_roster",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 31.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.101504215,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 1,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": null,
+        "readable": false,
+        "role": "pool_or_roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "roster:0.02:0",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 85.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.139218621,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 0,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": 0.02,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": 0.0,
+        "readable": false,
+        "role": "roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "roster:0.1:0",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 49.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.101504215,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 1,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": 0.1,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": 0.0,
+        "readable": false,
+        "role": "roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "roster:0.02:0.05",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 85.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.139218621,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 0,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": 0.02,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": 0.05,
+        "readable": false,
+        "role": "roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "roster:0.1:0.05",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 44.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.101504215,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 1,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": 0.1,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": 0.05,
+        "readable": false,
+        "role": "roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "floor:0.1",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 44.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.101504215,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 1,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": null,
+        "readable": false,
+        "role": "floor",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "floor:0.25",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": 44.0,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": 0.101504215,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 1,
+          "speaking": 1,
+          "top_in_pool": 1,
+          "unjudged": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "unjudged_line": 1,
+          "with_pick": 1
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [
+            "labelled-position"
+          ],
+          "unjudged_1": [
+            "labelled-position"
+          ],
+          "unjudged_3": [
+            "labelled-position"
+          ],
+          "unjudged_line_1": [
+            "labelled-position"
+          ]
+        },
+        "q": null,
+        "readable": false,
+        "role": "floor",
+        "unknown_r_kept": 0
+      }
+    ],
+    "ks": [
+      1,
+      3,
+      5,
+      10
+    ],
+    "labels": {
+      "blind_options": 2,
+      "blind_picks": 1,
+      "fallback_labels": 1,
+      "fallback_picks": 0,
+      "labelled_positions": 1,
+      "options": 3,
+      "own_picks": 1,
+      "positions": 1,
+      "scored_only_options": 1
+    },
+    "margin": 0.01,
+    "never_everywhere": [],
+    "r_by_label": [
+      {
+        "bucket": "r < 0.1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 0.25",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 0.5",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r = 1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r unknown",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      }
+    ],
+    "reference": "roster:0.1:0.05",
+    "reveal_changes": {
+      "blind_labels": 2,
+      "blind_picks": 1,
+      "drafts_revealed": [
+        "labelled-position"
+      ],
+      "labels": [
+        {
+          "blind": "never",
+          "current": "maybe",
+          "option": "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra",
+          "position": "labelled-position"
+        }
+      ],
+      "picks": [],
+      "reveals_without_change": []
+    },
+    "rule": {
+      "edge": [],
+      "pick": null,
+      "readable": 0,
+      "receipt": null,
+      "roster_arms": 4,
+      "ties": []
+    },
+    "second_line": {
+      "differs": false,
+      "outcome": {
+        "edge": [],
+        "pick": null,
+        "readable": 0,
+        "receipt": null,
+        "roster_arms": 4,
+        "ties": []
+      }
+    },
+    "sensitivity": {
+      "leave_out": [
+        {
+          "draft": "labelled-position",
+          "pick": null
+        }
+      ],
+      "margins": [
+        {
+          "margin": 0.005,
+          "pick": null
+        },
+        {
+          "margin": 0.02,
+          "pick": null
+        }
+      ]
+    },
+    "worklist": {
+      "lines_at": "roster:0.1:0.05",
+      "unjudged_lines": [
+        {
+          "line": "Bard",
+          "option": "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+          "position": "labelled-position"
+        }
+      ],
+      "unlabelled_rows": [
+        {
+          "position": "labelled-position",
+          "rows": [
+            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+            "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+            "Thresh+Zyra|top=Rumble,jungle=Zyra,support=Thresh",
+            "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona",
+            "Shaco+Thresh|top=Rumble,jungle=Shaco,support=Thresh",
+            "Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar"
+          ]
+        }
+      ]
+    }
+  },
   "positions": [
     {
       "actual_next": [

@@ -27,6 +27,8 @@ use super::tier_b_rule::{
     canonical_line, line_text, read_run, ArmInput, ArmRole, ArmSpec, Fold, LabelChange, PickChange,
     PositionInput, RBucket, Read, RevealRead, TopLine, FLOOR_RATIOS,
 };
+use super::tier_b_summary::metrics_json_of;
+pub use super::tier_b_summary::{render_summary, summary_of};
 use super::universe::{ChampionIdx, Universe, DEFAULT_OFF_POOL_COST, DEFAULT_OFF_ROLE_COST};
 use crate::cancellation::CancelHandle;
 use crate::draft_state::{ActionType, Side};
@@ -154,9 +156,13 @@ pub struct ReviewRun {
     pub positions: Vec<PositionRead>,
     /// A malformed fixture is reported here, in its place: the rest of the corpus still runs.
     pub load_errors: Vec<String>,
-    /// The rule's reading of the run (design § 4), in memory only: Task 11 puts it in the JSON.
+    /// The rule's reading of the run (design § 4), kept in memory, not serialised: `metrics` (below) is its view in the JSON.
     #[serde(skip)]
     pub read: Read,
+    /// What the rule read, for the page's results tab and the summary (`tier_b_summary`). Additive to
+    /// `tier-b-run/1`: absent when no position carries a label or an own pick.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -516,7 +522,7 @@ pub fn run_review(
             cfg,
         )
     });
-    ReviewRun {
+    let mut run = ReviewRun {
         schema: SCHEMA,
         run: RunHeader {
             id: cfg.run_id.clone(),
@@ -558,7 +564,10 @@ pub fn run_review(
         read: read_of(&positions, &arms, cfg.margin),
         positions,
         load_errors,
-    }
+        metrics: None,
+    };
+    run.metrics = metrics_json_of(&run);
+    run
 }
 
 /// The rule's reading of the whole run: the arms, then the floor rows, through `read_run`.

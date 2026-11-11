@@ -21,8 +21,9 @@ use engine_core::reference::tier_b::{
     Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
 use engine_core::reference::tier_b_review::{
-    draft_of, floor_keep, opponent_charge, run_review, score_ranking, EngineStamp, OwnPick,
-    PositionScore, ReviewConfig, ReviewRun, ScoredAction, TopClassName,
+    draft_of, floor_keep, opponent_charge, render_summary, run_review, score_ranking, summary_of,
+    ArmWire, DataStamp, EngineStamp, OwnPick, PositionScore, ReviewConfig, ReviewRun, RunHeader,
+    ScoredAction, SearchStamp, TopClassName, WidthsWire,
 };
 use engine_core::reference::tier_b_rule::{
     canonical_line, choose_arm, line_text, read_arms, read_run, ArmInput, ArmRole, ArmScore,
@@ -4193,4 +4194,435 @@ fn an_own_pick_first_given_after_the_reveal_is_read_and_counted() {
     assert!(run.positions[0].scoring.pick_fallback);
     assert_eq!(run.positions[0].scoring.rule.own_pick, None);
     assert_eq!(run.read.fallbacks.picks, 1);
+}
+
+// ---- Task 11: the run's `metrics`, the text summary, the history ---------------------------------------
+
+/// The labelled position's run, kept in memory (the in-memory `Read` is not in the JSON).
+fn base_review() -> &'static ReviewRun {
+    static BASE: std::sync::OnceLock<ReviewRun> = std::sync::OnceLock::new();
+    BASE.get_or_init(|| run_of(&[labelled()], &review_config(), &live()))
+}
+
+/// The summary on the labelled position is pinned: the table, floor rows, the rule's line, receipt,
+/// sensitivity, second line, `never_everywhere`, `r_by_label`, `bad_line@1` and the worklist, in order.
+/// Nothing in it is wall-clock or platform dependent (the run id and commit are the config's).
+/// Kills: any change to what the summary prints or the order it prints it in.
+#[test]
+fn the_summary_on_the_labelled_position_is_pinned() {
+    insta::assert_snapshot!(
+        "summary_on_the_labelled_position",
+        render_summary(base_review())
+    );
+}
+
+/// `bad_line@1` reads "bad of judged": an arm whose #1 line has no verdict prints 0 bad of 0 judged
+/// with the line counted as unjudged, never as a clean zero; the figures are the arm's `Metrics`.
+/// Kills: printing `bad_line` alone; unjudged lines left out of the line.
+#[test]
+fn the_summary_reads_bad_line_as_bad_of_judged() {
+    let run = base_review();
+    let text = render_summary(run);
+    let arm = run
+        .read
+        .arms
+        .iter()
+        .find(|a| a.spec.id == REFERENCE_ARM)
+        .expect("the reference arm");
+    let line = format!(
+        "{REFERENCE_ARM}: {} bad of {} judged, {} unjudged",
+        arm.all.bad_line, arm.all.judged_line, arm.all.unjudged_line
+    );
+    assert!(text.contains(&line), "{line}\n{text}");
+    assert!(text.contains("bad_line@1 (bad of judged"), "{text}");
+    let m = &run.metrics.as_ref().expect("labelled run has metrics")["arms"];
+    let wire = m
+        .as_array()
+        .and_then(|a| a.iter().find(|a| a["id"] == REFERENCE_ARM))
+        .expect("the reference arm's metrics");
+    assert_eq!(wire["metrics"]["bad_line"], arm.all.bad_line);
+    assert_eq!(wire["metrics"]["judged_line"], arm.all.judged_line);
+    assert_eq!(wire["metrics"]["unjudged_line"], arm.all.unjudged_line);
+}
+
+/// A run header for the constructed summaries (nothing in it is measured).
+fn test_header(arm_ids: &[&str]) -> RunHeader {
+    RunHeader {
+        id: "2026-11-11T00:00:00Z".to_string(),
+        engine: EngineStamp {
+            name: "reference".to_string(),
+            commit: Some("abc1234".to_string()),
+            dirty: Some(false),
+        },
+        data: DataStamp {
+            fm_version: "fm-test".to_string(),
+            meta_version: "meta-test".to_string(),
+            positions_patch: "16.19".to_string(),
+        },
+        search: SearchStamp {
+            horizon: 2,
+            widths: WidthsWire {
+                singles: 1,
+                pairs: 1,
+                root_off_pool: 1,
+            },
+            node_budget: 1,
+            jobs: 1,
+        },
+        k: 3,
+        margin: 0.01,
+        reference_arm: arm_ids[0].to_string(),
+        arms: arm_ids
+            .iter()
+            .map(|id| ArmWire {
+                id: id.to_string(),
+                rule: "roster",
+                p: None,
+                q: None,
+            })
+            .collect(),
+    }
+}
+
+/// Every field `metrics.arms[]` emits for an arm, against the in-memory `ArmScore`.
+fn assert_wire_arm(wire: &Value, arm: &ArmScore, unknown_r_kept: usize) {
+    let m = &wire["metrics"];
+    let a = &arm.all;
+    assert_eq!(wire["id"], arm.spec.id);
+    assert_eq!(wire["readable"], arm.readable());
+    assert_eq!(wire["unknown_r_kept"], unknown_r_kept);
+    for (name, got) in [
+        ("never", a.never),
+        ("near", a.near),
+        ("unjudged", a.unjudged),
+        ("play", a.play),
+        ("no_play", a.no_play),
+        ("neither_play", a.neither_play),
+        ("pick", a.pick),
+        ("pick_off", a.pick_off),
+    ] {
+        assert_eq!(m[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    for (name, got) in [
+        ("positions", a.positions),
+        ("speaking", a.speaking),
+        ("non_speaking", a.positions - a.speaking),
+        ("with_pick", a.with_pick),
+        ("pick_off_eligible", a.pick_off_eligible),
+        ("top_in_pool", a.top_in_pool),
+        ("pick_absent", a.pick_absent),
+        ("opp_charge_lead", a.opp_charge_lead),
+        ("bad_line", a.bad_line),
+        ("judged_line", a.judged_line),
+        ("unjudged_line", a.unjudged_line),
+    ] {
+        assert_eq!(m[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    assert_eq!(
+        m["never_1_by_class"],
+        json!({"in_pool": a.never_1_in_pool, "off_pool_base": a.never_1_base, "off_pool_graded": a.never_1_graded})
+    );
+    assert_eq!(m["pick_median_regret"], json!(a.pick_median_regret));
+    let ids = |f: &dyn Fn(&PositionScore) -> bool| -> Vec<String> {
+        arm.rows
+            .iter()
+            .filter(|r| r.score.as_ref().is_some_and(f))
+            .map(|r| r.id.clone())
+            .collect()
+    };
+    let behind = &wire["positions"];
+    for (name, got) in [
+        ("never_1", ids(&|s| s.never[0])),
+        ("never_3", ids(&|s| s.never[1])),
+        ("near_1", ids(&|s| s.near[0])),
+        ("near_3", ids(&|s| s.near[1])),
+        ("unjudged_1", ids(&|s| s.unjudged[0])),
+        ("unjudged_3", ids(&|s| s.unjudged[1])),
+        ("pick_3", ids(&|s| s.pick[1])),
+    ] {
+        assert_eq!(behind[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    let silent: Vec<&str> = arm
+        .rows
+        .iter()
+        .filter(|r| r.score.is_none())
+        .map(|r| r.id.as_str())
+        .collect();
+    assert_eq!(behind["not_speaking"], json!(silent));
+}
+
+/// The `metrics` block carries what the page and the summary read, and agrees with the in-memory read.
+/// Kills: a metrics block that drifts from `Read`; positions behind a count missing.
+#[test]
+fn the_metrics_block_agrees_with_the_read() {
+    let run = base_review();
+    let v = serde_json::to_value(run).expect("serialises");
+    let m = &v["metrics"];
+    assert_eq!(m["ks"], json!([1, 3, 5, 10]));
+    assert_eq!(m["reference"], REFERENCE_ARM);
+    assert_eq!(m["labels"]["positions"], 1);
+    assert_eq!(m["labels"]["labelled_positions"], 1);
+    assert_eq!(m["rule"]["roster_arms"], 4);
+    assert_eq!(
+        m["rule"]["pick"],
+        serde_json::to_value(&run.read.rule.pick).unwrap()
+    );
+    let arms = array(&m["arms"], "arms");
+    assert_eq!(
+        arms.len(),
+        run.read.arms.len(),
+        "arms then the two floor rows"
+    );
+    for (wire, arm) in arms.iter().zip(&run.read.arms) {
+        assert_wire_arm(wire, arm, 0);
+    }
+    let roles: Vec<&str> = arms.iter().map(|a| text(&a["role"], "role")).collect();
+    assert_eq!(roles.iter().filter(|r| **r == "floor").count(), 2);
+    for key in [
+        "sensitivity",
+        "second_line",
+        "never_everywhere",
+        "r_by_label",
+        "reveal_changes",
+        "worklist",
+    ] {
+        assert!(m.get(key).is_some(), "metrics.{key}");
+    }
+    assert_eq!(array(&m["r_by_label"], "r_by_label").len(), 6);
+}
+
+/// With no labels there is nothing to read: `metrics` is absent (not null, not empty), the JSON still
+/// parses and carries `tier-b-run/1`, and the summary says so.
+/// Kills: an always-present `metrics`; a summary that tables an unread corpus.
+#[test]
+fn metrics_are_absent_with_no_labels_and_the_json_still_parses() {
+    let run = run_of(&[supp_17()], &supp_config(), &live());
+    assert!(run.metrics.is_none());
+    let written = serde_json::to_string_pretty(&run).expect("serialises");
+    let v: Value = serde_json::from_str(&written).expect("it parses");
+    assert_eq!(v["schema"], "tier-b-run/1");
+    assert!(v.as_object().expect("an object").get("metrics").is_none());
+    let summary = render_summary(&run);
+    assert!(summary.contains("No labels yet"), "{summary}");
+    assert!(!summary.contains("P x Q"), "{summary}");
+}
+
+/// `history.jsonl` beside the fixtures is not a fixture: `load_dir` reads `*.json` only, so a history
+/// line (even one that is not a fixture at all) adds no load result and no error.
+/// Kills: a loader that reads every file in the directory.
+#[test]
+fn a_history_jsonl_in_the_fixtures_dir_is_not_loaded() {
+    let live = live();
+    let dir = std::env::temp_dir().join(format!("tier-b-history-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    std::fs::write(dir.join("2026-10-07-labelled.json"), labelled().to_string())
+        .expect("fixture copy");
+    let before = TierBFixture::load_dir(&dir, &live).expect("loads");
+    std::fs::write(dir.join("history.jsonl"), "{\"not\": \"a fixture\"}\n").expect("history");
+    let after = TierBFixture::load_dir(&dir, &live).expect("loads");
+    std::fs::remove_dir_all(&dir).expect("clean up");
+    assert_eq!(before.len(), 1);
+    assert_eq!(after.len(), 1, "the history file is not a position");
+    assert!(after[0].is_ok());
+}
+
+/// The binary writes `summary.txt` beside the run JSON.
+/// Kills: a summary written elsewhere or not at all.
+#[test]
+fn the_binary_writes_summary_txt_beside_the_run_json() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let fixtures =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let dir = std::env::temp_dir().join(format!("tier-b-summary-bin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let ran = std::process::Command::new(exe)
+        .env("TIER_B_JSON", dir.join("run.json"))
+        .env("TIER_B_FIXTURES", &fixtures)
+        .env("TIER_B_P", "0.1")
+        .env("TIER_B_Q", "0.05")
+        .env("TIER_B_WIDTHS", "10,20,30")
+        .env("TIER_B_K", "3")
+        .env("TIER_B_JOBS", "2")
+        .env("TIER_B_RUN_ID", "2026-11-09T00:00:00Z")
+        .output()
+        .expect("the binary runs");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let summary = std::fs::read_to_string(dir.join("summary.txt")).expect("summary.txt");
+    std::fs::remove_dir_all(&dir).expect("clean up");
+    assert!(
+        summary.starts_with("Tier B review summary: run 2026-11-09T00:00:00Z"),
+        "{summary}"
+    );
+}
+
+/// A constructed run where the rule reads: two positions, arm A (the reference) with the `never` first
+/// at one and arm B clean, so B is picked, A's `never@1` is the receipt's `from`, and the table marks
+/// the pick and the reference. Pinned, so the readable half of the text (the pick line, the receipt, the
+/// sensitivity and second lines) is under test as well as the unread half above.
+/// Kills: a summary that prints only the unread case; a receipt printed to-from; a pick unmarked.
+#[test]
+fn the_summary_of_a_readable_run_is_pinned() {
+    let ps = [
+        rpos(
+            "2026-10-01-a",
+            "2026-10-01",
+            Side::Blue,
+            Some(false),
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        ),
+        rpos(
+            "2026-10-02-b",
+            "2026-10-02",
+            Side::Blue,
+            None,
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &GOOD_C2_AT_5), (ARM_B, &GOOD_C2_AT_2)],
+        ),
+    ];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    assert_eq!(
+        read.rule.pick.as_deref(),
+        Some(ARM_B),
+        "the premise: B is readable and better"
+    );
+    let header = test_header(&[ARM_A, ARM_B]);
+    let text = summary_of(&header, &read, &inputs);
+    assert!(
+        text.contains("The rule: 2 of 2 arms readable. Pick: roster:0.15:0.05"),
+        "{text}"
+    );
+    assert!(
+        text.contains("never@1 1 → 0"),
+        "the receipt reads reference then pick\n{text}"
+    );
+    insta::assert_snapshot!("summary_of_a_readable_run", text);
+}
+
+/// A constructed run that reaches every branch the labelled run does not: a near tie (`(+n)`), an arm
+/// where a position does not speak (`!`, the count), two arms tied on the three keys with the reference
+/// among them (so the pick is the reference: `bad_line@1` prints once), a second line that DIFFERS, floor
+/// rows with a non-speaking count and unknown-r placements kept, the grid's bottom edge above zero (bare
+/// flag, per the ruling on Task 10's C1), and `≥` cells with their upper bounds. The wire block is
+/// compared to the same read field by field, on values that are not all zero.
+/// Kills: `(+n)`, `!`, DIFFERS, the ties text, the floor rows' counts, the upper-bound lines or the
+/// single bad_line block dropped or changed; a wire field that drifts where the labelled run holds zeros.
+#[test]
+fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() {
+    // c0 is `never`; p1: the never is first and a play sits within the margin: near at 1 and 3.
+    const NEAR: [(u8, f64); 6] = [(0, 1.0), (1, 0.995), (2, 0.9), (3, 0.8), (4, 0.7), (5, 0.6)];
+    // c5 first, then the plays, the `never` last.
+    const C5_FIRST: [(u8, f64); 6] = [(5, 1.0), (1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6), (0, 0.1)];
+    let c = "roster:0.2:0.05";
+    let (f1, f2) = ("floor:0.1", "floor:0.25");
+    let mut p1 = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        Some(true),
+        &LABELS,
+        Some(2),
+        &[
+            (ARM_A, &NEAR),
+            (ARM_B, &NEAR),
+            (c, &NEAR),
+            (f1, &NEAR),
+            (f2, &NEAR),
+        ],
+    );
+    p1.arms[3].unknown_r_kept = 2;
+    let mut p2 = rpos(
+        "2026-10-02-b",
+        "2026-10-02",
+        Side::Blue,
+        Some(false),
+        &LABELS,
+        Some(2),
+        &[
+            (ARM_A, &C5_FIRST),
+            (ARM_B, &GOOD_C2_AT_2),
+            (c, &[]),
+            (f1, &GOOD_C2_AT_2),
+            (f2, &[]),
+        ],
+    );
+    // After the reveal c5 reads `never`: arm A puts it first, B does not, so the current fold prefers B.
+    p2.current.labels.insert(opt(5), Label::Never);
+    let ps = [p1, p2];
+    let inputs = refs(&ps);
+    let mut specs = vec![
+        roster_spec(0.1, 0.05),
+        roster_spec(0.15, 0.05),
+        roster_spec(0.2, 0.05),
+    ];
+    for (id, _) in [(f1, 0), (f2, 1)] {
+        specs.push(ArmSpec {
+            id: id.to_string(),
+            role: ArmRole::Floor,
+            p: None,
+            q: None,
+        });
+    }
+    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    assert_eq!(
+        read.rule.pick.as_deref(),
+        Some(ARM_A),
+        "premise: the tie keeps the reference"
+    );
+    assert_eq!(read.rule.ties.len(), 2, "premise: A and B tie");
+    assert!(
+        read.second_line.differs,
+        "premise: the current fold picks B"
+    );
+
+    let header = test_header(&[ARM_A, ARM_B, c]);
+    let text = summary_of(&header, &read, &inputs);
+    assert!(text.contains("(+1)"), "{text}");
+    assert!(text.contains("! some positions do not speak"), "{text}");
+    assert!(text.contains("DIFFERS"), "{text}");
+    assert!(text.contains("tied on the three keys"), "{text}");
+    assert!(
+        text.contains("non-speaking 1 of 2, unknown r kept 0"),
+        "{text}"
+    );
+    assert!(text.contains("unknown r kept 2"), "{text}");
+    assert!(
+        text.contains("on the grid's edge (P = 0.1)\n"),
+        "bare bottom edge\n{text}"
+    );
+    assert_eq!(
+        text.matches("0 bad of 0 judged").count(),
+        1,
+        "pick = reference prints the line once\n{text}"
+    );
+    assert!(text.contains("reference = pick, "), "{text}");
+    insta::assert_snapshot!("summary_of_every_branch", text);
+
+    let header_run = test_header(&[ARM_A, ARM_B, c]);
+    let wire = engine_core::reference::tier_b_summary::metrics_of(&header_run, &read, &inputs)
+        .expect("labelled");
+    let arms = array(&wire["arms"], "arms");
+    assert_eq!(arms.len(), read.arms.len());
+    for (w, arm) in arms.iter().zip(&read.arms) {
+        let unknown: usize = inputs
+            .iter()
+            .flat_map(|p| p.arms.iter())
+            .filter(|a| a.id == arm.spec.id)
+            .map(|a| a.unknown_r_kept)
+            .sum();
+        assert_wire_arm(w, arm, unknown);
+    }
+    assert_eq!(wire["rule"]["pick"], ARM_A);
+    assert_eq!(wire["second_line"]["differs"], true);
+    assert_eq!(
+        wire["rule"]["receipt"]["pick"],
+        wire["rule"]["receipt"]["reference"]
+    );
 }
