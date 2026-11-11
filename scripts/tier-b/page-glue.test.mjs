@@ -108,7 +108,7 @@ function makeDoc(dataJson) {
     return n;
   };
   const fixed = {};
-  for (const id of ["runline", "count-rows", "count-cards", "unfinished", "storage-notice", "load-errors", "root", "copy", "download", "armwrap", "arm", "export-msg", "export-box"]) {
+  for (const id of ["runline", "count-rows", "count-cards", "unfinished", "storage-notice", "load-errors", "root", "copy", "download", "armwrap", "arm", "export-msg", "export-box", "tab-positions", "tab-results", "results", "tip", "selnote"]) {
     fixed[id] = doc.createElement("div");
     fixed[id].id = id;
   }
@@ -544,4 +544,158 @@ test("M5: a re-read page shows the earlier line verdict as pressed and the earli
   assert.equal(button(doc, E, "bad").attrs["aria-pressed"], "true");
   assert.equal(button(doc, E, "ok").attrs["aria-pressed"], "false");
   assert.equal(walk(cardEl(doc, E), (n) => n.tag === "textarea")[0].value, "an earlier note");
+});
+
+// ---- the results tab ----
+function glueMetrics() {
+  const mx = (over) => ({
+    positions: 5, speaking: 5, non_speaking: 0, never: [0, 0, 0, 0], near: [0, 0, 0, 0], unjudged: [0, 0, 0, 0], play: [0, 0, 0, 0], no_play: 0, neither_play: 0,
+    pick: [0, 0, 0, 0], pick_off: [0, 0, 0, 0], with_pick: 4, pick_off_eligible: 2, never_1_by_class: { in_pool: 0, off_pool_base: 0, off_pool_graded: 0 },
+    top_in_pool: 3, bad_line: 0, judged_line: 0, unjudged_line: 0, ...over,
+  });
+  const none = Object.fromEntries(["never_1", "never_3", "near_1", "near_3", "unjudged_1", "unjudged_3", "pick_3", "pick_3_out", "not_speaking", "bad_line_1", "unjudged_line_1"].map((k) => [k, []]));
+  const arm = (id, role, p, q, m, positions = {}) => ({ id, role, p, q, readable: true, unknown_r_kept: 0, metrics: mx(m), positions: { ...none, ...positions } });
+  const SYN = "2026-10-07-synth-dme-adc-pinch-slot-19";
+  const receipt = { reference: "roster:0.1:0.05", pick: "roster:0.15:0.05", from: mx(), to: mx(), leaves_top_3: [A], enters_top_3: [B, SYN], unstable: { positions: [A], from: mx(), to: mx() }, stable: { positions: [B, SYN], from: mx(), to: mx() } };
+  const outcome = { roster_arms: 2, readable: 2, ties: ["roster:0.1:0.05"], pick: "roster:0.1:0.05", edge: [], receipt };
+  return {
+    ks: [1, 3, 5, 10], margin: 0.01, reference: "roster:0.1:0.05",
+    labels: { positions: 5, labelled_positions: 4, options: 20, blind_options: 18, scored_only_options: 2, own_picks: 4, blind_picks: 3, fallback_labels: 0, fallback_picks: 0 },
+    arms: [
+      arm("pool_or_roster", "pool_or_roster", null, null, { never: [2, 3, 0, 0] }),
+      arm("roster:0.1:0.05", "roster", 0.1, 0.05, { never: [3, 4, 0, 0], pick: [0, 2, 0, 0] }, { never_1: [A, B, "2026-10-07-synth-dme-adc-pinch-slot-19"], pick_3_out: [A] }),
+      arm("roster:0.15:0.05", "roster", 0.15, 0.05, { never: [1, 1, 0, 0] }),
+      arm("floor:0.1", "floor", null, null, { never: [1, 2, 0, 0] }),
+    ],
+    rule: outcome,
+    sensitivity: { margins: [], leave_out: [] },
+    second_line: { differs: false, outcome },
+    never_everywhere: [A, B],
+    r_by_label: [{ bucket: "r < 0.1", play: 0, maybe: 0, never: 0 }],
+    reveal_changes: { blind_labels: 2, blind_picks: 1, labels: [{ position: A, option: "SECRET-OPTION-RC", blind: "never", current: "play" }], picks: [{ position: B, blind: ["Ahri"], current: null }], drafts_revealed: [], reveals_without_change: [] },
+    worklist: { lines_at: "roster:0.1:0.05", unlabelled_rows: [{ position: A, rows: ["UNLABELLED-ROW-A"] }], unjudged_lines: [{ position: A, option: "SECRET-OPTION", line: "SECRET-LINE" }] },
+  };
+}
+const evalIn = (ctx, code) => vm.runInContext(code, ctx);
+const cellsOf = (doc) => walk(doc.fixed.results, (n) => n.dataset.arm !== undefined && n.tag === "button");
+
+test("the results tab says there are no labels when the run has no metrics", () => {
+  const { doc } = loadPage({ localStorage: () => memoryStorage().api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  assert.equal(doc.fixed.results.hidden, false);
+  assert.equal(doc.fixed.root.hidden, true);
+  assert.match(doc.fixed.results.textContent, /No labels yet/);
+  assert.equal(cellsOf(doc).length, 0);
+});
+
+test("results: numbers print in the cell, hover and focus show the details, an unrevealed draft's positions are never named, and selecting an arm reveals nothing", () => {
+  const { doc, ctx } = loadPage({ run: { ...RUN, metrics: glueMetrics() }, localStorage: () => memoryStorage().api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  const cells = cellsOf(doc);
+  assert.deepEqual(cells.map((c) => c.dataset.arm).sort(), ["roster:0.15:0.05", "roster:0.1:0.05"]);
+  const c = cells.find((x) => x.dataset.arm === "roster:0.1:0.05");
+  assert.equal(walk(c, (n) => n.classList.contains("n"))[0].textContent, "3");
+  assert.match(c.textContent, /rule's pick/);
+  assert.match(c.textContent, /current defaults/);
+  assert.equal(c.className.includes("h3"), true, "the largest count takes the darkest step");
+
+  // nothing of an unrevealed draft's positions or options on the whole tab
+  const page = doc.fixed.results.textContent;
+  for (const secret of [A, B, "UNLABELLED-ROW-A", "SECRET-OPTION", "SECRET-LINE"]) assert.equal(page.includes(secret), false, secret);
+  assert.match(page, /not yet revealed \(not named\)/);
+
+  // hover and keyboard focus show the same details, on the cell itself
+  for (const type of ["pointerenter", "focus"]) {
+    doc.fixed.tip.hidden = true;
+    c.handlers[type][0]();
+    assert.equal(doc.fixed.tip.hidden, false, type);
+    assert.match(doc.fixed.tip.textContent, /never@3 4, pick@3 2 of 4/);
+    assert.equal(doc.fixed.tip.textContent.includes(A), false, type);
+    assert.ok(doc.fixed.tip.textContent.includes("2026-10-07-synth-dme-adc-pinch-slot-19"), "the revealed draft's position is named: " + type);
+  }
+  c.handlers.blur[0]();
+  assert.equal(doc.fixed.tip.hidden, true);
+
+  // the pool_or_roster and floor marks are not selectable and carry no click
+  const staticMarks = walk(doc.fixed.results, (n) => n.classList.contains("static") || n.tag === "tr");
+  assert.ok(staticMarks.length >= 2);
+  for (const n of staticMarks) assert.equal(n.handlers.click, undefined);
+
+  // selecting: the arm the cards use changes, the page state does not, no draft is revealed
+  const before = evalIn(ctx, "JSON.stringify(state)");
+  const other = cells.find((x) => x.dataset.arm === "roster:0.15:0.05");
+  other.handlers.click[0]();
+  assert.equal(doc.fixed.arm.value, String(RUN.run.arms.findIndex((a) => a.id === "roster:0.15:0.05")));
+  assert.equal(evalIn(ctx, "viewArm"), Number(doc.fixed.arm.value));
+  assert.equal(evalIn(ctx, "JSON.stringify(state)"), before, "selecting an arm writes nothing to the page state");
+  assert.equal(evalIn(ctx, "DATA.drafts.map((d) => draftRevealState(d, state)).join()"), evalIn(ctx, "DATA.drafts.map((d) => draftRevealState(d, restoreState(DATA, null))).join()"));
+  assert.equal(other.getAttribute("aria-pressed"), "true");
+  assert.equal(c.getAttribute("aria-pressed"), "false");
+  assert.match(doc.fixed.selnote.textContent === "" ? doc.fixed.results.textContent : doc.fixed.selnote.textContent, /Cards show: P 0\.15/);
+
+  // back on the cards: redrawn for the chosen arm, still no score on any unrevealed card
+  doc.fixed["tab-positions"].handlers.click[0]();
+  assert.equal(doc.fixed.root.hidden, false);
+  const unrevealed = cardEl(doc, A);
+  assert.equal(/value 0\.|gain|Revealed/.test(unrevealed.textContent), false);
+});
+
+// Every string the tab renders, tooltips of every mark included.
+function everyText(doc) {
+  const out = [doc.fixed.results.textContent];
+  for (const n of walk(doc.fixed.results, (x) => x.handlers.focus || x.handlers.pointerenter)) {
+    for (const type of ["focus", "pointerenter"]) {
+      if (!n.handlers[type]) continue;
+      n.handlers[type][0]();
+      out.push(doc.fixed.tip.textContent, doc.fixed.results.textContent);
+    }
+  }
+  return out.join("\n");
+}
+
+test("results: no position of an unrevealed draft, and none of its options or lines, is in any text of the tab", () => {
+  const { doc } = loadPage({ run: { ...RUN, metrics: glueMetrics() }, localStorage: () => memoryStorage().api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  const text = everyText(doc);
+  for (const secret of [A, B, "SECRET-OPTION", "SECRET-OPTION-RC", "SECRET-LINE", "UNLABELLED-ROW-A"]) assert.equal(text.includes(secret), false, secret);
+  assert.match(text, /not yet revealed \(not named\)/);
+  assert.match(text, /depth check did not hold \(1 positions/);
+  assert.ok(text.includes("2026-10-07-synth-dme-adc-pinch-slot-19"), "the revealed draft's position is named");
+});
+
+test("results: a click marks the cards for redraw and the revealed card then shows the chosen arm; state is unchanged", () => {
+  const { doc, ctx } = loadPage({ run: { ...RUN, metrics: glueMetrics() }, localStorage: () => memoryStorage().api });
+  const E = "2026-10-07-synth-dme-adc-pinch-slot-19";
+  doc.fixed["tab-results"].handlers.click[0]();
+  const before = evalIn(ctx, "JSON.stringify(state)");
+  assert.equal(evalIn(ctx, "armsDirty"), false);
+  cellsOf(doc).find((x) => x.dataset.arm === "roster:0.15:0.05").handlers.click[0]();
+  assert.equal(evalIn(ctx, "armsDirty"), true, "the cards are marked for redraw");
+  doc.fixed["tab-positions"].handlers.click[0]();
+  assert.equal(evalIn(ctx, "armsDirty"), false);
+  assert.match(cardEl(doc, E).textContent, /3\. Revealed - P 0\.15 {2}Q 0\.05/);
+  assert.equal(evalIn(ctx, "JSON.stringify(state)"), before);
+});
+
+test("results: hover and focus on the pool_or_roster cell and a floor row show their details; marks point at the tooltip; the detail block shows the focused arm", () => {
+  const { doc } = loadPage({ run: { ...RUN, metrics: glueMetrics() }, localStorage: () => memoryStorage().api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  const por = walk(doc.fixed.results, (n) => n.dataset.arm === "pool_or_roster")[0];
+  const floor = walk(doc.fixed.results, (n) => n.tag === "tr" && n.textContent.startsWith("floor:0.1"))[0];
+  assert.ok(por && floor);
+  for (const [mark, want] of [[por, /not a candidate for the pick/], [floor, /comparison row, not selectable/]]) {
+    for (const type of ["pointerenter", "focus"]) {
+      doc.fixed.tip.hidden = true;
+      mark.handlers[type][0]();
+      assert.equal(doc.fixed.tip.hidden, false, type);
+      assert.match(doc.fixed.tip.textContent, want);
+    }
+    assert.equal(mark.getAttribute("aria-describedby"), "tip");
+  }
+  const c = cellsOf(doc)[0];
+  assert.equal(c.getAttribute("aria-describedby"), "tip");
+  c.handlers.focus[0]();
+  const detail = walk(doc.fixed.results, (n) => n.id === "detail")[0];
+  assert.match(detail.textContent, /never@3 \d/, "never@3 and pick@3 are on the page without the tooltip");
+  assert.match(detail.textContent, /pick@3 \d+ of 4/);
 });

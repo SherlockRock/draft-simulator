@@ -790,4 +790,249 @@ function buildExport(state, data) {
   return exportWithProblems(state, data).exported;
 }
 
-export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen };
+// ---- the results tab (design section 5) --------------------------------------------------------
+// Pure readers of the run's `metrics` block (absent when the run has no labels). Nothing here scores anything.
+//
+// Blind rule: the results are corpus-wide aggregates, which are shown. What is NOT shown is anything that
+// names an unrevealed draft's positions or options (which position has a clear never at #1, which row is the
+// engine's #1 there): `positionVisible` gates every list of positions, and an unrevealed draft's positions are
+// only counted ("n in drafts not yet revealed"). Nothing here touches `state`, so reading or selecting from the
+// tab never reveals a draft.
+
+// The heat table has four steps of one hue (palette blue 100/200/300/400 in light, 700/600/500/400 in dark).
+const HEAT_STEPS = 4;
+
+// The step of a count: 0 (the lightest, near zero) for 0, then the rest spread evenly to the largest count.
+// The printed number is the value; the step only orders it.
+function heatStep(value, max) {
+  if (!(value > 0) || !(max > 0)) return 0;
+  return Math.min(HEAT_STEPS - 1, Math.max(1, Math.ceil((value / max) * (HEAT_STEPS - 1))));
+}
+
+// The count range each step stands for, as printed in the key: [{ step, text }] for the steps that hold a count.
+function heatLegend(max) {
+  const ranges = [];
+  const top = Math.max(0, max);
+  for (let v = 0; v <= top; v++) {
+    const step = heatStep(v, max);
+    const last = ranges[ranges.length - 1];
+    if (last && last.step === step) last.hi = v;
+    else ranges.push({ step, lo: v, hi: v });
+  }
+  return ranges.map((r) => ({ step: r.step, text: r.lo === r.hi ? String(r.lo) : r.lo + "-" + r.hi }));
+}
+
+// `n`, `≥n` where positions are unjudged at that k (n is then the lower bound), `(+m)` for near ties.
+function countText(m, j) {
+  return (m.unjudged[j] > 0 ? "≥" : "") + m.never[j] + (m.near[j] > 0 ? "(+" + m.near[j] + ")" : "");
+}
+
+function rosterArms(metrics) {
+  return metrics.arms.filter((a) => a.role === "roster");
+}
+
+// One cell of the table. The number is `text`; `tags` say, in words, what the colour must not carry alone.
+function cellModel(arm, metrics, max) {
+  const m = arm.metrics;
+  const rule = metrics.rule;
+  const tags = [];
+  if (rule.pick === arm.id) tags.push("rule's pick");
+  else if (rule.ties.includes(arm.id)) tags.push("tied with the pick");
+  if (metrics.reference === arm.id) tags.push("current defaults");
+  if (rule.pick === arm.id && rule.edge.length > 0) tags.push("on the grid's edge");
+  if (!arm.readable) tags.push("not readable");
+  if (m.non_speaking > 0) tags.push(m.non_speaking + " of " + m.positions + " do not speak");
+  return {
+    id: arm.id,
+    role: arm.role,
+    text: countText(m, 0),
+    step: heatStep(m.never[0], max),
+    readable: arm.readable,
+    tags,
+  };
+}
+
+// The table: roster arms by P (rows) and Q (columns), the pool_or_roster row and the floor rows beside it.
+function gridModel(metrics) {
+  const roster = rosterArms(metrics);
+  const axis = (key) => [...new Set(roster.map((a) => a[key]))].sort((a, b) => a - b);
+  const ps = axis("p");
+  const qs = axis("q");
+  const max = Math.max(0, ...roster.map((a) => a.metrics.never[0]));
+  const rows = ps.map((p) => qs.map((q) => {
+    const arm = roster.find((a) => a.p === p && a.q === q);
+    return arm ? cellModel(arm, metrics, max) : null;
+  }));
+  const por = metrics.arms.find((a) => a.role === "pool_or_roster");
+  return {
+    ps,
+    qs,
+    rows,
+    max,
+    por: por ? cellModel(por, metrics, max) : null,
+    floors: metrics.arms.filter((a) => a.role === "floor").map((a) => ({
+      id: a.id,
+      text: countText(a.metrics, 0),
+      never3: countText(a.metrics, 1),
+      pick3: a.metrics.pick[1],
+      nonSpeaking: a.metrics.non_speaking,
+      positions: a.metrics.positions,
+      unknownR: a.unknown_r_kept,
+    })),
+  };
+}
+
+// Whether a position of the run may be named on the results tab: only once its draft is revealed.
+function positionVisible(data, state, positionId) {
+  for (const d of data.drafts) {
+    if (d.cards.some((c) => c.id === positionId)) return draftRevealState(d, state) === "revealed";
+  }
+  return false;
+}
+
+// "a, b" for the visible ids, then how many were left unnamed: "none" for an empty list.
+function namedPositions(ids, visible) {
+  if (ids.length === 0) return "none";
+  const named = ids.filter(visible);
+  const hidden = ids.length - named.length;
+  const parts = [];
+  if (named.length > 0) parts.push(named.join(", "));
+  if (hidden > 0) parts.push((named.length > 0 ? "+" : "") + hidden + " in drafts not yet revealed (not named)");
+  return parts.join(" ");
+}
+
+// The tooltip / detail text of an arm: what the table does not print, and the positions behind each count.
+function hoverLines(arm, visible) {
+  const m = arm.metrics;
+  const p = arm.positions;
+  const named = (key) => namedPositions(p[key], visible);
+  const lines = [
+    arm.id + (arm.role === "roster" ? "" : arm.role === "pool_or_roster" ? " (not a candidate for the pick)" : " (comparison row, not selectable)"),
+    "never@1 " + countText(m, 0) + ", never@3 " + countText(m, 1) + ", pick@3 " + m.pick[1] + " of " + m.with_pick + " with an own pick",
+    "never@1 " + m.never[0] + ", near " + m.near[0] + ", unjudged " + m.unjudged[0] + ". never@3 " + m.never[1] + ", near " + m.near[1] + ", unjudged " + m.unjudged[1] + ".",
+    "never@1 at: " + named("never_1"),
+    "near ties at 1: " + named("near_1"),
+    "unjudged at 1: " + named("unjudged_1"),
+    "never@3 at: " + named("never_3"),
+    "near ties at 3: " + named("near_3"),
+    "unjudged at 3: " + named("unjudged_3"),
+    "pick@3 holds at: " + named("pick_3"),
+    "own pick outside the top 3 at: " + named("pick_3_out"),
+    "positions that do not speak: " + named("not_speaking"),
+  ];
+  if (!arm.readable) lines.splice(1, 0, "not readable: a position does not speak, or a count is unjudged at k = 1 or 3");
+  return lines;
+}
+
+// The arm index a table click selects for the cards: a roster or pool_or_roster arm of the run, else -1
+// (a floor row is not an arm of the run, so it is never selectable). Selecting changes the arm the revealed
+// cards show and nothing else.
+function armChoice(data, armId) {
+  return data.run.arms.findIndex((a) => a.id === armId);
+}
+
+// What the page says about a selection, in words.
+function selectionNote(data, state, armIdx) {
+  const arm = data.run.arms[armIdx];
+  const label = armLabel(arm, data.run.reference_arm);
+  const revealed = data.drafts.some((d) => draftRevealState(d, state) === "revealed");
+  return "Cards show: " + label + (revealed ? "." : ". No draft is revealed yet, so no card shows an arm.");
+}
+
+function arrow(a, b) {
+  return a + " → " + b;
+}
+
+function receiptLines(r, visible) {
+  const f = r.from;
+  const t = r.to;
+  const out = [
+    "never@1 " + arrow(f.never[0], t.never[0]) + " (in-pool " + arrow(f.never_1_by_class.in_pool, t.never_1_by_class.in_pool) +
+      ", off-pool base " + arrow(f.never_1_by_class.off_pool_base, t.never_1_by_class.off_pool_base) +
+      ", off-pool graded " + arrow(f.never_1_by_class.off_pool_graded, t.never_1_by_class.off_pool_graded) + "), near@1 " + arrow(f.near[0], t.near[0]) +
+      ", never@3 " + arrow(f.never[1], t.never[1]) + ", pick@3 " + arrow(f.pick[1], t.pick[1]) +
+      ", pick_off@3 " + f.pick_off[1] + " of " + f.pick_off_eligible + " → " + t.pick_off[1] + " of " + t.pick_off_eligible +
+      ", top in-pool " + arrow(f.top_in_pool, t.top_in_pool),
+    "own pick leaves the top 3 at: " + namedPositions(r.leaves_top_3, visible),
+    "own pick enters the top 3 at: " + namedPositions(r.enters_top_3, visible),
+  ];
+  for (const [name, s] of [["depth check did not hold", r.unstable], ["the others", r.stable]]) {
+    out.push(name + " (" + s.positions.length + " positions" + (s.positions.length > 0 ? ": " + namedPositions(s.positions, visible) : "") + "): never@1 " + arrow(s.from.never[0], s.to.never[0]) +
+      ", never@3 " + arrow(s.from.never[1], s.to.never[1]) + ", pick@3 " + arrow(s.from.pick[1], s.to.pick[1]));
+  }
+  return out;
+}
+
+const pickWords = (p) => (p === null || p === undefined ? "none readable" : p);
+
+// The rule's line: "N of M arms readable. Pick: ..." or "0 of M arms readable, so it names no pick."
+function ruleLine(rule) {
+  if (rule.readable === 0) return "0 of " + rule.roster_arms + " arms readable, so the rule names no pick. The worklist below says what is left to judge.";
+  return rule.readable + " of " + rule.roster_arms + " arms readable. Pick: " + pickWords(rule.pick) +
+    (rule.ties.length > 1 ? " (tied on the three keys: " + rule.ties.join(", ") + ")" : "");
+}
+
+function sensitivityLines(s) {
+  return [
+    ...s.margins.map((x) => "ε " + x.margin + ": " + pickWords(x.pick)),
+    ...s.leave_out.map((x) => "without " + x.draft + ": " + pickWords(x.pick)),
+  ];
+}
+
+function secondLine(sl) {
+  const o = sl.outcome;
+  return o.readable + " of " + o.roster_arms + " arms readable, pick " + pickWords(o.pick) + (sl.differs ? "  ** DIFFERS from the blind read **" : " (same as the blind read)");
+}
+
+// `bad_line@1` as "bad of judged", for the reference arm and the rule's pick.
+function badLineLines(metrics) {
+  const byId = (id) => metrics.arms.find((a) => a.id === id);
+  const text = (a) => a.id + ": " + a.metrics.bad_line + " bad of " + a.metrics.judged_line + " judged, " + a.metrics.unjudged_line + " unjudged";
+  const ref = byId(metrics.reference);
+  const pick = metrics.rule.pick === null ? undefined : byId(metrics.rule.pick);
+  const out = [];
+  if (ref) out.push((pick && pick.id === ref.id ? "reference = pick, " : "reference, ") + text(ref));
+  if (pick && ref && pick.id !== ref.id) out.push("pick, " + text(pick));
+  return out;
+}
+
+function neverEverywhereLine(list, visible) {
+  return list.length === 0 ? "none" : namedPositions(list, visible);
+}
+
+function rByLabelRows(rows) {
+  return rows.map((r) => ({ bucket: r.bucket, play: r.play, maybe: r.maybe, never: r.never }));
+}
+
+// reveal_changes for the page: the changed labels and picks of visible positions (a revealed draft's own answers).
+function revealChangesView(rc, visible) {
+  return { labels: rc.labels.filter((c) => visible(c.position)), picks: rc.picks.filter((c) => visible(c.position)) };
+}
+
+function revealChangesLine(rc) {
+  return rc.labels.length + " of " + rc.blind_labels + " blind labels and " + rc.picks.length + " of " + rc.blind_picks +
+    " blind picks changed after the reveal; drafts revealed: " + (rc.drafts_revealed.length === 0 ? "none" : rc.drafts_revealed.join(", ")) +
+    "; reveals with no change: " + (rc.reveals_without_change.length === 0 ? "none" : rc.reveals_without_change.join(", "));
+}
+
+// The worklist for the page: unlabelled rows and unjudged #1 lines are listed only for revealed drafts' positions
+// (an unlabelled row or a #1 line at an unrevealed draft is an engine fact about it); the rest is a count.
+function worklistView(w, visible) {
+  const shown = w.unlabelled_rows.filter((e) => visible(e.position));
+  const hiddenRows = w.unlabelled_rows.filter((e) => !visible(e.position)).reduce((n, e) => n + e.rows.length, 0);
+  const lines = w.unjudged_lines.filter((l) => visible(l.position));
+  return {
+    unlabelled: shown.map((e) => ({ position: e.position, rows: e.rows })),
+    hiddenRows,
+    linesAt: w.lines_at,
+    unjudgedLines: lines,
+    hiddenLines: w.unjudged_lines.length - lines.length,
+  };
+}
+
+function labelsLine(l) {
+  return l.options + " options labelled over " + l.labelled_positions + " of " + l.positions + " positions (" + l.blind_options + " blind, " + l.scored_only_options +
+    " scored only), " + l.own_picks + " own picks (" + l.blind_picks + " blind). Read from the current fold, no blind answer: " + l.fallback_labels + " labels, " + l.fallback_picks + " own picks.";
+}
+
+export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen, HEAT_STEPS, heatLegend, revealChangesView, armChoice, badLineLines, cellModel, countText, gridModel, heatStep, hoverLines, labelsLine, namedPositions, neverEverywhereLine, positionVisible, rByLabelRows, receiptLines, revealChangesLine, ruleLine, secondLine, selectionNote, sensitivityLines, worklistView };

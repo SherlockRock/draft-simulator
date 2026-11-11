@@ -116,6 +116,43 @@ details.more table{border-collapse:collapse;margin-top:4px;font-variant-numeric:
 details.more td,details.more th{padding:2px 8px;text-align:left;border-bottom:1px solid var(--line)}
 .lineverdict{border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px;display:flex;flex-direction:column;gap:4px}
 .cardnote{width:100%;min-height:48px;margin-top:6px;font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px}
+
+/* The results tab. Sequential heat: one hue (palette blue), four steps; the printed number carries the value. */
+:root{--heat0:#cde2fb;--heat1:#9ec5f4;--heat2:#6da7ec;--heat3:#3987e5;--heat-ink:#14202b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--heat0:#0d366b;--heat1:#184f95;--heat2:#256abf;--heat3:#3987e5;--heat-ink:#ffffff}}
+:root[data-theme="dark"]{--heat0:#0d366b;--heat1:#184f95;--heat2:#256abf;--heat3:#3987e5;--heat-ink:#ffffff}
+.tabs{display:flex;gap:4px;margin-top:10px;border-bottom:1px solid var(--line)}
+.tabs button{background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;padding:6px 14px;font-weight:700;font-family:var(--font-display);text-transform:uppercase;letter-spacing:.06em;font-size:15px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--fg)}
+#results{margin-top:18px;display:flex;flex-direction:column;gap:18px}
+#results[hidden]{display:none}
+#results h2{font-family:var(--font-display);font-size:22px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.rsec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.rsec p{margin:4px 0}
+.rsec .ln{margin:3px 0;overflow-wrap:anywhere}
+.rside{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:flex-start}
+table.heat{border-collapse:separate;border-spacing:4px}
+table.heat th{font-weight:600;color:var(--muted);font-size:12px;text-align:center;padding:2px 4px;font-variant-numeric:tabular-nums}
+table.heat th[scope="row"]{text-align:right;white-space:nowrap}
+.hc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:104px;min-height:68px;padding:6px 6px;border:1px solid var(--line);border-radius:6px;color:var(--heat-ink);background:var(--heat0);font:inherit;cursor:pointer;text-align:center}
+.hc.h1{background:var(--heat1)}.hc.h2{background:var(--heat2)}.hc.h3{background:var(--heat3)}
+.hc .n{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.hc .tg{display:flex;flex-wrap:wrap;gap:2px;justify-content:center}
+.hc .tg span{font-size:11px;font-weight:700;line-height:1.2;background:var(--panel);color:var(--fg);border:1px solid var(--fg);border-radius:3px;padding:0 4px}
+.hc:hover,.hc:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.hc[aria-pressed="true"]{box-shadow:0 0 0 3px var(--fg)}
+.hc.static{cursor:default}
+.hscroll{overflow-x:auto;max-width:100%}.detail{font-size:13px}.detail .ln{margin:2px 0;overflow-wrap:anywhere}.detail .ln:first-child{font-weight:700}
+.heatkey{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-top:6px}
+.heatkey i{display:inline-block;width:22px;height:12px;border:1px solid var(--line);border-radius:2px;background:var(--heat0)}.heatkey i.h1{background:var(--heat1)}.heatkey i.h2{background:var(--heat2)}.heatkey i.h3{background:var(--heat3)}
+.fl{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
+.fl td,.fl th{padding:3px 8px;border-bottom:1px solid var(--line);text-align:left}
+#tip{position:fixed;z-index:20;max-width:min(560px,calc(100vw - 24px));background:var(--panel);color:var(--fg);border:1px solid var(--fg);border-radius:6px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.25);pointer-events:none}
+#tip[hidden]{display:none}
+#tip .ln{margin:2px 0;overflow-wrap:anywhere}#tip .ln:first-child{font-weight:700;font-size:13px}
+.rtable{border-collapse:collapse;font-variant-numeric:tabular-nums}
+.rtable td,.rtable th{padding:3px 12px 3px 0;text-align:left;border-bottom:1px solid var(--line)}
+@media(max-width:560px){.hc{min-width:78px}}
 </style>
 </head>
 <body>
@@ -135,8 +172,14 @@ details.more td,details.more th{padding:2px 8px;text-align:left;border-bottom:1p
     <button class="btn ghost" type="button" id="download" disabled title="Nothing to export yet.">Download</button>
   </div>
 </header>
+<div class="wrap"><div class="tabs" role="tablist" aria-label="Page">
+  <button type="button" role="tab" id="tab-positions" aria-selected="true" aria-controls="root">Positions</button>
+  <button type="button" role="tab" id="tab-results" aria-selected="false" aria-controls="results">Results</button>
+</div></div>
 <div class="wrap"><textarea id="export-box" readonly hidden aria-label="Verdicts export"></textarea></div>
 <main id="root"></main>
+<section id="results" role="tabpanel" aria-labelledby="tab-results" hidden></section>
+<div id="tip" role="tooltip" hidden></div>
 </div>
 <script id="page-data" type="application/json">@@DATA@@</script>
 <script>
@@ -714,7 +757,9 @@ document.addEventListener("keydown", (ev) => {
   sel.value = String(viewArm);
   sel.addEventListener("change", () => {
     viewArm = Number(sel.value);
+    armsDirty = false;
     render();
+    if (!document.getElementById("results").hidden) renderResults();
   });
 })();
 
@@ -779,6 +824,241 @@ document.getElementById("download").addEventListener("click", () => {
 document.getElementById("unfinished").addEventListener("change", () => {
   for (const [id, { card }] of EL) if (!id.startsWith("draft:")) card.hidden = cardSettled(CARDS.get(id).draft, CARDS.get(id).card, state) && document.getElementById("unfinished").checked;
 });
+
+// ---- the results tab (design section 5) ----
+// Corpus-wide aggregates from the run's `metrics`. It reads `state` only through `positionVisible`, which names
+// a position only when its draft is revealed, and it writes nothing to `state`: reading the tab or selecting an
+// arm from it cannot reveal a draft, and no per-option engine rank of an unrevealed draft is on it.
+const visiblePos = (id) => positionVisible(DATA, state, id);
+let detailEl = null; // the detail block under the table
+let CELLS = []; // the selectable cells, for the pressed state
+let armsDirty = false; // an arm was chosen on the tab: the cards are redrawn when the Positions tab is shown
+const tipEl = document.getElementById("tip");
+
+function showTip(texts, anchor) {
+  tipEl.innerHTML = "";
+  for (const l of texts) tipEl.appendChild(el("div", "ln", l));
+  tipEl.hidden = false;
+  if (anchor && typeof anchor.getBoundingClientRect === "function") {
+    const r = anchor.getBoundingClientRect();
+    const h = tipEl.getBoundingClientRect().height || 0; // measured, not assumed
+    const top = r.bottom + 6 + h > window.innerHeight ? Math.max(8, r.top - 6 - h) : r.bottom + 6;
+    tipEl.style.top = top + "px";
+    tipEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 420)) + "px";
+  }
+}
+// The same lines, always on the page under the table (the tooltip enhances, it does not gate): the focused,
+// else the selected, arm.
+function showDetail(texts) {
+  const d = detailEl;
+  if (!d) return;
+  d.innerHTML = "";
+  for (const l of texts) d.appendChild(el("div", "ln", l));
+}
+function hideTip() {
+  tipEl.hidden = true;
+}
+// A mark with hover and keyboard-focus details; the same lines are in the detail block under the table.
+function withTip(node, lines) {
+  node.tabIndex = 0;
+  node.setAttribute("aria-describedby", "tip");
+  node.addEventListener("pointerenter", () => showTip(lines, node));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", () => { showTip(lines, node); showDetail(lines); });
+  node.addEventListener("blur", hideTip);
+  node.addEventListener("keydown", (ev) => { if (ev.key === "Escape") hideTip(); });
+}
+function rsec(title) {
+  const s = el("div", "rsec");
+  s.appendChild(el("h2", "", title));
+  return s;
+}
+function lines(sec, list, cls) {
+  for (const l of list) sec.appendChild(el("p", "ln " + (cls || ""), l));
+}
+
+function armByIdIn(id) {
+  return DATA.metrics.arms.find((a) => a.id === id);
+}
+
+function heatCell(model, selectable) {
+  const arm = armByIdIn(model.id);
+  const tip = hoverLines(arm, visiblePos);
+  const b = el(selectable ? "button" : "div", "hc h" + model.step + (selectable ? "" : " static"));
+  if (selectable) b.type = "button";
+  b.dataset.arm = model.id;
+  b.appendChild(el("span", "n", model.text));
+  const tg = el("span", "tg");
+  for (const t of model.tags) tg.appendChild(el("span", "", t));
+  b.appendChild(tg);
+  b.setAttribute("aria-label", model.id + ": never@1 " + model.text + (model.tags.length ? ". " + model.tags.join(", ") : ""));
+  if (selectable) {
+    const idx = armChoice(DATA, model.id);
+    b.setAttribute("aria-pressed", String(idx === viewArm));
+    CELLS.push(b);
+    b.addEventListener("click", () => {
+      if (idx < 0) return;
+      viewArm = idx;
+      document.getElementById("arm").value = String(idx);
+      armsDirty = true;
+      for (const c of CELLS) c.setAttribute("aria-pressed", String(c.dataset.arm === model.id));
+      document.getElementById("selnote").textContent = selectionNote(DATA, state, idx);
+      showDetail(tip);
+    });
+    b.addEventListener("pointerenter", () => showTip(tip, b));
+    b.addEventListener("pointerleave", hideTip);
+    b.setAttribute("aria-describedby", "tip");
+    b.addEventListener("focus", () => { showTip(tip, b); showDetail(tip); });
+    b.addEventListener("blur", hideTip);
+    b.addEventListener("keydown", (ev) => { if (ev.key === "Escape") hideTip(); });
+  } else {
+    withTip(b, tip);
+  }
+  return b;
+}
+
+function renderResults() {
+  const root = document.getElementById("results");
+  root.innerHTML = "";
+  CELLS = [];
+  hideTip();
+  const M = DATA.metrics;
+  if (!M) {
+    const s = rsec("Results");
+    s.appendChild(el("p", "", "No labels yet: this run has no results to read. Label some positions, apply the export, and run again."));
+    root.appendChild(s);
+    return;
+  }
+  const g = gridModel(M);
+  // 1. the table
+  const t = rsec("never@1 by P and Q");
+  t.appendChild(el("p", "note", "Each cell: positions where the engine's #1 is a clear never (≥n: n is a lower bound, some options unjudged; (+n): near ties, not read by the rule). Hover or focus a cell for never@3, pick@3 and the positions behind each count; Enter or click selects the arm for the cards. " + labelsLine(M.labels)));
+  const side = el("div", "rside");
+  const grid = el("div", "");
+  const tbl = el("table", "heat");
+  const head = el("tr", "");
+  head.appendChild(el("th", "", "P \\ Q"));
+  for (const q of g.qs) { const th = el("th", "", "Q " + q); th.setAttribute("scope", "col"); head.appendChild(th); }
+  tbl.appendChild(head);
+  g.ps.forEach((p, i) => {
+    const tr = el("tr", "");
+    const th = el("th", "", "P " + p);
+    th.setAttribute("scope", "row");
+    tr.appendChild(th);
+    for (const c of g.rows[i]) {
+      const td = el("td", "");
+      if (c) td.appendChild(heatCell(c, true));
+      else td.appendChild(el("span", "note", "-"));
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  });
+  const scroll = el("div", "hscroll");
+  scroll.appendChild(tbl);
+  grid.appendChild(scroll);
+  const key = el("div", "heatkey");
+  for (const b of heatLegend(g.max)) {
+    key.appendChild(el("i", "h" + b.step));
+    key.appendChild(el("span", "", b.text));
+  }
+  key.appendChild(el("span", "", "never@1 positions (largest on the grid: " + g.max + ")"));
+  grid.appendChild(key);
+  side.appendChild(grid);
+  const beside = el("div", "");
+  beside.appendChild(el("p", "lbl", "Beside the grid: not selectable as the pick"));
+  if (g.por) {
+    beside.appendChild(el("p", "note", "pool_or_roster"));
+    beside.appendChild(heatCell({ ...g.por, tags: ["not selectable as the pick", ...g.por.tags] }, false));
+  }
+  const ft = el("table", "fl");
+  const fh = el("tr", "");
+  for (const h of ["floor row", "never@1", "never@3", "pick@3", "does not speak", "unknown r kept"]) fh.appendChild(el("th", "", h));
+  ft.appendChild(fh);
+  for (const f of g.floors) {
+    const tr = el("tr", "");
+    for (const v of [f.id, f.text, f.never3, String(f.pick3), f.nonSpeaking + " of " + f.positions, String(f.unknownR)]) tr.appendChild(el("td", "", v));
+    withTip(tr, hoverLines(armByIdIn(f.id), visiblePos));
+    ft.appendChild(tr);
+  }
+  beside.appendChild(el("p", "note", "Floor rows: the reference ranking with options holding an off-pool placement below r 0.10 and 0.25 removed (root only, no re-search)."));
+  beside.appendChild(ft);
+  side.appendChild(beside);
+  t.appendChild(side);
+  t.appendChild(el("p", "note", "Cards show the arm chosen here and only on revealed drafts."));
+  const sel = el("p", "ln", selectionNote(DATA, state, viewArm));
+  sel.id = "selnote";
+  t.appendChild(sel);
+  t.appendChild(el("p", "lbl", "Detail of the selected or focused arm"));
+  const det = el("div", "detail");
+  det.id = "detail";
+  detailEl = det;
+  t.appendChild(det);
+  const shownArm = armByIdIn(DATA.run.arms[viewArm].id) || armByIdIn(M.rule.pick || M.reference);
+  if (shownArm) showDetail(hoverLines(shownArm, visiblePos));
+  root.appendChild(t);
+
+  // 2. the rule, receipt, sensitivity, second line
+  const r = rsec("The rule");
+  lines(r, [ruleLine(M.rule)]);
+  for (const e of M.rule.edge) lines(r, [e.text]);
+  if (M.rule.receipt) {
+    r.appendChild(el("p", "lbl", "Receipt, " + M.rule.receipt.reference + " → " + M.rule.receipt.pick));
+    lines(r, receiptLines(M.rule.receipt, visiblePos));
+  }
+  r.appendChild(el("p", "lbl", "Sensitivity (the pick at other margins, and with each draft left out)"));
+  lines(r, sensitivityLines(M.sensitivity));
+  r.appendChild(el("p", "lbl", "Second line (the rule on the current fold)"));
+  lines(r, [secondLine(M.second_line)]);
+  root.appendChild(r);
+
+  // 3. the rest
+  const o = rsec("Also");
+  o.appendChild(el("p", "lbl", "bad_line@1 (bad of judged; an unjudged line is not a good one)"));
+  lines(o, badLineLines(M));
+  o.appendChild(el("p", "lbl", "never_everywhere (a clear never at #1 at every readable arm)"));
+  lines(o, [neverEverywhereLine(M.never_everywhere, visiblePos)]);
+  o.appendChild(el("p", "lbl", "r_by_label (options with one off-pool placement)"));
+  const rt = el("table", "rtable");
+  const rh = el("tr", "");
+  for (const h of ["r", "play", "maybe", "never"]) rh.appendChild(el("th", "", h));
+  rt.appendChild(rh);
+  for (const row of rByLabelRows(M.r_by_label)) {
+    const tr = el("tr", "");
+    for (const v of [row.bucket, row.play, row.maybe, row.never]) tr.appendChild(el("td", "", String(v)));
+    rt.appendChild(tr);
+  }
+  o.appendChild(rt);
+  o.appendChild(el("p", "lbl", "reveal_changes"));
+  lines(o, [revealChangesLine(M.reveal_changes)]);
+  const rcv = revealChangesView(M.reveal_changes, visiblePos);
+  for (const c of rcv.labels) lines(o, [c.position + ": " + c.option + " " + c.blind + " → " + c.current], "note");
+  for (const c of rcv.picks) lines(o, [c.position + ": own pick " + JSON.stringify(c.blind) + " → " + JSON.stringify(c.current)], "note");
+  root.appendChild(o);
+
+  const w = worklistView(M.worklist, visiblePos);
+  const wl = rsec("Worklist");
+  lines(wl, [(M.rule.readable === 0 ? "No arm is readable: this is what is left to judge. " : "") + "Unlabelled rows are listed for revealed drafts only" + (w.hiddenRows > 0 ? "; " + w.hiddenRows + " more in drafts not yet revealed (not listed)" : "") + "."]);
+  for (const e of w.unlabelled) lines(wl, [e.position + ": " + e.rows.length + " unlabelled rows - " + e.rows.join(" | ")], "note");
+  lines(wl, ["#1 lines at " + (w.linesAt === null || w.linesAt === undefined ? "-" : w.linesAt) + " with no verdict: " + (w.unjudgedLines.length === 0 ? "none named" : "") + (w.hiddenLines > 0 ? (w.unjudgedLines.length ? "; " : "") + w.hiddenLines + " in drafts not yet revealed (not named)" : "")]);
+  for (const l of w.unjudgedLines) lines(wl, [l.position + ": " + l.option + " (" + l.line + ")"], "note");
+  root.appendChild(wl);
+}
+
+function showTab(which) {
+  const positions = which === "positions";
+  document.getElementById("root").hidden = !positions;
+  document.getElementById("results").hidden = positions;
+  document.getElementById("tab-positions").setAttribute("aria-selected", String(positions));
+  document.getElementById("tab-results").setAttribute("aria-selected", String(!positions));
+  hideTip();
+  if (positions) {
+    if (armsDirty) { armsDirty = false; render(); }
+  } else {
+    renderResults();
+  }
+}
+document.getElementById("tab-positions").addEventListener("click", () => showTab("positions"));
+document.getElementById("tab-results").addEventListener("click", () => showTab("results"));
 
 document.getElementById("runline").textContent =
   "run " + DATA.run.id + " - " + DATA.run.engine.name + " " + (DATA.run.engine.commit || "?") + " - positions patch " + DATA.run.data.positions_patch;
