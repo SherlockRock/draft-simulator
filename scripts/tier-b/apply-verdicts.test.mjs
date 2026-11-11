@@ -11,7 +11,10 @@ import { callerPath, dirBytes, reviewPaths, runIdFor } from "./review.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
 const DATA = path.join(REPO, "packages/engine-core/tests/data/tier-b-review");
-const REAL = path.join(REPO, "packages/engine-core/fixtures/tier-b");
+// Frozen copies of four real fixtures as they stood before any sitting (git 416b1fc). The live corpus gains
+// `verdicts` with every sitting, and these tests need positions that hold none: a test export's `base: 0`
+// against a labelled fixture reads as stale.
+const UNLABELLED = path.join(DATA, "unlabelled");
 const read = (name) => JSON.parse(fs.readFileSync(path.join(DATA, name), "utf8"));
 const FOLD_VECTORS = read("fold-vectors.json");
 const REFUSAL_VECTORS = read("refusal-vectors.json");
@@ -360,7 +363,7 @@ function scratch() {
 }
 function tempCorpus(names) {
   const dir = scratch();
-  for (const n of names) fs.copyFileSync(path.join(REAL, n), path.join(dir, n));
+  for (const n of names) fs.copyFileSync(path.join(UNLABELLED, n), path.join(dir, n));
   return dir;
 }
 const text = (dir, n) => fs.readFileSync(path.join(dir, n), "utf8");
@@ -395,7 +398,7 @@ test("applyExport edits the file as text: only the new verdicts block differs, o
   const block = `  "verdicts": [\n    ${JSON.stringify(entry, null, 2).split("\n").join("\n    ")}\n  ],\n`;
   assert.equal(after.replace(block, ""), before, "removing the block gives back the original bytes");
   assert.equal(after.indexOf(block) + block.length, after.indexOf('  "review"'));
-  assert.equal(text(dir, SUPP_A), fs.readFileSync(path.join(REAL, SUPP_A), "utf8"), "the other file is untouched");
+  assert.equal(text(dir, SUPP_A), fs.readFileSync(path.join(UNLABELLED, SUPP_A), "utf8"), "the other file is untouched");
 });
 
 test("applyExport appends: a later apply keeps every earlier byte", () => {
@@ -586,7 +589,7 @@ function layouts(original) {
 }
 
 test("a fixture laid out so the splice would duplicate the key, or put it elsewhere, is refused and left as it was", () => {
-  for (const [name, edited] of Object.entries(layouts(fs.readFileSync(path.join(REAL, AD16), "utf8")))) {
+  for (const [name, edited] of Object.entries(layouts(fs.readFileSync(path.join(UNLABELLED, AD16), "utf8")))) {
     const dir = scratch();
     fs.writeFileSync(path.join(dir, AD16), edited);
     const { option } = optionFor(edited);
@@ -681,7 +684,7 @@ test("the command reads a relative export and --fixtures from INIT_CWD, not from
   const home = scratch();
   const dir = path.join(home, "corpus");
   fs.mkdirSync(dir);
-  fs.copyFileSync(path.join(REAL, AD16), path.join(dir, AD16));
+  fs.copyFileSync(path.join(UNLABELLED, AD16), path.join(dir, AD16));
   const { option } = optionFor(text(dir, AD16));
   fs.writeFileSync(path.join(home, "export.json"), JSON.stringify(exportOf(1, { [ID(AD16)]: { base: 0, blind: { ...span("01", "02"), labels: { [option]: "play" } } } })));
   const done = spawnSync(process.execPath, [path.join(HERE, "apply-verdicts.mjs"), "export.json", "--fixtures", "corpus", "--no-review"], {
