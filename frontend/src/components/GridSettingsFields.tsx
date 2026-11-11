@@ -98,6 +98,15 @@ export const createGridSettingsForm = (): GridSettingsForm => {
     };
 };
 
+/**
+ * A FIXED height, not a `max-h`. The dialog is centred vertically, so a list
+ * that grew by one input per added column or row re-centred the whole dialog
+ * and slid the steppers out from under the cursor — a second click on "+"
+ * missed. Fixed, the counts change and nothing else on screen moves. Three
+ * inputs fit without scrolling, matching a new group's 3x3.
+ */
+const LABEL_LIST_CLASS = "custom-scrollbar h-40 space-y-2 overflow-y-auto pr-1";
+
 const LABEL_INPUT_CLASS =
     "w-full appearance-none rounded border border-darius-border bg-darius-card px-3 py-2 text-sm leading-tight text-darius-text-primary shadow focus:outline-none focus:ring-2 focus:ring-darius-purple-bright";
 
@@ -189,7 +198,7 @@ export const GridSettingsFields: Component<GridSettingsFieldsProps> = (props) =>
             <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
                 Column labels
             </span>
-            <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
+            <div class={LABEL_LIST_CLASS}>
                 <Index each={Array.from({ length: props.form.cols() })}>
                     {(_, i) => (
                         <input
@@ -210,7 +219,7 @@ export const GridSettingsFields: Component<GridSettingsFieldsProps> = (props) =>
             <span class="mb-2 block text-sm font-medium text-darius-text-secondary">
                 Row labels
             </span>
-            <div class="custom-scrollbar max-h-40 space-y-2 overflow-y-auto pr-1">
+            <div class={LABEL_LIST_CLASS}>
                 <Index each={Array.from({ length: props.rowInputCount() })}>
                     {(_, i) => (
                         <input
