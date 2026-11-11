@@ -20,7 +20,8 @@ use engine_core::reference::tier_b::{
     Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
 use engine_core::reference::tier_b_review::{
-    draft_of, run_review, EngineStamp, ReviewConfig, ReviewRun,
+    draft_of, run_review, score_ranking, EngineStamp, OwnPick, PositionScore, ReviewConfig,
+    ReviewRun, ScoredAction, TopClassName,
 };
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 use serde::Deserialize;
@@ -2355,4 +2356,476 @@ fn zero_jobs_is_one_job() {
         .expect("it is JSON");
     std::fs::remove_file(&out).expect("clean up");
     assert_eq!(v["run"]["search"]["jobs"], 1);
+}
+
+// ---- Task 9: scoring a ranking ---------------------------------------------------------------------
+//
+// Rankings are written in the mover's terms (a larger `v` is better for the mover) and built for both
+// movers: Blue values are `v`, Red values `-v`, so a dropped sign fails the Red half. Entry `i` is
+// `Pick(ChampionIdx(i))`. Expected arrays are indexed k = 1, 3, 5, 10.
+
+#[derive(Clone, Copy, PartialEq)]
+enum L {
+    P,
+    M,
+    N,
+    /// No label; the option is resolved but not in the map.
+    U,
+}
+
+#[derive(Clone, Copy)]
+struct R {
+    v: f64,
+    l: L,
+    charge: f64,
+    in_pool: bool,
+}
+
+fn r(v: f64, l: L) -> R {
+    R {
+        v,
+        l,
+        charge: 0.0,
+        in_pool: true,
+    }
+}
+
+fn champ_action(i: u8) -> Action {
+    Action::Pick(ChampionIdx(i))
+}
+
+fn score_for(mover: Side, rows: &[R], own: Option<(u8, bool)>, margin: f64) -> PositionScore {
+    let sign = if mover == Side::Blue { 1.0 } else { -1.0 };
+    let mut labels = HashMap::new();
+    let ranking: Vec<ScoredAction> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let action = champ_action(u8::try_from(i).expect("small"));
+            let key = OptionKey { action, comp: None };
+            match row.l {
+                L::P => labels.insert(key.clone(), Label::Play),
+                L::M => labels.insert(key.clone(), Label::Maybe),
+                L::N => labels.insert(key.clone(), Label::Never),
+                L::U => None,
+            };
+            ScoredAction {
+                action,
+                value: sign * row.v,
+                option: (row.l != L::U || i % 2 == 1).then_some(key),
+                in_pool: own.map_or(row.in_pool, |(o, in_pool)| {
+                    if usize::from(o) == i {
+                        in_pool
+                    } else {
+                        row.in_pool
+                    }
+                }),
+                class: if row.in_pool {
+                    TopClassName::InPool
+                } else {
+                    TopClassName::Graded
+                },
+                opponent_charge: row.charge,
+            }
+        })
+        .collect();
+    score_ranking(
+        mover,
+        &ranking,
+        &labels,
+        own.map(|(i, _)| champ_action(i)),
+        own.is_some_and(|(_, in_pool)| in_pool),
+        margin,
+    )
+}
+
+fn both(rows: &[R], own: Option<(u8, bool)>, margin: f64, check: impl Fn(Side, PositionScore)) {
+    for mover in [Side::Blue, Side::Red] {
+        check(mover, score_for(mover, rows, own, margin));
+    }
+}
+
+const T: bool = true;
+const F: bool = false;
+
+/// A large lead at #1 is a clear `never` at every k whatever sits near #3. Hand measure: the `never`
+/// at 2.0 is the best-ranked `never`; the non-`never` options at or above it or within 0.01 below:
+/// none (the next is 1.0). Count 0 is under every k. The four plays at 0.9..0.891 sit within 0.01 of #3
+/// (0.9) and number 4 >= 3: reading the cluster near #k would deny k = 3.
+/// Kills: comparing against #k instead of the best-ranked `never`.
+#[test]
+fn a_large_lead_is_clear_whatever_sits_near_the_kth() {
+    let rows = [
+        r(2.0, L::N),
+        r(1.0, L::P),
+        r(0.9, L::P),
+        r(0.895, L::P),
+        r(0.893, L::P),
+        r(0.891, L::P),
+    ];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+    });
+}
+
+/// 0.5000 never, 0.4998 play, 0.1 play. Count of non-`never` within 0.01 of the `never`: 1 (the 0.4998;
+/// the 0.1 is 0.4 away). k = 1: 1 < 1 fails, so not clear: a near tie, the `never` is in the top 1.
+/// k = 3, 5, 10: 1 under k, clear; `play` is in the top 3 but not the top 1.
+/// Kills: ε ignored (count 0 would make k = 1 clear).
+#[test]
+fn a_gap_of_two_ten_thousandths_is_a_near_tie_at_one_and_clear_at_three() {
+    let rows = [r(0.5, L::N), r(0.4998, L::P), r(0.1, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+        assert_eq!(s.play, [F, T, T, T], "{mover:?}");
+    });
+}
+
+/// The ε bound is inclusive. Margin 0.25 (exact in binary): `never` 1.0, play at 0.75 is exactly 0.25
+/// below, so it counts: k = 1 not clear. Play at 0.7499 does not... it is 0.2501 below: k = 1 clear.
+/// Kills: an exclusive bound.
+#[test]
+fn the_margin_bound_is_inclusive() {
+    both(&[r(1.0, L::N), r(0.75, L::P)], None, 0.25, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+    });
+    both(&[r(1.0, L::N), r(0.7499, L::P)], None, 0.25, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+    });
+}
+
+/// Two `never`s tied at 1.0, a `play` at 0.5. The best-ranked `never` is the first; the non-`never`s
+/// at or above it or within 0.01 below: none. Clear at every k. Ranks are [1, 1, 3]: the top 1 holds
+/// both `never`s and no `play` (`no_play@1`), the top 3 holds the `play`.
+/// Kills: counting the second `never` as a non-`never`; comparing against #k.
+#[test]
+fn two_nevers_tied_at_the_top_with_a_play_far_behind_is_clear() {
+    let rows = [r(1.0, L::N), r(1.0, L::N), r(0.5, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+        assert_eq!(s.play, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.no_play, [T, F, F, F], "{mover:?}");
+    });
+}
+
+/// `1.000 never, 0.995 unlabelled, 0.800 play`. Unlabelled as `never`: the best `never` is #1 and no
+/// non-`never` is within 0.01: count 0, clear. Unlabelled as non-`never`: count 1 (0.995): clear only
+/// where 1 < k. So k = 1 disagrees (`unjudged@1`, so `near@1` is off), k = 3, 5, 10 agree on clear.
+/// Kills: a single completion; unlabelled read as `never` only.
+#[test]
+fn an_unlabelled_option_inside_the_margin_is_unjudged_at_one_and_certain_at_three() {
+    let rows = [r(1.0, L::N), r(0.995, L::U), r(0.8, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.unjudged, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+    });
+}
+
+/// Nine plays (2.9 .. 2.1), a `never` at rank 10 (1.000), an unlabelled option at rank 11. As `never`
+/// the unlabelled is outside the count: 9 non-`never`s above the best `never`, 9 < 10 clear. As
+/// non-`never` at 0.995 (within 0.01): 10, not clear. So `unjudged@10`, `never@10` off; k = 1, 3, 5:
+/// 9 >= k under both, agreed not clear. With the rank-11 option at 0.9 (outside) both agree: clear.
+/// Kills: truncating the ranking at k (rank 11 unread); a single completion.
+#[test]
+fn an_unlabelled_rank_eleven_decides_never_at_ten() {
+    let mut rows: Vec<R> = (0..9).map(|i| r(2.9 - 0.1 * f64::from(i), L::P)).collect();
+    rows.push(r(1.0, L::N));
+    let mut near = rows.clone();
+    near.push(r(0.995, L::U));
+    both(&near, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F; 4], "{mover:?}");
+        assert_eq!(s.unjudged, [F, F, F, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+    });
+    let mut far = rows;
+    far.push(r(0.9, L::U));
+    both(&far, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, F, F, T], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+    });
+}
+
+/// `near@k`: `never` at 1.0, `maybe` at 0.995, `play` at 0.5, no unlabelled. k = 1: count 1, not clear;
+/// `never` in top 1; certain: near. k = 3: clear, so not near. A `never` outside the top k is no near
+/// tie either: `never` at rank 2 under a `play` far above is not in the top 1.
+/// Kills: `near` set wherever a `never` is not clear regardless of the top k.
+#[test]
+fn near_needs_a_labelled_never_in_the_top_k() {
+    both(
+        &[r(1.0, L::N), r(0.995, L::M), r(0.5, L::P)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.near, [T, F, F, F], "{mover:?}");
+            assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        },
+    );
+    // play 2.0, never 1.0, play 0.999: the never is #2, count above or within = 2.
+    // k = 1: not in the top 1 (not near, and not clear: 2 >= 1); k = 3: 2 < 3 clear.
+    both(
+        &[r(2.0, L::P), r(1.0, L::N), r(0.999, L::P)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.near, [F; 4], "{mover:?}");
+            assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        },
+    );
+}
+
+/// `neither_play`: never 1.0, unlabelled 0.9, maybe 0.8, no `play`. Top 1 is the `never`, fully
+/// labelled, no `play`: `no_play@1`. Top 3 and beyond hold an unlabelled option: in neither.
+/// All maybes: fully labelled everywhere, `no_play` throughout.
+/// Kills: reading an unlabelled option as not-`play` (no_play at k = 3).
+#[test]
+fn an_unlabelled_option_in_range_counts_in_neither_play() {
+    let rows = [r(1.0, L::N), r(0.9, L::U), r(0.8, L::M)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.play, [F; 4], "{mover:?}");
+        assert_eq!(s.no_play, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.neither_play, [F, T, T, T], "{mover:?}");
+    });
+    both(
+        &[r(1.0, L::N), r(0.9, L::M), r(0.8, L::M)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.no_play, [T; 4], "{mover:?}");
+            assert_eq!(s.neither_play, [F; 4], "{mover:?}");
+        },
+    );
+}
+
+fn five(fourth: f64) -> [R; 5] {
+    [
+        r(1.0, L::P),
+        r(0.75, L::P),
+        r(0.5, L::P),
+        r(fourth, L::P),
+        r(0.1, L::P),
+    ]
+}
+
+/// The own pick is entry 3 (rank 4). Margin 0.25. #3 is 0.5; the pick at 0.25 is exactly 0.25 below, so
+/// within: `pick@3`. Rank 4 <= 5 and <= 10: counts. #1 is 1.0: 0.25 is far outside: no.
+/// The pick at 0.249 is 0.251 below #3: `pick@3` off. Regret is the mover-signed gap to #1: 0.75, 0.751.
+/// Kills: plain rank for picks; a dropped sign (a Red value would put the pick above or below wrongly).
+#[test]
+fn an_own_pick_within_the_margin_of_the_kth_counts_and_one_outside_does_not() {
+    both(&five(0.25), Some((3, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, T, T, T], "{mover:?}");
+        assert_eq!(
+            s.own,
+            OwnPick::Ranked {
+                rank: 4,
+                regret: 0.75
+            },
+            "{mover:?}"
+        );
+    });
+    both(&five(0.249), Some((3, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, F, T, T], "{mover:?}");
+        match s.own {
+            OwnPick::Ranked { rank: 4, regret } => assert!((regret - 0.751).abs() < 1e-12),
+            other => panic!("{mover:?}: {other:?}"),
+        }
+    });
+}
+
+/// A pick at rank 2 (0.9) is within 0.25 of #1 (1.0): `pick@1` although rank 2.
+/// Kills: plain rank; margin read only below the k-th.
+#[test]
+fn an_own_pick_at_two_is_within_the_margin_of_one() {
+    let rows = [r(1.0, L::P), r(0.9, L::P), r(0.1, L::P)];
+    both(&rows, Some((1, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+    });
+    both(&rows, Some((2, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, T, T, T], "{mover:?}");
+    });
+}
+
+/// `pick_off` counts only an off-pool own pick; in-pool leaves `pick_off` empty and not eligible.
+/// No own pick (no view): outside the pick metrics, `NoPick`, not eligible, no median rank. An own
+/// pick not in the ranking: `Absent`, rank infinity in the median, no regret, never a pick, but
+/// eligible when off-pool (it is counted in the denominator).
+/// Kills: `pick_off` as `pick`; absent read as no view; a rank-0 absent.
+#[test]
+fn pick_off_is_for_off_pool_picks_and_absent_is_not_no_view() {
+    let rows = [r(1.0, L::P), r(0.5, L::P)];
+    both(&rows, Some((0, false)), 0.01, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [T; 4], "{mover:?}");
+        assert!(s.pick_off_eligible);
+    });
+    both(&rows, Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [F; 4], "{mover:?}");
+        assert!(!s.pick_off_eligible);
+    });
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.own, OwnPick::NoPick, "{mover:?}");
+        assert_eq!(s.pick, [F; 4], "{mover:?}");
+        assert!(!s.pick_off_eligible);
+        assert_eq!(s.own.rank_for_median(), None);
+    });
+    both(&rows, Some((200, false)), 0.01, |mover, s| {
+        assert_eq!(s.own, OwnPick::Absent, "{mover:?}");
+        assert_eq!(s.pick, [F; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [F; 4], "{mover:?}");
+        assert!(s.pick_off_eligible);
+        assert_eq!(s.own.rank_for_median(), Some(f64::INFINITY));
+    });
+}
+
+/// A ranking shorter than k, and an empty one, do not panic. One `never` alone: clear at every k, its
+/// class is #1's. Empty: everything off, no class, an own pick absent.
+/// Kills: indexing the k-th entry directly.
+#[test]
+fn a_ranking_shorter_than_k_is_handled() {
+    both(&[r(1.0, L::N)], Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.never, [T; 4], "{mover:?}");
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.class_at_1, Some(TopClassName::InPool));
+    });
+    both(&[], Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.never, [F; 4], "{mover:?}");
+        assert_eq!(s.no_play, [F; 4], "{mover:?}");
+        assert_eq!(s.neither_play, [T; 4], "{mover:?}");
+        assert_eq!(s.own, OwnPick::Absent, "{mover:?}");
+        assert_eq!(s.class_at_1, None);
+        assert!(!s.opp_lead);
+    });
+}
+
+fn charged(v: f64, charge: f64) -> R {
+    R {
+        charge,
+        ..r(v, L::P)
+    }
+}
+
+/// `opp_lead`: the #1 changes when `value - mover_sign * charge` replaces `value`, re-ordered for the
+/// mover. Hand measure (mover terms, adjusted = v - charge): A 0.30 c 0.05 -> 0.25 below B 0.28: lead.
+/// A 0.30 c 0.01 -> 0.29 above B: none. A 0.5 c 0.25 -> 0.25 ties B 0.25: a tie keeps the #1: none.
+/// C third (0.2 c 0.0) beating both adjusted (A 0.5 c 0.4 -> 0.1, B 0.4 c 0.3 -> 0.1): lead.
+/// Pins only what `score_ranking` does with the `opponent_charge` it is given. That the runner leaves an
+/// infeasibility band out of the charge cannot be tested here; it is tested where `opponent_charge` is
+/// computed (Task 10/11).
+/// Kills: a dropped sign (Red would add the charge); the tie going to the later entry.
+#[test]
+fn opp_lead_flips_with_the_sign_and_keeps_a_tied_leader() {
+    both(
+        &[charged(0.30, 0.05), charged(0.28, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.30, 0.01), charged(0.28, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(!s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.5, 0.25), charged(0.25, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(!s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.5, 0.4), charged(0.4, 0.3), charged(0.2, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(s.opp_lead, "{m:?}");
+        },
+    );
+}
+
+/// `class_at_1` reads the #1's class: an off-pool #1 is `Graded` here, an in-pool one `InPool`.
+/// Kills: reading the last entry or the pick's class.
+#[test]
+fn class_at_one_is_the_top_entrys() {
+    let off = R {
+        in_pool: false,
+        ..r(1.0, L::P)
+    };
+    both(&[off, r(0.5, L::P)], None, 0.01, |m, s| {
+        assert_eq!(s.class_at_1, Some(TopClassName::Graded), "{m:?}");
+    });
+    both(&[r(1.0, L::P), off], None, 0.01, |m, s| {
+        assert_eq!(s.class_at_1, Some(TopClassName::InPool), "{m:?}");
+    });
+}
+
+/// An unlabelled option above the best labelled `never`. `[U 1.0, P 0.9, N 0.5]`: as `never` the
+/// unlabelled is the best `never` with nothing above it: count 0, clear at every k. As non-`never` the
+/// best `never` is 0.5 with two non-`never`s above: clear only at k = 3, 5, 10. So `unjudged@1`,
+/// `never` at 3, 5, 10. `[U 1.0, P 0.5]` (no labelled `never`): as `never` the unlabelled #1 is clear
+/// (the play at 0.5 is outside the margin); as non-`never` there is no `never`, so not clear:
+/// `unjudged` at every k.
+/// Kills: the best never chosen from labelled options only.
+#[test]
+fn an_unlabelled_option_above_the_best_labelled_never_is_unjudged() {
+    both(
+        &[r(1.0, L::U), r(0.9, L::P), r(0.5, L::N)],
+        None,
+        0.01,
+        |m, s| {
+            assert_eq!(s.never, [F, T, T, T], "{m:?}");
+            assert_eq!(s.unjudged, [T, F, F, F], "{m:?}");
+        },
+    );
+    both(&[r(1.0, L::U), r(0.5, L::P)], None, 0.01, |m, s| {
+        assert_eq!(s.never, [F; 4], "{m:?}");
+        assert_eq!(s.unjudged, [T; 4], "{m:?}");
+    });
+}
+
+/// Ties at the k boundary are read by rank. `[N 1.0, P 1.0, P 0.5]` has ranks [1, 1, 3]: the top 1
+/// holds both tied entries, so `play@1` (by list position it would be off and `no_play@1` on). The
+/// `never` is not clear at k = 1 (the tied play is within the margin: count 1), so `near@1`.
+/// Kills: the top k taken by list position.
+#[test]
+fn a_tie_at_the_k_boundary_is_in_the_top_k() {
+    both(
+        &[r(1.0, L::N), r(1.0, L::P), r(0.5, L::P)],
+        None,
+        0.01,
+        |m, s| {
+            assert_eq!(s.play, [T; 4], "{m:?}");
+            assert_eq!(s.no_play, [F; 4], "{m:?}");
+            assert_eq!(s.near, [T, F, F, F], "{m:?}");
+            assert_eq!(s.never, [F, T, T, T], "{m:?}");
+        },
+    );
+}
+
+/// `at(k)` reads the same as the arrays, and refuses a k outside `SCORE_KS`.
+/// Kills: an off-by-one in the index.
+#[test]
+fn at_reads_the_metric_for_that_k() {
+    let s = score_for(
+        Side::Red,
+        &[r(1.0, L::N), r(0.995, L::U), r(0.8, L::P)],
+        None,
+        0.01,
+    );
+    assert!(s.at(1).expect("k = 1").unjudged);
+    assert!(s.at(3).expect("k = 3").never);
+    assert!(!s.at(1).expect("k = 1").never);
+    assert!(s.at(2).is_none());
 }

@@ -1344,6 +1344,206 @@ fn read_position(
     }
 }
 
+// ---- scoring a ranking (design § 4) ------------------------------------------------------------------
+
+/// The cut-offs every metric is read at.
+pub const SCORE_KS: [usize; 4] = [1, 3, 5, 10];
+
+/// One entry of a full, mover-ordered ranking, as `score_ranking` reads it. This is the T12 seam: no
+/// search or leaf type appears here. `option` is resolved wherever a label exists for the action and is
+/// `None` otherwise (an unlabelled action needs no trace). `value` is Blue-perspective;
+/// `opponent_charge` is the opponent's off-pool and grade charge only (never an infeasibility band,
+/// which stays in `value`).
+#[derive(Clone, Debug)]
+pub struct ScoredAction {
+    pub action: Action,
+    pub value: f64,
+    pub option: Option<OptionKey>,
+    /// Must agree with `own_pick_in_pool` for the own pick's entry (debug-asserted); Task 10's floor
+    /// rows and `top_in_pool` read it.
+    pub in_pool: bool,
+    pub class: TopClassName,
+    pub opponent_charge: f64,
+}
+
+/// Where the reader's own pick stands. `NoPick` (no view, or not answered) takes the position out of the
+/// pick metrics; `Absent` (the action is not in the ranking) is rank infinity, left out of regret and
+/// counted.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OwnPick {
+    NoPick,
+    Absent,
+    /// `rank` is 1 + the number of strictly better values; `regret` the mover-signed logit gap from #1.
+    Ranked {
+        rank: usize,
+        regret: f64,
+    },
+}
+
+/// One k's reading of a position, so a caller does not index the `[bool; 4]`s by hand.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AtK {
+    pub never: bool,
+    pub near: bool,
+    pub unjudged: bool,
+    pub play: bool,
+    pub no_play: bool,
+    pub neither_play: bool,
+    pub pick: bool,
+    pub pick_off: bool,
+}
+
+impl PositionScore {
+    /// The metrics at `k`, one of `SCORE_KS`; `None` for any other k.
+    pub fn at(&self, k: usize) -> Option<AtK> {
+        let j = SCORE_KS.iter().position(|&x| x == k)?;
+        Some(AtK {
+            never: self.never[j],
+            near: self.near[j],
+            unjudged: self.unjudged[j],
+            play: self.play[j],
+            no_play: self.no_play[j],
+            neither_play: self.neither_play[j],
+            pick: self.pick[j],
+            pick_off: self.pick_off[j],
+        })
+    }
+}
+
+impl OwnPick {
+    /// The rank as the median reads it: infinity when absent, `None` (outside the metric) with no pick.
+    pub fn rank_for_median(&self) -> Option<f64> {
+        match self {
+            OwnPick::NoPick => None,
+            OwnPick::Absent => Some(f64::INFINITY),
+            OwnPick::Ranked { rank, .. } => Some(*rank as f64),
+        }
+    }
+}
+
+/// One position's reading of one ranking. Every `[bool; 4]` is indexed like `SCORE_KS`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionScore {
+    pub never: [bool; 4],
+    pub near: [bool; 4],
+    pub unjudged: [bool; 4],
+    pub play: [bool; 4],
+    pub no_play: [bool; 4],
+    /// In neither `play` nor `no_play`: an unlabelled option is in range and no `play` is.
+    pub neither_play: [bool; 4],
+    pub pick: [bool; 4],
+    /// `pick`, only where the own pick is off-pool (`pick_off_eligible`).
+    pub pick_off: [bool; 4],
+    pub pick_off_eligible: bool,
+    pub own: OwnPick,
+    /// The #1 changes when the opponent's leaf charges are taken out of the values.
+    pub opp_lead: bool,
+    pub class_at_1: Option<TopClassName>,
+}
+
+/// Scores a full, mover-ordered (best first for the mover; debug-asserted) ranking against the resolved labels (design § 4). Values are
+/// Blue-perspective, so every comparison reads `sign * value`; every `margin` bound is inclusive.
+pub fn score_ranking(
+    mover: Side,
+    ranking: &[ScoredAction],
+    labels: &HashMap<OptionKey, Label>,
+    own_pick: Option<Action>,
+    own_pick_in_pool: bool,
+    margin: f64,
+) -> PositionScore {
+    let sign = mover_sign(mover);
+    let signed: Vec<f64> = ranking.iter().map(|a| sign * a.value).collect();
+    debug_assert!(
+        signed.windows(2).all(|w| w[0] >= w[1]),
+        "the ranking must be best-first for the mover"
+    );
+    let rank = ranks(&signed);
+    let label = |a: &ScoredAction| a.option.as_ref().and_then(|o| labels.get(o)).copied();
+
+    // A clear `never` at k, with unlabelled options read as `never` or not.
+    let clear = |k: usize, unlabelled_never: bool| -> bool {
+        let is_never = |a: &ScoredAction| match label(a) {
+            Some(l) => l == Label::Never,
+            None => unlabelled_never,
+        };
+        let Some(best) = ranking.iter().position(is_never) else {
+            return false;
+        };
+        let floor = signed[best] - margin;
+        let count = ranking
+            .iter()
+            .enumerate()
+            .filter(|(i, a)| !is_never(a) && (*i < best || signed[*i] >= floor))
+            .count();
+        count < k
+    };
+
+    let mut score = PositionScore {
+        never: [false; 4],
+        near: [false; 4],
+        unjudged: [false; 4],
+        play: [false; 4],
+        no_play: [false; 4],
+        neither_play: [false; 4],
+        pick: [false; 4],
+        pick_off: [false; 4],
+        pick_off_eligible: own_pick.is_some() && !own_pick_in_pool,
+        own: OwnPick::NoPick,
+        opp_lead: false,
+        class_at_1: ranking.first().map(|a| a.class),
+    };
+
+    let own_index = own_pick.and_then(|p| ranking.iter().position(|a| a.action == p));
+    debug_assert!(
+        own_index.is_none_or(|i| ranking[i].in_pool == own_pick_in_pool),
+        "own_pick_in_pool must agree with the ranked entry's in_pool"
+    );
+    if own_pick.is_some() {
+        score.own = match own_index {
+            Some(i) => OwnPick::Ranked {
+                rank: rank[i],
+                regret: signed[0] - signed[i] + 0.0,
+            },
+            None => OwnPick::Absent,
+        };
+    }
+
+    for (j, &k) in SCORE_KS.iter().enumerate() {
+        let as_never = clear(k, true);
+        let as_not = clear(k, false);
+        score.never[j] = as_never && as_not;
+        score.unjudged[j] = as_never != as_not;
+
+        let top = rank_prefix(&rank, k);
+        let top_labels: Vec<Option<Label>> = ranking[..top].iter().map(label).collect();
+        score.play[j] = top_labels.contains(&Some(Label::Play));
+        score.no_play[j] = top > 0 && top_labels.iter().all(|l| l.is_some()) && !score.play[j];
+        score.neither_play[j] = !score.play[j] && !score.no_play[j];
+        score.near[j] =
+            top_labels.contains(&Some(Label::Never)) && !score.never[j] && !score.unjudged[j];
+
+        if let Some(i) = own_index {
+            // Within ε of the k-th entry's value, or in the top k by rank.
+            let kth = signed[k.min(signed.len()) - 1];
+            score.pick[j] = rank[i] <= k || signed[i] >= kth - margin;
+            score.pick_off[j] = score.pick[j] && score.pick_off_eligible;
+        }
+    }
+
+    // The #1 with the opponent's leaf charges taken out, re-ordered for the mover; a tie keeps the
+    // original #1.
+    // `sign * (value - sign * charge)` is `sign * value - charge`.
+    let adjusted = |i: usize| signed[i] - ranking[i].opponent_charge;
+    let mut lead = 0;
+    for i in 1..ranking.len() {
+        if adjusted(i) > adjusted(lead) {
+            lead = i;
+        }
+    }
+    score.opp_lead = lead != 0;
+    score
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parallel_map, rank_prefix, ranks, same_top};
