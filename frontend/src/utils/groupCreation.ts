@@ -1,7 +1,6 @@
 import type { DraftMode, GameType, CanvasGroupMetadataUpdate } from "./schemas";
 import {
     DEFAULT_GRID_COLS,
-    DEFAULT_GRID_ROWS,
     buildGridMetadata,
     gridDimensions,
     type GridSettingsInput
@@ -30,6 +29,18 @@ import type { CardLayout } from "./canvasCardLayout";
 export const NEW_GROUP_DRAFT_MODE: DraftMode = "fearless";
 
 /**
+ * How many rows a NEW grid Group is born with — a 3x3 alongside
+ * `DEFAULT_GRID_COLS` (2026-11-10 canvas iteration).
+ *
+ * ⚠️ Deliberately NOT `DEFAULT_GRID_ROWS`. That constant is the reading of an
+ * ABSENT `metadata.gridRows`, which every grid predating the setting relies on
+ * to keep its old height. Raising it would grow every legacy grid to three
+ * rows the next time it is measured; this only changes what the create dialog
+ * offers.
+ */
+export const NEW_GROUP_GRID_ROWS = 3;
+
+/**
  * The grid form a new Group starts from — decision 13's `grid` default, which
  * is only observable the moment the user turns Enable Series OFF.
  *
@@ -37,7 +48,7 @@ export const NEW_GROUP_DRAFT_MODE: DraftMode = "fearless";
  */
 export const newGroupGridSettings = (): GridSettingsInput => ({
     gridCols: DEFAULT_GRID_COLS,
-    gridRows: DEFAULT_GRID_ROWS,
+    gridRows: NEW_GROUP_GRID_ROWS,
     rowLabels: [],
     colLabels: []
 });
