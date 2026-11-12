@@ -40,6 +40,13 @@ export const PLAYABLE_MIN_PICK_RATE = 10 / 10_000;
  * than ~50,000 games the rate floor admits noise pairs; 50 picks stops that. No
  * effect today (277 > 50). */
 export const PLAYABLE_MIN_PICKS = 50;
+/** Legality floor on the champion's OWN games (engine slice B, ruled 2026-11-11, S1 2026-11-12): a role
+ * the positions do not list is playable only when it holds at least this share of the champion's picks
+ * on its deciding patch, read on the 3-dp share the table stores (`storedShare`), so the floor is
+ * checkable from the compiled file alone. On the 16.19 table it removes 22 of 433 playable pairs
+ * (Lee Sin support 0.9 %, Kai'Sa top 1.9 %, ...) and no listed role; Tristana top (1.964 %, stored 0.020)
+ * stays. */
+export const PLAYABLE_MIN_OWN_SHARE = 0.02;
 /** The refresh warns when the deciding patch has fewer train games than this. */
 export const THIN_PATCH_GAMES = 50_000;
 /** The name the provenance block records for the rule above. */
@@ -169,11 +176,17 @@ export function ratesFromCorpus(doc, { minPicks = MIN_PICKS } = {}) {
  * @param {number} trainGames
  * @returns {string[]}
  */
-export function playableRoles(positions, shares, picks, trainGames, { minPickRate = PLAYABLE_MIN_PICK_RATE, minPicks = PLAYABLE_MIN_PICKS } = {}) {
+export function playableRoles(positions, shares, picks, trainGames, { minPickRate = PLAYABLE_MIN_PICK_RATE, minPicks = PLAYABLE_MIN_PICKS, minOwnShare = PLAYABLE_MIN_OWN_SHARE } = {}) {
   const floor = Math.max(minPickRate * trainGames, minPicks);
   // `share × picks` is the role's pick COUNT (the shares are count / total): rounded, because the float
   // product can sit an ulp under the integer it encodes and miss an integer floor.
-  return META_POSITIONS.filter((role) => positions.includes(role) || Math.round((shares[role] ?? 0) * picks) >= floor);
+  return META_POSITIONS.filter((role) => positions.includes(role)
+    || (Math.round((shares[role] ?? 0) * picks) >= floor && storedShare(shares[role]) >= minOwnShare));
+}
+
+/** A share as the table stores it (3 dp): what `fiveShares` writes and the own-games floor reads. */
+export function storedShare(share) {
+  return Number((share ?? 0).toFixed(3));
 }
 
 /** data/compiled/winrates.json (u.gg per-role match counts) -> rates by alias.
@@ -235,7 +248,7 @@ export function refreshPositions(rows, rates, threshold = POSITIONS_THRESHOLD, f
  * champion the source has; a kept row keeps whatever it had (the legacy listed-key shape included).
  */
 function fiveShares(shares) {
-  return Object.fromEntries(META_POSITIONS.map((role) => [role, Number((shares[role] ?? 0).toFixed(3))]));
+  return Object.fromEntries(META_POSITIONS.map((role) => [role, storedShare(shares[role])]));
 }
 
 /** The roles the engine may seat the champion in: `playable`, or the positions when the row has none. */

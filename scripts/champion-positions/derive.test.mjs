@@ -1,9 +1,10 @@
 // scripts/champion-positions/derive.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   POSITIONS_THRESHOLD, MAX_PRIMARY_FLIPS, MAX_FEASIBILITY_DROP, MIN_PICKS, RECENCY_RULE,
-  PLAYABLE_MIN_PICK_RATE, PLAYABLE_MIN_PICKS, THIN_PATCH_GAMES,
+  PLAYABLE_MIN_PICK_RATE, PLAYABLE_MIN_PICKS, PLAYABLE_MIN_OWN_SHARE, storedShare, THIN_PATCH_GAMES,
   derivePositions, ratesFromCorpus, ratesFromUgg, refreshPositions, diffPositions, playableRoles,
   buildProvenance, formatPositionsSource, evaluateGate, carryForward, formatDiff, parsePatch, comparePatches,
 } from "./derive.mjs";
@@ -131,7 +132,9 @@ test("ratesFromCorpus gives a pooled-fallback champion the window's picks and tr
 test("playableRoles is the listed roles plus every role whose picks reach the rate floor, in vocabulary order", () => {
   // Kai'Sa-shaped: 1.9% top of 47,500 picks on a 277,103-game patch = 902 picks >= 277.1 (the rate floor).
   const shares = { TOP: 0.019, JUNGLE: 0.002, MIDDLE: 0.004, BOTTOM: 0.975, SUPPORT: 0 };
-  assert.deepEqual(playableRoles(["BOTTOM"], shares, 47500, 277103), ["TOP", "BOTTOM"]);
+  // This test is about the pick-count floor; Kai'Sa top (1.9 %) is under the own-games floor, which T27 tests,
+  // so it is switched off here (engine slice B, T33).
+  assert.deepEqual(playableRoles(["BOTTOM"], shares, 47500, 277103, { minOwnShare: 0 }), ["TOP", "BOTTOM"]);
   // The floor is inclusive: 0.25 × 400 = 100 picks on a 100,000-game patch (rate floor 100).
   assert.deepEqual(playableRoles(["TOP"], { TOP: 0.75, JUNGLE: 0.25 }, 400, 100000), ["TOP", "JUNGLE"]);
   assert.deepEqual(playableRoles(["TOP"], { TOP: 0.75, JUNGLE: 0.2475 }, 400, 100000), ["TOP"]);
@@ -139,6 +142,46 @@ test("playableRoles is the listed roles plus every role whose picks reach the ra
   // product can fall short of it by an ulp — (1/49) × 49 = 0.9999999999999999 — so it is ROUNDED before
   // the comparison, or a pair at exactly an integer floor could be dropped (judge M4).
   assert.deepEqual(playableRoles(["TOP"], { TOP: 48 / 49, JUNGLE: 1 / 49 }, 49, 0, { minPickRate: 0, minPicks: 1 }), ["TOP", "JUNGLE"]);
+});
+
+// ---- the own-games floor (engine slice B, S1/F2; design T27, T28) ----
+
+test("T27 playableRoles drops a non-listed role under 2 % of the champion's own games, read on the stored 3-dp share", () => {
+  assert.equal(PLAYABLE_MIN_OWN_SHARE, 0.02);
+  // The pick-count floor is out of the way (1 pick minimum, no rate) so only the own-games floor decides.
+  const opt = { minPickRate: 0, minPicks: 1 };
+  const at = (share) => playableRoles(["BOTTOM"], { TOP: share, BOTTOM: 1 - share }, 10000, 0, opt);
+  assert.deepEqual(at(0.019), ["BOTTOM"], "stored 0.019 is under the floor");
+  assert.deepEqual(at(0.0196), ["TOP", "BOTTOM"], "0.0196 is stored as 0.020 and stays (the unrounded share would drop it)");
+  assert.deepEqual(at(0.02), ["TOP", "BOTTOM"], "the floor is inclusive");
+  // A listed role is never tested against the floor.
+  assert.deepEqual(playableRoles(["TOP", "BOTTOM"], { TOP: 0.01, BOTTOM: 0.99 }, 10000, 0, opt), ["TOP", "BOTTOM"]);
+  // The count floor still applies: 3 % of 1000 picks is 30 < 50, though the own-games floor passes.
+  assert.deepEqual(playableRoles(["BOTTOM"], { TOP: 0.03, BOTTOM: 0.97 }, 1000, 0), ["BOTTOM"]);
+  assert.deepEqual(playableRoles(["BOTTOM"], { TOP: 0.03, BOTTOM: 0.97 }, 1000, 0, { minOwnShare: 0.5 }), ["BOTTOM"]);
+  assert.deepEqual(playableRoles(["BOTTOM"], { TOP: 0.03, BOTTOM: 0.97 }, 2000, 0), ["TOP", "BOTTOM"], "60 picks pass both floors");
+  assert.equal(storedShare(0.0196), 0.02);
+  assert.equal(storedShare(undefined), 0);
+});
+
+test("T28 refreshPositions floors playable on the share it stores, and the provenance carries minOwnShare", () => {
+  const rows = [{ name: "A", id: "A", positions: ["BOTTOM"] }];
+  const rates = new Map([["A", { TOP: 0.0196, JUNGLE: 0.019, MIDDLE: 0, BOTTOM: 0.9614, SUPPORT: 0 }]]);
+  const floor = { picks: new Map([["A", 10000]]), trainGames: new Map([["A", 0]]), minPickRate: 0, minPicks: 1 };
+  const { rows: out } = refreshPositions(rows, rates, POSITIONS_THRESHOLD, floor);
+  assert.equal(out[0].positionShares.TOP, 0.02);
+  assert.equal(out[0].positionShares.JUNGLE, 0.019);
+  assert.deepEqual(out[0].playable, ["TOP", "BOTTOM"], "TOP is stored at 0.020 and kept; JUNGLE at 0.019 is dropped");
+  // Every playable role that is not listed holds the floor on the STORED share: checkable from the file alone.
+  for (const role of out[0].playable) if (!out[0].positions.includes(role)) assert.ok(out[0].positionShares[role] >= PLAYABLE_MIN_OWN_SHARE);
+  const rule = { minPickRate: 0.001, minPicks: 50, minOwnShare: 0.02, decidingPatch: "16.19", decidingGames: 277103 };
+  const p = buildProvenance({ kind: "corpus", patches: ["16.19"], games: 1, rule: "latest-patch", minPicks: 300, decidingPatch: "16.19", decidingGames: 277103,
+                              fallback: {}, playableRule: rule, threshold: 0.1, generatedAt: "x" });
+  assert.deepEqual(Object.keys(p.playableRule), ["minPickRate", "minPicks", "minOwnShare", "decidingPatch", "decidingGames"]);
+  // The refresh script (not importable: it runs main()) must write the constant into the block and print it.
+  const src = readFileSync(new URL("../refresh-champion-positions.mjs", import.meta.url), "utf8");
+  assert.match(src, /minPicks: PLAYABLE_MIN_PICKS, minOwnShare: PLAYABLE_MIN_OWN_SHARE, decidingPatch/);
+  assert.match(src, /holding >= \$\{PLAYABLE_MIN_OWN_SHARE \* 100\} % of the champion's own games/);
 });
 
 test("playableRoles keeps a listed role below the floor (the union is the construction, not a check)", () => {
@@ -281,6 +324,7 @@ test("refreshPositions writes playable from the corpus floor (positions ∪ coun
   const floor = {
     picks: new Map([["Kaisa", 47500], ["Heimerdinger", 2000]]),
     trainGames: new Map([["Kaisa", 277103], ["Heimerdinger", 277103]]),
+    minOwnShare: 0, // this test is about the pick-count floor; Kai'Sa top (1.9 %) is under the own-games floor (T28 tests that)
   };
   const { rows: out } = refreshPositions(rows, rates, POSITIONS_THRESHOLD, floor);
   assert.deepEqual(out[0].positions, ["BOTTOM"]);
