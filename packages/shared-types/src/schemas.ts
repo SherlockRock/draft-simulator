@@ -193,18 +193,48 @@ export type TeamPlayer = z.infer<typeof TeamPlayerSchema>;
 
 export const TeamSchema = z.object({
   id: z.string(),
-  owner_id: z.string(),
+  // Null for imported (tournament) teams, which have no owning user.
+  owner_id: z.string().nullable(),
   name: z.string(),
   // Deliberately z.string(), NOT ScoutRegionSchema: a read schema should not
   // throw on unexpected DB data. Writes are validated against ScoutRegionSchema
   // (payloads) and isValidRegion (backend); StyledSelect only offers valid
   // options, so the frontend cannot emit an out-of-set region.
   region: z.string(),
+  tournament_id: z.string().nullable().optional(),
+  // z.string(), not an enum: a read schema must not break on a future source.
+  source: z.string().optional(),
+  // external_id / external_org_id are import bookkeeping the client never
+  // reads in T1, so they are not modelled (zod strips unknown keys).
+  acronym: z.string().nullable().optional(),
+  // JSONB column; tolerant of missing keys (unknown keys are stripped).
+  colors: z
+    .object({
+      primary: z.string().optional(),
+      secondary: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+  archived_at: z.string().nullable().optional(),
+  // Sequelize sends null for a missing belongsTo.
+  Tournament: z
+    .object({ id: z.string(), name: z.string(), source: z.string() })
+    .nullable()
+    .optional(),
+  // Present on GET /api/teams rows (required there: see TeamListRowSchema);
+  // absent when a team rides inside a canvas payload.
+  canEditRoster: z.boolean().optional(),
   TeamPlayers: z.array(TeamPlayerSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 export type Team = z.infer<typeof TeamSchema>;
+
+// A row of GET /api/teams: the server always computes canEditRoster.
+export const TeamListRowSchema = TeamSchema.extend({
+  canEditRoster: z.boolean(),
+});
+export type TeamListRow = z.infer<typeof TeamListRowSchema>;
 
 export const CreateTeamPayloadSchema = z.object({
   name: z.string().min(1).max(120),
