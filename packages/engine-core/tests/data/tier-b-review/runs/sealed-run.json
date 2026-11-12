@@ -1,0 +1,4076 @@
+{
+  "load_errors": [],
+  "metrics": {
+    "arms": [
+      {
+        "id": "pool_or_roster",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_line": 0,
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": null,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": null,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 0,
+          "speaking": 0,
+          "top_in_pool": 0,
+          "unjudged": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "unjudged_line": 0,
+          "with_pick": 0
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "no_line_1": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [],
+          "unjudged_1": [],
+          "unjudged_3": [],
+          "unjudged_line_1": []
+        },
+        "q": null,
+        "readable": false,
+        "role": "pool_or_roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "roster:0.1:0.05",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_line": 0,
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": null,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": null,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 0,
+          "speaking": 0,
+          "top_in_pool": 0,
+          "unjudged": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "unjudged_line": 0,
+          "with_pick": 0
+        },
+        "p": 0.1,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "no_line_1": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [],
+          "unjudged_1": [],
+          "unjudged_3": [],
+          "unjudged_line_1": []
+        },
+        "q": 0.05,
+        "readable": false,
+        "role": "roster",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "floor:0.1",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_line": 0,
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": null,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": null,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 0,
+          "speaking": 0,
+          "top_in_pool": 0,
+          "unjudged": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "unjudged_line": 0,
+          "with_pick": 0
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "no_line_1": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [],
+          "unjudged_1": [],
+          "unjudged_3": [],
+          "unjudged_line_1": []
+        },
+        "q": null,
+        "readable": false,
+        "role": "floor",
+        "unknown_r_kept": 0
+      },
+      {
+        "id": "floor:0.25",
+        "metrics": {
+          "bad_line": 0,
+          "judged_line": 0,
+          "near": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "neither_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "never_1_by_class": {
+            "in_pool": 0,
+            "off_pool_base": 0,
+            "off_pool_graded": 0
+          },
+          "no_line": 0,
+          "no_play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "non_speaking": 0,
+          "opp_charge_lead": 0,
+          "pick": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_absent": 0,
+          "pick_median_rank": null,
+          "pick_median_rank_absent": false,
+          "pick_median_regret": null,
+          "pick_off": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "pick_off_eligible": 0,
+          "play": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "positions": 0,
+          "speaking": 0,
+          "top_in_pool": 0,
+          "unjudged": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "unjudged_line": 0,
+          "with_pick": 0
+        },
+        "p": null,
+        "positions": {
+          "bad_line_1": [],
+          "near_1": [],
+          "near_3": [],
+          "never_1": [],
+          "never_3": [],
+          "no_line_1": [],
+          "not_speaking": [],
+          "pick_3": [],
+          "pick_3_out": [],
+          "unjudged_1": [],
+          "unjudged_3": [],
+          "unjudged_line_1": []
+        },
+        "q": null,
+        "readable": false,
+        "role": "floor",
+        "unknown_r_kept": 0
+      }
+    ],
+    "holdout": {
+      "labels": {
+        "blind_options": 4,
+        "blind_picks": 2,
+        "labelled_positions": 2,
+        "options": 5,
+        "own_picks": 2,
+        "positions": 2,
+        "scored_only_options": 1
+      },
+      "positions": 2,
+      "sealed": true
+    },
+    "ks": [
+      1,
+      3,
+      5,
+      10
+    ],
+    "labels": {
+      "blind_options": 0,
+      "blind_picks": 0,
+      "fallback_labels": 0,
+      "fallback_picks": 0,
+      "labelled_positions": 0,
+      "options": 0,
+      "own_picks": 0,
+      "positions": 0,
+      "scored_only_options": 0
+    },
+    "margin": 0.01,
+    "never_everywhere": [],
+    "r_by_label": [
+      {
+        "bucket": "r < 0.1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 0.25",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 0.5",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r < 1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r = 1",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      },
+      {
+        "bucket": "r unknown",
+        "maybe": 0,
+        "never": 0,
+        "play": 0
+      }
+    ],
+    "reference": "roster:0.1:0.05",
+    "reveal_changes": {
+      "blind_labels": 0,
+      "blind_picks": 0,
+      "drafts_revealed": [],
+      "labels": [],
+      "picks": [],
+      "reveals_without_change": []
+    },
+    "rule": {
+      "edge": [],
+      "pick": null,
+      "readable": 0,
+      "receipt": null,
+      "roster_arms": 1,
+      "ties": []
+    },
+    "second_line": {
+      "differs": false,
+      "outcome": {
+        "edge": [],
+        "pick": null,
+        "readable": 0,
+        "receipt": null,
+        "roster_arms": 1,
+        "ties": []
+      }
+    },
+    "sensitivity": {
+      "leave_out": [],
+      "margins": [
+        {
+          "margin": 0.005,
+          "pick": null,
+          "readable": 0
+        },
+        {
+          "margin": 0.02,
+          "pick": null,
+          "readable": 0
+        }
+      ]
+    },
+    "worklist": {
+      "holdout_unlabelled_rows": [
+        {
+          "position": "2026-11-09-ho-blind-pinch-slot-9",
+          "rows": [
+            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
+            "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona",
+            "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar",
+            "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+            "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona"
+          ]
+        },
+        {
+          "position": "2026-11-09-ho-scored-pinch-slot-9",
+          "rows": [
+            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
+            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
+            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
+            "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona",
+            "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar",
+            "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+            "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona"
+          ]
+        }
+      ],
+      "lines_at": "roster:0.1:0.05",
+      "not_judgeable": 0,
+      "unjudged_lines": [],
+      "unlabelled_rows": []
+    }
+  },
+  "positions": [
+    {
+      "actual_next": [
+        "Galio",
+        "MonkeyKing"
+      ],
+      "base": 1,
+      "board": [
+        {
+          "champion": "Zilean",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 0
+        },
+        {
+          "champion": "Qiyana",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 1
+        },
+        {
+          "champion": "Zaahen",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 2
+        },
+        {
+          "champion": "Naafiri",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 3
+        },
+        {
+          "champion": "Ivern",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 4
+        },
+        {
+          "champion": "Ambessa",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 5
+        },
+        {
+          "champion": "Rumble",
+          "kind": "pick",
+          "side": "Blue",
+          "slot": 6
+        },
+        {
+          "champion": "Vi",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 7
+        },
+        {
+          "champion": "Locke",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 8
+        }
+      ],
+      "category": "off-pool",
+      "depth_check": {
+        "horizon": 3,
+        "same_first": true,
+        "same_top_3": true,
+        "stable": true,
+        "top_3": []
+      },
+      "draft": "ho-blind",
+      "exclusions": [],
+      "id": "2026-11-09-ho-blind-pinch-slot-9",
+      "kind": "pair",
+      "labels": {
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "blind": "play",
+          "current": "play"
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "blind": "never",
+          "current": "never"
+        }
+      },
+      "legacy": {
+        "off_pool": false,
+        "role_verdict": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "ok": true,
+          "roles": [
+            "mid",
+            "jungle"
+          ]
+        }
+      },
+      "loader_notes": [],
+      "menu": {
+        "adc": [
+          {
+            "best": null,
+            "champion": "Aphelios",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ezreal",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Kaisa",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Kalista",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Lucian",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Yunara",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Zeri",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ziggs",
+            "status": "open"
+          }
+        ],
+        "jungle": [
+          {
+            "best": null,
+            "champion": "JarvanIV",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "LeeSin",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "MonkeyKing",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Naafiri",
+            "status": "banned"
+          },
+          {
+            "best": null,
+            "champion": "Qiyana",
+            "status": "banned"
+          },
+          {
+            "best": null,
+            "champion": "Shyvana",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Vi",
+            "status": "picked"
+          },
+          {
+            "best": null,
+            "champion": "XinZhao",
+            "status": "open"
+          }
+        ],
+        "mid": [
+          {
+            "best": null,
+            "champion": "Ahri",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Cassiopeia",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Galio",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Locke",
+            "status": "picked"
+          },
+          {
+            "best": null,
+            "champion": "Nasus",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Orianna",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ryze",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Syndra",
+            "status": "open"
+          }
+        ],
+        "support": [
+          {
+            "best": null,
+            "champion": "Alistar",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Bard",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Leona",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Lulu",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Milio",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Nami",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Nautilus",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Renata",
+            "status": "open"
+          }
+        ]
+      },
+      "mover": "Blue",
+      "notes": "TEST DATA for the Tier B review tool's development / holdout split: labelled-position.json as a holdout position (draft ho-blind), its scored verdict entry removed: a sealed holdout is blind. Not a real fixture; the labels are made up.",
+      "open_roles": [
+        [
+          "jungle",
+          "mid",
+          "adc",
+          "support"
+        ]
+      ],
+      "options": {
+        "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona": {
+          "action": [
+            "Ahri",
+            "Leona"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Ahri",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Ahri+Milio|top=Rumble,mid=Ahri,support=Milio": {
+          "action": [
+            "Ahri",
+            "Milio"
+          ],
+          "comp": {
+            "mid": "Ahri",
+            "support": "Milio",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Milio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Cassiopeia"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Cassiopeia",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Cassiopeia",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Galio"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Galio",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Kaisa|top=Rumble,adc=Kaisa,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Kaisa"
+          ],
+          "comp": {
+            "adc": "Kaisa",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Kaisa",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Alistar+MonkeyKing|top=Rumble,jungle=MonkeyKing,support=Alistar": {
+          "action": [
+            "Alistar",
+            "MonkeyKing"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Alistar+Syndra|top=Rumble,mid=Syndra,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Syndra"
+          ],
+          "comp": {
+            "mid": "Syndra",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Syndra",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zeri"
+          ],
+          "band": "blind",
+          "comp": {
+            "adc": "Zeri",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zyra"
+          ],
+          "band": "later",
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Aphelios+Leona|top=Rumble,adc=Aphelios,support=Leona": {
+          "action": [
+            "Aphelios",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Aphelios",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Aphelios",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Bard+Galio|top=Rumble,mid=Galio,support=Bard": {
+          "action": [
+            "Bard",
+            "Galio"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Bard",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Bard",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona": {
+          "action": [
+            "Cassiopeia",
+            "Leona"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Cassiopeia",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Cassiopeia",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Ezreal+Leona|top=Rumble,adc=Ezreal,support=Leona": {
+          "action": [
+            "Ezreal",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Ezreal",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ezreal",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+Leona|top=Rumble,mid=Galio,support=Leona": {
+          "action": [
+            "Galio",
+            "Leona"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Galio",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Galio",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Galio+Nautilus|top=Rumble,mid=Galio,support=Nautilus": {
+          "action": [
+            "Galio",
+            "Nautilus"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Nautilus",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Nautilus",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+Renata|top=Rumble,mid=Galio,support=Renata": {
+          "action": [
+            "Galio",
+            "Renata"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Renata",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Renata",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "JarvanIV+Leona|top=Rumble,jungle=JarvanIV,support=Leona": {
+          "action": [
+            "JarvanIV",
+            "Leona"
+          ],
+          "comp": {
+            "jungle": "JarvanIV",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "JarvanIV",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Kalista+Leona|top=Rumble,adc=Kalista,support=Leona": {
+          "action": [
+            "Kalista",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Kalista",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Kalista",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "LeeSin+Leona|top=Rumble,jungle=LeeSin,support=Leona": {
+          "action": [
+            "LeeSin",
+            "Leona"
+          ],
+          "comp": {
+            "jungle": "LeeSin",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "LeeSin",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Leona+Lucian|top=Rumble,adc=Lucian,support=Leona": {
+          "action": [
+            "Leona",
+            "Lucian"
+          ],
+          "comp": {
+            "adc": "Lucian",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Lucian",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona": {
+          "action": [
+            "Leona",
+            "Nasus"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Nasus",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Nasus",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 0.3681241184767278,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Orianna|top=Rumble,mid=Orianna,support=Leona": {
+          "action": [
+            "Leona",
+            "Orianna"
+          ],
+          "comp": {
+            "mid": "Orianna",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Orianna",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Ryze|top=Rumble,mid=Ryze,support=Leona": {
+          "action": [
+            "Leona",
+            "Ryze"
+          ],
+          "comp": {
+            "mid": "Ryze",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Ryze",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Shyvana|top=Rumble,jungle=Shyvana,support=Leona": {
+          "action": [
+            "Leona",
+            "Shyvana"
+          ],
+          "comp": {
+            "jungle": "Shyvana",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Shyvana",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Leona+XinZhao|top=Rumble,jungle=XinZhao,support=Leona": {
+          "action": [
+            "Leona",
+            "XinZhao"
+          ],
+          "comp": {
+            "jungle": "XinZhao",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "XinZhao",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Leona+Yunara|top=Rumble,adc=Yunara,support=Leona": {
+          "action": [
+            "Leona",
+            "Yunara"
+          ],
+          "comp": {
+            "adc": "Yunara",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Yunara",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona": {
+          "action": [
+            "Leona",
+            "Zeri"
+          ],
+          "band": "blind",
+          "comp": {
+            "adc": "Zeri",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Ziggs|top=Rumble,adc=Ziggs,support=Leona": {
+          "action": [
+            "Leona",
+            "Ziggs"
+          ],
+          "comp": {
+            "adc": "Ziggs",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Ziggs",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona": {
+          "action": [
+            "Leona",
+            "Zyra"
+          ],
+          "band": "later",
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Lulu+Zeri|top=Rumble,adc=Zeri,support=Lulu": {
+          "action": [
+            "Lulu",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Lulu",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Lulu",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "action": [
+            "MonkeyKing",
+            "Syndra"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Syndra",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Syndra",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Nami+Zeri|top=Rumble,adc=Zeri,support=Nami": {
+          "action": [
+            "Nami",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Nami",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Nami",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        }
+      },
+      "pools": {
+        "blue": {
+          "adc": [
+            "Yunara",
+            "Ziggs",
+            "Aphelios",
+            "Ezreal",
+            "Kaisa",
+            "Kalista",
+            "Lucian",
+            "Zeri"
+          ],
+          "jungle": [
+            "Naafiri",
+            "Qiyana",
+            "LeeSin",
+            "JarvanIV",
+            "MonkeyKing",
+            "XinZhao",
+            "Vi",
+            "Shyvana"
+          ],
+          "mid": [
+            "Locke",
+            "Syndra",
+            "Nasus",
+            "Ahri",
+            "Galio",
+            "Cassiopeia",
+            "Orianna",
+            "Ryze"
+          ],
+          "support": [
+            "Bard",
+            "Alistar",
+            "Lulu",
+            "Milio",
+            "Nautilus",
+            "Nami",
+            "Leona",
+            "Renata"
+          ],
+          "top": [
+            "Rumble",
+            "Riven",
+            "Camille",
+            "Ambessa",
+            "KSante",
+            "Aurora",
+            "Zaahen",
+            "Yone"
+          ]
+        },
+        "red": {
+          "adc": [
+            "Ezreal",
+            "Caitlyn",
+            "Jhin",
+            "Jinx",
+            "Kaisa",
+            "Ashe",
+            "Sivir",
+            "Varus"
+          ],
+          "jungle": [
+            "JarvanIV",
+            "Ivern",
+            "Shyvana",
+            "XinZhao",
+            "Vi",
+            "MonkeyKing",
+            "Zaahen",
+            "Aatrox"
+          ],
+          "mid": [
+            "Zilean",
+            "Locke",
+            "Galio",
+            "Chogath",
+            "Orianna",
+            "Ryze",
+            "Syndra",
+            "Viktor"
+          ],
+          "support": [
+            "Bard",
+            "Neeko",
+            "Seraphine",
+            "Rakan",
+            "Amumu",
+            "Alistar",
+            "Braum",
+            "Nami"
+          ],
+          "top": [
+            "Sion",
+            "KSante",
+            "Zaahen",
+            "Ornn",
+            "DrMundo",
+            "Aatrox",
+            "Malphite",
+            "Renekton"
+          ]
+        }
+      },
+      "readings": [],
+      "reference_ranking": [],
+      "review": "2026-10-04 user (scored read, role maps): stay.",
+      "slot": 9,
+      "split": "holdout",
+      "verdicts": [
+        {
+          "finished": "2026-11-09T14:12:41Z",
+          "fm_version": "fm-2026-09-01-6880daa",
+          "from": {
+            "rev": 17,
+            "run": "2026-11-09T14:03:22Z"
+          },
+          "labels": {
+            "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+            "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+          },
+          "mode": "blind",
+          "note": "Syndra mid is not this team.",
+          "positions_patch": "16.19",
+          "started": "2026-11-09T14:10:05Z",
+          "would_pick": [
+            "MonkeyKing",
+            "Galio"
+          ]
+        }
+      ],
+      "warnings": [],
+      "would_pick": {
+        "blind": [
+          "Galio",
+          "MonkeyKing"
+        ],
+        "current": [
+          "Galio",
+          "MonkeyKing"
+        ]
+      }
+    },
+    {
+      "actual_next": [
+        "Galio",
+        "MonkeyKing"
+      ],
+      "base": 2,
+      "board": [
+        {
+          "champion": "Zilean",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 0
+        },
+        {
+          "champion": "Qiyana",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 1
+        },
+        {
+          "champion": "Zaahen",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 2
+        },
+        {
+          "champion": "Naafiri",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 3
+        },
+        {
+          "champion": "Ivern",
+          "kind": "ban",
+          "side": "Blue",
+          "slot": 4
+        },
+        {
+          "champion": "Ambessa",
+          "kind": "ban",
+          "side": "Red",
+          "slot": 5
+        },
+        {
+          "champion": "Rumble",
+          "kind": "pick",
+          "side": "Blue",
+          "slot": 6
+        },
+        {
+          "champion": "Vi",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 7
+        },
+        {
+          "champion": "Locke",
+          "kind": "pick",
+          "side": "Red",
+          "slot": 8
+        }
+      ],
+      "category": "off-pool",
+      "depth_check": {
+        "horizon": 3,
+        "same_first": true,
+        "same_top_3": true,
+        "stable": true,
+        "top_3": []
+      },
+      "draft": "ho-scored",
+      "exclusions": [],
+      "id": "2026-11-09-ho-scored-pinch-slot-9",
+      "kind": "pair",
+      "labels": {
+        "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": {
+          "current": "play"
+        },
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "blind": "play",
+          "current": "play"
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "blind": "never",
+          "current": "maybe"
+        }
+      },
+      "legacy": {
+        "off_pool": false,
+        "role_verdict": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "ok": true,
+          "roles": [
+            "mid",
+            "jungle"
+          ]
+        }
+      },
+      "loader_notes": [],
+      "menu": {
+        "adc": [
+          {
+            "best": null,
+            "champion": "Aphelios",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ezreal",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Kaisa",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Kalista",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Lucian",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Yunara",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Zeri",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ziggs",
+            "status": "open"
+          }
+        ],
+        "jungle": [
+          {
+            "best": null,
+            "champion": "JarvanIV",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "LeeSin",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "MonkeyKing",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Naafiri",
+            "status": "banned"
+          },
+          {
+            "best": null,
+            "champion": "Qiyana",
+            "status": "banned"
+          },
+          {
+            "best": null,
+            "champion": "Shyvana",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Vi",
+            "status": "picked"
+          },
+          {
+            "best": null,
+            "champion": "XinZhao",
+            "status": "open"
+          }
+        ],
+        "mid": [
+          {
+            "best": null,
+            "champion": "Ahri",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Cassiopeia",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Galio",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Locke",
+            "status": "picked"
+          },
+          {
+            "best": null,
+            "champion": "Nasus",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Orianna",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Ryze",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Syndra",
+            "status": "open"
+          }
+        ],
+        "support": [
+          {
+            "best": null,
+            "champion": "Alistar",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Bard",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Leona",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Lulu",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Milio",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Nami",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Nautilus",
+            "status": "open"
+          },
+          {
+            "best": null,
+            "champion": "Renata",
+            "status": "open"
+          }
+        ]
+      },
+      "mover": "Blue",
+      "notes": "TEST DATA for the Tier B review tool's development / holdout split: labelled-position.json as a holdout position (draft ho-scored), its scored verdict entry kept: a revealed holdout, which the loader warns on and the run still writes sealed. Not a real fixture; the labels are made up.",
+      "open_roles": [
+        [
+          "jungle",
+          "mid",
+          "adc",
+          "support"
+        ]
+      ],
+      "options": {
+        "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": {
+          "action": [
+            "Ahri",
+            "LeeSin"
+          ],
+          "comp": {
+            "jungle": "LeeSin",
+            "mid": "Ahri",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "LeeSin",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona": {
+          "action": [
+            "Ahri",
+            "Leona"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Ahri",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Ahri+Milio|top=Rumble,mid=Ahri,support=Milio": {
+          "action": [
+            "Ahri",
+            "Milio"
+          ],
+          "comp": {
+            "mid": "Ahri",
+            "support": "Milio",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ahri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Milio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Cassiopeia"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Cassiopeia",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Cassiopeia",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Galio"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Galio",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Kaisa|top=Rumble,adc=Kaisa,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Kaisa"
+          ],
+          "comp": {
+            "adc": "Kaisa",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Kaisa",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Alistar+MonkeyKing|top=Rumble,jungle=MonkeyKing,support=Alistar": {
+          "action": [
+            "Alistar",
+            "MonkeyKing"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Alistar+Syndra|top=Rumble,mid=Syndra,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Syndra"
+          ],
+          "comp": {
+            "mid": "Syndra",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Syndra",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zeri"
+          ],
+          "band": "blind",
+          "comp": {
+            "adc": "Zeri",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar": {
+          "action": [
+            "Alistar",
+            "Zyra"
+          ],
+          "band": "later",
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Alistar",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Alistar",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Aphelios+Leona|top=Rumble,adc=Aphelios,support=Leona": {
+          "action": [
+            "Aphelios",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Aphelios",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Aphelios",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Bard+Galio|top=Rumble,mid=Galio,support=Bard": {
+          "action": [
+            "Bard",
+            "Galio"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Bard",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Bard",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona": {
+          "action": [
+            "Cassiopeia",
+            "Leona"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Cassiopeia",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Cassiopeia",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Ezreal+Leona|top=Rumble,adc=Ezreal,support=Leona": {
+          "action": [
+            "Ezreal",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Ezreal",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Ezreal",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+Leona|top=Rumble,mid=Galio,support=Leona": {
+          "action": [
+            "Galio",
+            "Leona"
+          ],
+          "band": "blind",
+          "comp": {
+            "mid": "Galio",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": {
+          "action": [
+            "Galio",
+            "MonkeyKing"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Galio",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Galio+Nautilus|top=Rumble,mid=Galio,support=Nautilus": {
+          "action": [
+            "Galio",
+            "Nautilus"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Nautilus",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Nautilus",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Galio+Renata|top=Rumble,mid=Galio,support=Renata": {
+          "action": [
+            "Galio",
+            "Renata"
+          ],
+          "comp": {
+            "mid": "Galio",
+            "support": "Renata",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Galio",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            },
+            {
+              "champion": "Renata",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "JarvanIV+Leona|top=Rumble,jungle=JarvanIV,support=Leona": {
+          "action": [
+            "JarvanIV",
+            "Leona"
+          ],
+          "comp": {
+            "jungle": "JarvanIV",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "JarvanIV",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Kalista+Leona|top=Rumble,adc=Kalista,support=Leona": {
+          "action": [
+            "Kalista",
+            "Leona"
+          ],
+          "comp": {
+            "adc": "Kalista",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Kalista",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "LeeSin+Leona|top=Rumble,jungle=LeeSin,support=Leona": {
+          "action": [
+            "LeeSin",
+            "Leona"
+          ],
+          "comp": {
+            "jungle": "LeeSin",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "LeeSin",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            }
+          ]
+        },
+        "Leona+Lucian|top=Rumble,adc=Lucian,support=Leona": {
+          "action": [
+            "Leona",
+            "Lucian"
+          ],
+          "comp": {
+            "adc": "Lucian",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Lucian",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona": {
+          "action": [
+            "Leona",
+            "Nasus"
+          ],
+          "band": "later",
+          "comp": {
+            "mid": "Nasus",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Nasus",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 0.3681241184767278,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Orianna|top=Rumble,mid=Orianna,support=Leona": {
+          "action": [
+            "Leona",
+            "Orianna"
+          ],
+          "comp": {
+            "mid": "Orianna",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Orianna",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Ryze|top=Rumble,mid=Ryze,support=Leona": {
+          "action": [
+            "Leona",
+            "Ryze"
+          ],
+          "comp": {
+            "mid": "Ryze",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Ryze",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Leona+Shyvana|top=Rumble,jungle=Shyvana,support=Leona": {
+          "action": [
+            "Leona",
+            "Shyvana"
+          ],
+          "comp": {
+            "jungle": "Shyvana",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Shyvana",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Leona+XinZhao|top=Rumble,jungle=XinZhao,support=Leona": {
+          "action": [
+            "Leona",
+            "XinZhao"
+          ],
+          "comp": {
+            "jungle": "XinZhao",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "XinZhao",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Leona+Yunara|top=Rumble,adc=Yunara,support=Leona": {
+          "action": [
+            "Leona",
+            "Yunara"
+          ],
+          "comp": {
+            "adc": "Yunara",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Yunara",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona": {
+          "action": [
+            "Leona",
+            "Zeri"
+          ],
+          "band": "blind",
+          "comp": {
+            "adc": "Zeri",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": true,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Ziggs|top=Rumble,adc=Ziggs,support=Leona": {
+          "action": [
+            "Leona",
+            "Ziggs"
+          ],
+          "comp": {
+            "adc": "Ziggs",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Ziggs",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona": {
+          "action": [
+            "Leona",
+            "Zyra"
+          ],
+          "band": "later",
+          "comp": {
+            "jungle": "Zyra",
+            "support": "Leona",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": true,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Leona",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zyra",
+              "grade": 0,
+              "in_pool": false,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            }
+          ]
+        },
+        "Lulu+Zeri|top=Rumble,adc=Zeri,support=Lulu": {
+          "action": [
+            "Lulu",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Lulu",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Lulu",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        },
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": {
+          "action": [
+            "MonkeyKing",
+            "Syndra"
+          ],
+          "comp": {
+            "jungle": "MonkeyKing",
+            "mid": "Syndra",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "MonkeyKing",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "jungle"
+            },
+            {
+              "champion": "Syndra",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "mid"
+            }
+          ]
+        },
+        "Nami+Zeri|top=Rumble,adc=Zeri,support=Nami": {
+          "action": [
+            "Nami",
+            "Zeri"
+          ],
+          "comp": {
+            "adc": "Zeri",
+            "support": "Nami",
+            "top": "Rumble"
+          },
+          "margin": false,
+          "row": false,
+          "side": [
+            {
+              "champion": "Rumble",
+              "grade": 0,
+              "in_pool": true,
+              "locked": true,
+              "r": 1.0,
+              "role": "top"
+            },
+            {
+              "champion": "Nami",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "support"
+            },
+            {
+              "champion": "Zeri",
+              "grade": 0,
+              "in_pool": true,
+              "locked": false,
+              "r": 1.0,
+              "role": "adc"
+            }
+          ]
+        }
+      },
+      "pools": {
+        "blue": {
+          "adc": [
+            "Yunara",
+            "Ziggs",
+            "Aphelios",
+            "Ezreal",
+            "Kaisa",
+            "Kalista",
+            "Lucian",
+            "Zeri"
+          ],
+          "jungle": [
+            "Naafiri",
+            "Qiyana",
+            "LeeSin",
+            "JarvanIV",
+            "MonkeyKing",
+            "XinZhao",
+            "Vi",
+            "Shyvana"
+          ],
+          "mid": [
+            "Locke",
+            "Syndra",
+            "Nasus",
+            "Ahri",
+            "Galio",
+            "Cassiopeia",
+            "Orianna",
+            "Ryze"
+          ],
+          "support": [
+            "Bard",
+            "Alistar",
+            "Lulu",
+            "Milio",
+            "Nautilus",
+            "Nami",
+            "Leona",
+            "Renata"
+          ],
+          "top": [
+            "Rumble",
+            "Riven",
+            "Camille",
+            "Ambessa",
+            "KSante",
+            "Aurora",
+            "Zaahen",
+            "Yone"
+          ]
+        },
+        "red": {
+          "adc": [
+            "Ezreal",
+            "Caitlyn",
+            "Jhin",
+            "Jinx",
+            "Kaisa",
+            "Ashe",
+            "Sivir",
+            "Varus"
+          ],
+          "jungle": [
+            "JarvanIV",
+            "Ivern",
+            "Shyvana",
+            "XinZhao",
+            "Vi",
+            "MonkeyKing",
+            "Zaahen",
+            "Aatrox"
+          ],
+          "mid": [
+            "Zilean",
+            "Locke",
+            "Galio",
+            "Chogath",
+            "Orianna",
+            "Ryze",
+            "Syndra",
+            "Viktor"
+          ],
+          "support": [
+            "Bard",
+            "Neeko",
+            "Seraphine",
+            "Rakan",
+            "Amumu",
+            "Alistar",
+            "Braum",
+            "Nami"
+          ],
+          "top": [
+            "Sion",
+            "KSante",
+            "Zaahen",
+            "Ornn",
+            "DrMundo",
+            "Aatrox",
+            "Malphite",
+            "Renekton"
+          ]
+        }
+      },
+      "readings": [],
+      "reference_ranking": [],
+      "review": "2026-10-04 user (scored read, role maps): stay.",
+      "slot": 9,
+      "split": "holdout",
+      "verdicts": [
+        {
+          "finished": "2026-11-09T14:12:41Z",
+          "fm_version": "fm-2026-09-01-6880daa",
+          "from": {
+            "rev": 17,
+            "run": "2026-11-09T14:03:22Z"
+          },
+          "labels": {
+            "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+            "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+          },
+          "mode": "blind",
+          "note": "Syndra mid is not this team.",
+          "positions_patch": "16.19",
+          "started": "2026-11-09T14:10:05Z",
+          "would_pick": [
+            "MonkeyKing",
+            "Galio"
+          ]
+        },
+        {
+          "finished": "2026-11-09T14:33:18Z",
+          "fm_version": "fm-2026-09-01-6880daa",
+          "from": {
+            "rev": 31,
+            "run": "2026-11-09T14:03:22Z"
+          },
+          "labels": {
+            "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": "play",
+            "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "maybe"
+          },
+          "line": {
+            "line": "Zyra",
+            "ok": false,
+            "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio"
+          },
+          "mode": "scored",
+          "positions_patch": "16.19",
+          "started": "2026-11-09T14:31:00Z"
+        }
+      ],
+      "warnings": [
+        "2026-11-09-ho-scored-pinch-slot-9: split: a sealed holdout position has been revealed (a scored verdict entry); the run still writes it sealed"
+      ],
+      "would_pick": {
+        "blind": [
+          "Galio",
+          "MonkeyKing"
+        ],
+        "current": [
+          "Galio",
+          "MonkeyKing"
+        ]
+      }
+    }
+  ],
+  "run": {
+    "arms": [
+      {
+        "id": "pool_or_roster",
+        "rule": "pool_or_roster"
+      },
+      {
+        "id": "roster:0.1:0.05",
+        "p": 0.1,
+        "q": 0.05,
+        "rule": "roster"
+      }
+    ],
+    "data": {
+      "fm_version": "fm-2026-09-01-6880daa",
+      "meta_version": "16.13.1",
+      "positions_patch": "16.19"
+    },
+    "engine": {
+      "commit": "test",
+      "dirty": false,
+      "name": "reference"
+    },
+    "id": "2026-11-09T00:00:00Z",
+    "k": 10,
+    "margin": 0.01,
+    "reference_arm": "roster:0.1:0.05",
+    "search": {
+      "horizon": 2,
+      "node_budget": 20000000,
+      "widths": {
+        "pairs": 20,
+        "root_off_pool": 30,
+        "singles": 10
+      }
+    }
+  },
+  "schema": "tier-b-run/1"
+}

@@ -11,7 +11,7 @@
 
 use super::live::DEFAULT_SYNERGY_WEIGHT;
 use super::state::Action;
-use super::tier_b::{Label, OptionKey};
+use super::tier_b::{CorpusSplit, Label, OptionKey};
 use super::tier_b_review::{score_ranking, OwnPick, PositionScore, ScoredAction, TopClassName};
 use crate::draft_state::Side;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -169,6 +169,9 @@ pub struct PositionInput {
     /// fold's label.
     pub r_labels: Vec<(RBucket, Label)>,
     pub reveal: RevealRead,
+    /// Development positions feed the rule and everything beside it; holdout positions only the
+    /// holdout's own read (engine slice B design § 5).
+    pub split: CorpusSplit,
 }
 
 // ---- the sums ---------------------------------------------------------------------------------------
@@ -1036,6 +1039,20 @@ pub struct Read {
     pub worklist: Worklist,
     /// The `w` read; `None` when no weighted arm is in the run.
     pub weight: Option<WeightRead>,
+    /// The holdout positions' own read; `None` when the run has none.
+    pub holdout: Option<HoldoutRead>,
+}
+
+/// What the run reads of its holdout positions (engine slice B design § 5). Sealed, only their count
+/// and what is left to label; opened, the arms read over them alone.
+#[derive(Clone, Debug)]
+pub struct HoldoutRead {
+    pub positions: usize,
+    pub open: bool,
+    /// Every arm and floor row read over the holdout positions (the rule fold); empty while sealed.
+    pub arms: Vec<ArmScore>,
+    /// The holdout's catalog rows with no label (option ids only, which the page shows anyway).
+    pub unlabelled_rows: Vec<(String, Vec<String>)>,
 }
 
 /// Positions with a clear `never` at #1 at every readable arm: no P or Q fixes those. Empty when no arm
@@ -1071,12 +1088,24 @@ fn reference_top<'a>(arms: &'a [ArmScore], reference: &str, position: &str) -> O
 
 /// Everything of design § 4 over the corpus. `specs` lists the arms then the floor rows; `reference` is
 /// the reference arm's id; `margin` is ε.
+///
+/// The split (engine slice B design § 5): the DEVELOPMENT positions alone feed the arms, the rule, the
+/// sensitivity line, the second line, `never_everywhere`, `r_by_label`, the fallbacks, the worklist and
+/// the `w` read's development side; `reveal_changes` too while the holdout is sealed, every position once
+/// it is opened (`holdout_open`). The holdout positions are read apart (`Read.holdout`), and only when
+/// opened; the `w` read's holdout is `Empty` without a holdout position (opened or not), else `Open` on
+/// their own read when opened, else `Sealed`. With no holdout position every read is as before.
 pub fn read_run(
-    positions: &[&PositionInput],
+    all: &[&PositionInput],
     specs: &[ArmSpec],
     reference: &str,
     margin: f64,
+    holdout_open: bool,
 ) -> Read {
+    let (development, held): (Vec<&PositionInput>, Vec<&PositionInput>) = all
+        .iter()
+        .partition(|p| p.split == CorpusSplit::Development);
+    let positions = &development[..];
     let arms = read_arms(positions, specs, FoldKind::Rule, margin);
     let rule = choose_arm(&arms, reference);
 
@@ -1119,7 +1148,9 @@ pub fn read_run(
 
     let mut reveal = RevealChanges::default();
     let mut by_draft: BTreeMap<&str, (bool, bool)> = BTreeMap::new();
-    for p in positions {
+    // A sealed holdout is not named among the drafts revealed (its `scored` entry is the warning case).
+    let revealed_over = if holdout_open { all } else { positions };
+    for p in revealed_over {
         reveal.blind_labels += p.reveal.blind_labels;
         reveal.blind_picks += usize::from(p.reveal.blind_pick);
         let changed = !p.reveal.label_changes.is_empty() || p.reveal.pick_change.is_some();
@@ -1171,13 +1202,29 @@ pub fn read_run(
         unjudged_lines,
     };
 
-    // Until the split (slice B, task 4) every position is development and the holdout is empty.
-    let weight = weight_read(
-        &arms,
-        reference,
-        DEFAULT_SYNERGY_WEIGHT,
-        HoldoutState::Empty,
-    );
+    let holdout_arms = if holdout_open && !held.is_empty() {
+        read_arms(&held, specs, FoldKind::Rule, margin)
+    } else {
+        Vec::new()
+    };
+    let state = if held.is_empty() {
+        HoldoutState::Empty
+    } else if holdout_open {
+        HoldoutState::Open(&holdout_arms)
+    } else {
+        HoldoutState::Sealed
+    };
+    let weight = weight_read(&arms, reference, DEFAULT_SYNERGY_WEIGHT, state);
+    let holdout = (!held.is_empty()).then(|| HoldoutRead {
+        positions: held.len(),
+        open: holdout_open,
+        unlabelled_rows: held
+            .iter()
+            .filter(|p| !p.unlabelled_rows.is_empty())
+            .map(|p| (p.id.clone(), p.unlabelled_rows.clone()))
+            .collect(),
+        arms: holdout_arms,
+    });
 
     Read {
         never_everywhere: never_everywhere(&arms),
@@ -1198,6 +1245,7 @@ pub fn read_run(
         reveal_changes: reveal,
         worklist,
         weight,
+        holdout,
     }
 }
 

@@ -21,7 +21,7 @@ use engine_core::reference::oracle::{Mode, OracleInput};
 use engine_core::reference::search::{search, SearchParams, Shortlist};
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{
-    Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
+    CorpusSplit, Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
 use engine_core::reference::tier_b_review::{
     draft_of, floor_keep, opponent_charge, render_summary, run_review, run_review_with,
@@ -1084,6 +1084,7 @@ fn review_config() -> ReviewConfig {
         },
         positions_patch: "16.19".to_string(),
         playable_rule: None,
+        holdout_open: false,
     }
 }
 
@@ -3232,6 +3233,7 @@ fn rpos(
         unlabelled_rows: Vec::new(),
         r_labels: Vec::new(),
         reveal: RevealRead::default(),
+        split: CorpusSplit::Development,
     }
 }
 
@@ -3288,7 +3290,7 @@ fn the_rule_reads_the_blind_fold_not_the_current_one() {
         assert_eq!(arms[0].all.never[0], 1, "{mover:?}");
         let current = read_arms(&refs(&ps), &specs_ab(), FoldKind::Current, 0.01);
         assert_eq!(current[0].all.never[0], 0, "{mover:?}");
-        let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+        let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01, false);
         assert_eq!(read.rule.pick.as_deref(), Some(ARM_B), "{mover:?}");
         assert_eq!(
             read.second_line.outcome.pick.as_deref(),
@@ -3324,7 +3326,7 @@ fn the_second_line_is_flagged_only_when_the_pick_differs() {
         &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
     );
     let ps = [p, q];
-    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01, false);
     assert!(!read.second_line.differs);
     assert_eq!(read.second_line.outcome.pick, read.rule.pick);
     assert_eq!((read.fallbacks.labels, read.fallbacks.picks), (2, 1));
@@ -3396,7 +3398,7 @@ fn a_floor_row_is_scored_through_the_seam_and_never_selected() {
         w: None,
     });
     let ps = [p];
-    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01, false);
     // A good ranking: the `never` is last, clear only at k = 10.
     assert_eq!(
         read.arms[3].all.never,
@@ -3469,7 +3471,7 @@ fn sensitivity_re_scores_at_the_other_margins() {
         Some(2),
         &[(ARM_A, a), (ARM_B, b)],
     )];
-    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01, false);
     assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
     assert_eq!(
         read.sensitivity.margins,
@@ -3504,7 +3506,7 @@ fn sensitivity_leaves_each_draft_out_in_turn() {
         mk("p2", "d2", good, bad),
         mk("p3", "d3", good, bad),
     ];
-    let read = read_run(&refs(&ps), &specs_ab(), ARM_B, 0.01);
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_B, 0.01, false);
     assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
     assert_eq!(
         read.sensitivity.leave_out,
@@ -3541,7 +3543,7 @@ fn no_readable_arm_names_the_worklist() {
         line: "Zyra > Karma+Lulu".to_string(),
     });
     let ps = [p];
-    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01, false);
     assert_eq!(read.rule.readable, 0);
     assert!(read.rule.pick.is_none());
     assert_eq!(
@@ -3654,7 +3656,7 @@ fn never_everywhere_needs_every_readable_arm() {
     ];
     let mut specs = specs_ab();
     specs.push(roster_spec(0.2, 0.05));
-    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01, false);
     assert_eq!(read.never_everywhere, ["stuck"]);
     // An arm that is not readable (a silent position) does not hold `fixable` back.
     let mut quiet = mk("fine", good, good, &[]);
@@ -3664,11 +3666,11 @@ fn never_everywhere_needs_every_readable_arm() {
         mk("fixable", bad, bad, bad),
         quiet,
     ];
-    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01, false);
     assert_eq!(read.never_everywhere, ["stuck", "fixable"]);
     // No readable arm, no list.
     let ps = [mk("only", bad, bad, &[])];
-    let read = read_run(&refs(&ps), &[roster_spec(0.2, 0.05)], ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &[roster_spec(0.2, 0.05)], ARM_A, 0.01, false);
     assert!(read.never_everywhere.is_empty());
 }
 
@@ -3702,7 +3704,7 @@ fn r_by_label_buckets_and_sums() {
         (RBucket::One, Label::Play),
     ];
     let ps = [p];
-    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01, false);
     assert_eq!(read.r_by_label.counts[1], [1, 0, 2]);
     assert_eq!(read.r_by_label.counts[5], [0, 1, 0]);
     assert_eq!(read.r_by_label.counts[4], [1, 0, 0]);
@@ -3744,7 +3746,7 @@ fn reveal_changes_lists_differences_and_quiet_reveals() {
         current: None,
     });
     let ps = [changed, picked, mk("b1", "d2", true), mk("c1", "d3", false)];
-    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01, false);
     let rc = &read.reveal_changes;
     assert_eq!(rc.labels.len(), 1);
     assert_eq!(rc.picks.len(), 1);
@@ -4112,7 +4114,7 @@ fn the_second_line_reads_the_current_folds_own_pick() {
     p.arms[0].own_in_pool.push((act(5), true));
     p.arms[1].own_in_pool.push((act(5), true));
     let ps = [p];
-    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01, false);
     assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
     assert_eq!(read.second_line.outcome.pick.as_deref(), Some(ARM_B));
     assert!(read.second_line.differs);
@@ -4295,6 +4297,7 @@ fn test_header(arm_ids: &[&str]) -> RunHeader {
                 w: None,
             })
             .collect(),
+        holdout_open: false,
     }
 }
 
@@ -4502,7 +4505,7 @@ fn the_summary_of_a_readable_run_is_pinned() {
         ),
     ];
     let inputs = refs(&ps);
-    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01, false);
     assert_eq!(
         read.rule.pick.as_deref(),
         Some(ARM_B),
@@ -4586,7 +4589,7 @@ fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() 
             w: None,
         });
     }
-    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01, false);
     assert_eq!(
         read.rule.pick.as_deref(),
         Some(ARM_A),
@@ -4682,7 +4685,7 @@ fn an_empty_continuation_is_no_line_not_unjudged() {
     p.arms[1].top_line = top(1, "");
     let ps = [p];
     let inputs = refs(&ps);
-    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01, false);
     let m = &read.arms[0].all;
     assert_eq!(
         (m.no_line, m.unjudged_line, m.judged_line, m.bad_line),
@@ -4749,7 +4752,7 @@ fn a_pick_line_the_page_cannot_judge_is_marked() {
     p2.arms[1].top_line = top(0, "Zyra");
     let ps = [mk("2026-10-01-a", "2026-10-01", "Karma"), p2];
     let inputs = refs(&ps);
-    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01, false);
     assert_eq!(read.rule.pick.as_deref(), Some(ARM_B), "the premise");
     let lines = &read.worklist.unjudged_lines;
     assert_eq!(lines.len(), 2);
@@ -4812,7 +4815,7 @@ fn a_floor_rows_unjudged_cell_gets_an_upper_bound() {
     });
     let ps = [p];
     let inputs = refs(&ps);
-    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01, false);
     let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
     assert!(text.contains("floor:0.1  r < 0.1  ≥0/"), "{text}");
     assert!(text.contains("  floor:0.1  ≤1 / "), "{text}");
@@ -5237,7 +5240,7 @@ fn weighted_arms_leave_the_axes_the_rows_and_the_sensitivity_alone() {
     };
     let mut specs = specs_ab();
     let plain = positions(false);
-    let without = read_run(&refs(&plain), &specs, ARM_A, 0.01);
+    let without = read_run(&refs(&plain), &specs, ARM_A, 0.01, false);
     specs.push(ArmSpec {
         id: WARM.to_string(),
         role: ArmRole::Weight,
@@ -5246,7 +5249,7 @@ fn weighted_arms_leave_the_axes_the_rows_and_the_sensitivity_alone() {
         w: Some(2.0),
     });
     let weighted_inputs = positions(true);
-    let with = read_run(&refs(&weighted_inputs), &specs, ARM_A, 0.01);
+    let with = read_run(&refs(&weighted_inputs), &specs, ARM_A, 0.01, false);
     // The rows bite: both positions are clear nevers at both roster arms, and the weighted arm is not.
     assert_eq!(without.never_everywhere, ["d1", "d2"]);
     assert_eq!(with.never_everywhere, without.never_everywhere);
@@ -5670,7 +5673,7 @@ fn weight_fixture() -> (Vec<PositionInput>, Vec<ArmSpec>) {
 fn the_summary_prints_the_w_block_with_pick_at_3_for_every_w() {
     let (ps, specs) = weight_fixture();
     let inputs = refs(&ps);
-    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01, false);
     let weight = read.weight.as_ref().expect("weighted arms are present");
     assert_eq!(weight.pick, Some(1.5));
     assert_eq!(weight.reason, Some(WeightReason::HoldoutEmpty));
@@ -5714,7 +5717,7 @@ fn the_summary_prints_the_w_block_with_pick_at_3_for_every_w() {
         &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
     )];
     let inputs = refs(&plain);
-    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01, false);
     assert!(read.weight.is_none());
     let header = test_header(&[ARM_A, ARM_B]);
     assert!(!summary_of(&header, &read, &inputs).contains("Synergy weight"));
@@ -5731,7 +5734,7 @@ fn the_summary_prints_the_w_block_with_pick_at_3_for_every_w() {
 fn the_block_names_an_unreadable_weight_and_shows_an_open_holdout() {
     let (ps, specs) = weight_fixture();
     let inputs = refs(&ps);
-    let mut read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let mut read = read_run(&inputs, &specs, ARM_A, 0.01, false);
     let mut judged = warm(2.0, 2, 2, 2);
     judged.all.unjudged = [1, 1, 0, 0];
     let dev = [wref(2, 2, 2), warm(1.5, 0, 0, 2), judged];
@@ -5762,7 +5765,7 @@ fn metrics_weight_is_the_design_shape_and_the_holdout_only_when_open() {
     let (ps, specs) = weight_fixture();
     let inputs = refs(&ps);
     let header = test_header(&[ARM_A, ARM_B, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
-    let mut read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let mut read = read_run(&inputs, &specs, ARM_A, 0.01, false);
     let wire = engine_core::reference::tier_b_summary::metrics_of(&header, &read, &inputs)
         .expect("labelled");
     let w = &wire["weight"];
@@ -5816,4 +5819,882 @@ fn metrics_weight_is_the_design_shape_and_the_holdout_only_when_open() {
         assert_eq!(a["holdout"]["readable"], json!(true));
         assert_eq!(a["holdout"]["positions"], json!(3));
     }
+}
+
+// ---- Task 4 (slice B): the development / holdout split (engine design § 5, T20-T22) -----------------
+
+fn holdout_data(name: &str) -> Value {
+    review_data(&format!("holdout/{name}"))
+}
+
+/// The loader's warnings about the split, out of the others (data-version mismatches and the like).
+fn split_warnings(l: &Loaded) -> Vec<String> {
+    l.warnings
+        .iter()
+        .filter(|w| w.contains("split"))
+        .cloned()
+        .collect()
+}
+
+/// T20. `split` absent or `"development"` is development; `"holdout"` (on an `ho-` draft) is holdout;
+/// `null` is absent. Anything else is refused naming the field `split`, whatever its JSON type.
+/// Kills: unknown values accepted (read as development); a case-insensitive match; a non-string value
+/// refused by the JSON reader without naming the field.
+#[test]
+fn a_fixtures_split_is_development_or_holdout_and_anything_else_names_the_field() {
+    let live = live();
+    assert_eq!(
+        loaded(&labelled(), &live).fixture.split,
+        CorpusSplit::Development
+    );
+    for value in [json!("development"), Value::Null] {
+        let mut file = labelled();
+        file["split"] = value.clone();
+        assert_eq!(
+            loaded(&file, &live).fixture.split,
+            CorpusSplit::Development,
+            "{value}"
+        );
+    }
+    let ho = loaded(&holdout_data("ho-blind.json"), &live);
+    assert_eq!(ho.fixture.split, CorpusSplit::Holdout);
+    assert!(split_warnings(&ho).is_empty(), "{:?}", ho.warnings);
+    for bad in [
+        json!("Holdout"),
+        json!("dev"),
+        json!(""),
+        json!(1),
+        json!(true),
+    ] {
+        let mut file = labelled();
+        file["split"] = bad.clone();
+        let (field, reason) = invalid(&file, &live);
+        assert_eq!(field, "split", "{bad}");
+        assert_eq!(
+            reason,
+            format!("must be \"development\" or \"holdout\", got {bad}")
+        );
+    }
+}
+
+/// T20, the naming rule from `from_json`, both ways: a holdout whose draft does not start with `ho-`,
+/// and a development fixture (absent, explicit or `null` split) whose draft does, are `SplitName`; a bad
+/// `split` on an `ho-` draft is `SplitValue`. Both stop the run, an ordinary `Invalid` does not, and the
+/// split is checked before anything else the loader refuses.
+/// Kills: the rule one way only; a bad value on an `ho-` draft as an ordinary load error (it would
+/// shrink the holdout silently); a split error that does not stop the run; the split checked after the
+/// format (a holdout fixture with a second mistake would drop out as an ordinary error).
+#[test]
+fn the_ho_rule_holds_both_ways_and_a_bad_split_on_an_ho_draft_stops_the_run() {
+    let live = live();
+    let refused = |file: &Value| load(file, &live).expect_err("refused");
+
+    let mut file = labelled();
+    file["split"] = json!("holdout");
+    let err = refused(&file);
+    assert!(err.stops_the_run(), "{err}");
+    assert!(
+        matches!(&err, TierBError::SplitName { label, id, draft, split }
+            if label == "edited" && id == "labelled-position" && draft == "labelled-position"
+                && *split == CorpusSplit::Holdout),
+        "{err:?}"
+    );
+    assert!(
+        err.to_string().starts_with(
+            "edited: labelled-position: split: a holdout fixture's draft must start with \"ho-\""
+        ),
+        "{err}"
+    );
+
+    for value in [None, Some(json!("development")), Some(Value::Null)] {
+        let mut file = holdout_data("ho-blind.json");
+        match &value {
+            None => {
+                file.as_object_mut().expect("an object").remove("split");
+            }
+            Some(v) => file["split"] = v.clone(),
+        }
+        let err = refused(&file);
+        assert!(err.stops_the_run(), "{value:?}: {err}");
+        assert!(
+            matches!(&err, TierBError::SplitName { draft, split, .. }
+                if draft == "ho-blind" && *split == CorpusSplit::Development),
+            "{value:?}: {err:?}"
+        );
+    }
+
+    let mut file = holdout_data("ho-blind.json");
+    file["split"] = json!("holdOut");
+    let err = refused(&file);
+    assert!(err.stops_the_run(), "{err}");
+    assert!(
+        matches!(&err, TierBError::SplitValue { label, draft, value, .. }
+            if label == "edited" && draft == "ho-blind" && value == "\"holdOut\""),
+        "{err:?}"
+    );
+    assert!(err.to_string().contains("split"), "{err}");
+
+    let mut file = labelled();
+    file["split"] = json!("holdOut");
+    assert!(!refused(&file).stops_the_run());
+
+    let mut file = holdout_data("ho-blind.json");
+    file["split"] = json!("development");
+    file["format"] = json!("fearless");
+    assert!(matches!(refused(&file), TierBError::SplitName { .. }));
+}
+
+/// T20, fail closed (review M1): a fixture whose `id` names an `ho-` draft and that fails to load for
+/// any other reason (a misspelled key the JSON reader refuses, a position the loader refuses) is
+/// `HoldoutUnloadable` and stops the run, naming the file; the same mistakes on a development fixture
+/// stay ordinary load errors.
+/// Kills: a holdout file that fails the JSON read (or any later check) dropped as an ordinary load
+/// error, silently shrinking the holdout; every load error made fatal.
+#[test]
+fn a_holdout_fixture_that_does_not_load_stops_the_run() {
+    let live = live();
+    let rename = |mut file: Value, from: &str, to: &str| {
+        let o = file.as_object_mut().expect("an object");
+        let v = o.remove(from).expect("the key");
+        o.insert(to.to_string(), v);
+        file
+    };
+    let bad_position = |mut file: Value| {
+        file["position"][0]["champion"] = json!("NotAChampion");
+        file
+    };
+    for (name, file) in [
+        (
+            "misspelled split",
+            rename(holdout_data("ho-blind.json"), "split", "Split"),
+        ),
+        (
+            "misspelled notes",
+            rename(holdout_data("ho-blind.json"), "notes", "note"),
+        ),
+        ("bad position", bad_position(holdout_data("ho-blind.json"))),
+    ] {
+        let err = load(&file, &live).expect_err("refused");
+        assert!(err.stops_the_run(), "{name}: {err}");
+        assert!(
+            matches!(&err, TierBError::HoldoutUnloadable { label, id, draft, .. }
+                if label == "edited" && id == "2026-11-09-ho-blind-pinch-slot-9" && draft == "ho-blind"),
+            "{name}: {err:?}"
+        );
+        assert!(err.to_string().starts_with("edited: "), "{name}: {err}");
+    }
+    for (name, file) in [
+        ("misspelled notes", rename(labelled(), "notes", "note")),
+        ("bad position", bad_position(labelled())),
+    ] {
+        let err = load(&file, &live).expect_err("refused");
+        assert!(!err.stops_the_run(), "{name}: {err}");
+    }
+}
+
+/// T20 through `load_dir` (which `load_file` and the binary go through): the two holdout copies load as
+/// holdout, the revealed one with the warning and the blind one without; the misnamed copy's error
+/// carries its path. A `SplitName` reaching `run_review` is listed among `load_errors` like any other
+/// (only the binary stops on it).
+/// Kills: the label taken from the id (it would not name the file); the warning on every holdout, or on
+/// none.
+#[test]
+fn the_holdout_copies_load_and_a_misnamed_one_names_its_file() {
+    let live = live();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/holdout");
+    let results = TierBFixture::load_dir(&dir, &live).expect("the directory reads");
+    assert_eq!(results.len(), 3);
+    let bad = results[0].as_ref().expect_err("bad-name.json is refused");
+    match bad {
+        TierBError::SplitName { label, split, .. } => {
+            assert_eq!(PathBuf::from(label), dir.join("bad-name.json"));
+            assert_eq!(*split, CorpusSplit::Holdout);
+        }
+        other => panic!("expected SplitName, got {other:?}"),
+    }
+    assert!(bad.to_string().contains("bad-name.json"), "{bad}");
+
+    let blind = results[1].as_ref().expect("ho-blind loads");
+    assert_eq!(blind.fixture.split, CorpusSplit::Holdout);
+    assert_eq!(draft_of(&blind.fixture.id), "ho-blind");
+    assert!(split_warnings(blind).is_empty(), "{:?}", blind.warnings);
+    let scored = results[2].as_ref().expect("ho-scored loads");
+    assert_eq!(scored.fixture.split, CorpusSplit::Holdout);
+    assert_eq!(
+        split_warnings(scored),
+        ["2026-11-09-ho-scored-pinch-slot-9: split: a sealed holdout position has been revealed (a scored verdict entry); the run still writes it sealed"]
+    );
+
+    let run = run_review(&results[..1], &live, &review_config());
+    assert!(run.positions.is_empty());
+    assert_eq!(run.load_errors, [bad.to_string()]);
+}
+
+/// Every fixture id of the real corpus on 2026-11-12 with its draft as `draft_of` gave it then.
+const CORPUS_DRAFTS_2026_11_12: [(&str, &str); 23] = [
+    ("2026-09-29-ad-pinch-slot-16-kittens", "ad"),
+    ("2026-09-29-ad-pinch-slot-17-dme", "ad"),
+    ("2026-09-29-ad-pinch-slot-19-kittens", "ad"),
+    ("2026-09-29-mid-pinch-slot-16-kittens", "mid"),
+    ("2026-09-29-mid-pinch-slot-17-dme", "mid"),
+    ("2026-09-29-mid-pinch-slot-19-kittens", "mid"),
+    ("2026-09-29-supp-pinch-slot-16-kittens", "supp"),
+    ("2026-09-29-supp-pinch-slot-17-dme", "supp"),
+    ("2026-09-29-supp-pinch-slot-19-kittens", "supp"),
+    ("2026-09-29-top-pinch-slot-16-kittens", "top"),
+    ("2026-09-29-top-pinch-slot-17-dme", "top"),
+    ("2026-09-29-top-pinch-slot-19-kittens", "top"),
+    ("2026-10-04-ad-pinch-slot-9-dme", "ad"),
+    ("2026-10-04-mid-pinch-slot-7-kittens", "mid"),
+    ("2026-10-04-supp-pinch-slot-11-kittens", "supp"),
+    ("2026-10-04-supp-pinch-slot-17-dme", "supp"),
+    ("2026-10-04-supp-pinch-slot-19-kittens", "supp"),
+    ("2026-10-04-supp-pinch-slot-9-dme", "supp"),
+    ("2026-10-04-top-pinch-slot-11-kittens", "top"),
+    ("2026-10-04-top-pinch-slot-19-kittens", "top"),
+    ("2026-10-04-top-pinch-slot-7-kittens", "top"),
+    ("2026-10-07-synth-dme-adc-pinch-slot-17", "synth-dme-adc"),
+    ("2026-10-07-synth-dme-top-pinch-slot-17", "synth-dme-top"),
+];
+
+/// T20: `draft_of` is unchanged on every id of the corpus (pinned from 2026-11-12, each a file there),
+/// none of them reads as a holdout draft, and an `ho-` id groups as the design's example says.
+/// Kills: `draft_of` changed to know the split (stripping `ho-`, say), which would move the
+/// pre-registered sensitivity line's drafts.
+#[test]
+fn draft_of_is_unchanged_on_every_corpus_id() {
+    let dir = repo_root().join("packages/engine-core/fixtures/tier-b");
+    for (id, draft) in CORPUS_DRAFTS_2026_11_12 {
+        assert_eq!(draft_of(id), draft, "{id}");
+        assert!(!draft.starts_with("ho-"), "{id}");
+        assert!(
+            dir.join(format!("{id}.json")).exists(),
+            "{id} is in the corpus"
+        );
+    }
+    assert_eq!(
+        draft_of("2026-12-02-ho-supp-pinch-slot-9-kittens"),
+        "ho-supp"
+    );
+}
+
+/// T20, the binary: a split error in the corpus (a misnamed holdout, a bad `split` on an `ho-`
+/// draft, an `ho-` fixture that does not load) stops the run with exit 2 naming the file, before any
+/// search and with nothing written, even with a good position beside it. `TIER_B_HOLDOUT` other than `open` is a usage error; `open` writes
+/// `run.holdout_open: true`, and without it the key is absent.
+/// Kills: the binary running past a split error (it would list it among the load errors and search the
+/// rest); `TIER_B_HOLDOUT` ignored; any value read as open.
+#[test]
+fn the_binary_stops_on_a_split_error_naming_the_file_before_any_search() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let base = std::env::temp_dir().join(format!("tier-b-review-split-{}", std::process::id()));
+    let out = base.join("run.json");
+    let command = |fixtures: &PathBuf| {
+        let mut c = std::process::Command::new(exe);
+        c.env("TIER_B_JSON", &out)
+            .env("TIER_B_FIXTURES", fixtures)
+            .env("TIER_B_P", "0.1")
+            .env("TIER_B_Q", "0.05")
+            .env("TIER_B_W", "1")
+            .env("TIER_B_WIDTHS", "10,20,30")
+            .env("TIER_B_DEPTH_CHECK", "0")
+            .env("TIER_B_JOBS", "2")
+            .env("TIER_B_RUN_ID", "2026-11-09T00:00:00Z")
+            .env_remove("TIER_B_HOLDOUT");
+        c
+    };
+    let mut bad_value = holdout_data("ho-blind.json");
+    bad_value["split"] = json!("holdOut");
+    let mut bad_key = holdout_data("ho-blind.json");
+    let notes = bad_key
+        .as_object_mut()
+        .expect("an object")
+        .remove("notes")
+        .expect("notes");
+    bad_key["note"] = notes;
+    for (name, file) in [
+        ("bad-name", holdout_data("bad-name.json")),
+        ("bad-value", bad_value),
+        ("bad-key", bad_key),
+    ] {
+        let dir = base.join(name);
+        std::fs::create_dir_all(&dir).expect("a temp directory");
+        std::fs::write(dir.join("labelled-position.json"), labelled().to_string()).expect("write");
+        let path = dir.join(format!("{name}.json"));
+        std::fs::write(&path, file.to_string()).expect("write");
+        let ran = command(&dir).output().expect("the binary runs");
+        let stderr = String::from_utf8_lossy(&ran.stderr);
+        assert_eq!(ran.status.code(), Some(2), "{name}: {stderr}");
+        assert!(
+            stderr.contains(&path.display().to_string()),
+            "{name}: {stderr}"
+        );
+        assert!(stderr.contains("split"), "{name}: {stderr}");
+        assert!(
+            !stderr.contains("positions,"),
+            "{name}: a run was made: {stderr}"
+        );
+        assert!(!out.exists(), "{name}: a run was written");
+    }
+
+    let por = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let refused = command(&por)
+        .env("TIER_B_HOLDOUT", "yes")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("TIER_B_HOLDOUT"));
+    assert!(!out.exists(), "TIER_B_HOLDOUT=yes: a run was written");
+    for (holdout, opened) in [(Some("open"), Some(&json!(true))), (None, None)] {
+        let mut c = command(&por);
+        if let Some(h) = holdout {
+            c.env("TIER_B_HOLDOUT", h);
+        }
+        let ran = c.output().expect("the binary runs");
+        assert!(
+            ran.status.success(),
+            "{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+        let run: Value =
+            serde_json::from_str(&std::fs::read_to_string(&out).expect("run.json")).expect("json");
+        assert_eq!(run["run"].get("holdout_open"), opened, "{holdout:?}");
+        std::fs::remove_file(&out).expect("clean up");
+    }
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// T21 on constructed positions. Two development positions where arm B is the pick, and a holdout
+/// position with a clear `never@1` at both arms (so at the pick), its own draft, an unlabelled row, an
+/// `r` label, fallbacks and a revealed label change. Sealed or opened, the rule's arms, its pick, the
+/// sensitivity line, the second line, `never_everywhere`, `r_by_label`, the fallbacks and the worklist
+/// are those of the development positions alone. `reveal_changes` reads development while sealed and
+/// both once opened. Opened, the holdout's own arms do read its `never@1` (the position bites).
+/// Kills: the rule (or any read beside it) over every position; `reveal_changes` naming a sealed
+/// holdout draft; an opened holdout read that is not the holdout's.
+#[test]
+fn a_holdout_position_changes_nothing_the_rule_reads() {
+    let dev = |id: &str, draft: &str| {
+        rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        )
+    };
+    let only_dev = [dev("p1", "d1"), dev("p2", "d2")];
+    let without = read_run(&refs(&only_dev), &specs_ab(), ARM_A, 0.01, false);
+    assert_eq!(without.rule.pick.as_deref(), Some(ARM_B));
+    assert!(without.holdout.is_none());
+
+    let mut h = rpos(
+        "ho-p",
+        "ho-h",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &BAD_C2_AT_2)],
+    );
+    h.split = CorpusSplit::Holdout;
+    h.unlabelled_rows = vec!["u1".to_string()];
+    h.r_labels = vec![(RBucket::Below10, Label::Never)];
+    h.label_fallbacks = 3;
+    h.pick_fallback = true;
+    h.reveal = RevealRead {
+        revealed: true,
+        blind_labels: 6,
+        blind_pick: true,
+        label_changes: vec![LabelChange {
+            option: "c0".to_string(),
+            blind: Label::Never,
+            current: Label::Play,
+        }],
+        pick_change: None,
+    };
+    let mut all = only_dev.to_vec();
+    all.push(h);
+    for open in [false, true] {
+        let with = read_run(&refs(&all), &specs_ab(), ARM_A, 0.01, open);
+        assert_eq!(with.arms.len(), without.arms.len());
+        for (a, b) in with.arms.iter().zip(&without.arms) {
+            assert_eq!(a.spec.id, b.spec.id);
+            assert_eq!(a.all, b.all, "{open}: {}", a.spec.id);
+            let ids = |s: &ArmScore| s.rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+            assert_eq!(ids(a), ids(b), "{open}");
+        }
+        assert_eq!(with.rule, without.rule, "{open}");
+        assert_eq!(with.sensitivity, without.sensitivity, "{open}");
+        assert_eq!(with.second_line.outcome, without.second_line.outcome);
+        assert_eq!(with.second_line.differs, without.second_line.differs);
+        assert_eq!(with.never_everywhere, without.never_everywhere, "{open}");
+        assert_eq!(with.r_by_label, without.r_by_label, "{open}");
+        assert_eq!(with.fallbacks, without.fallbacks, "{open}");
+        assert_eq!(with.worklist, without.worklist, "{open}");
+        if open {
+            assert_eq!(with.reveal_changes.drafts_revealed, ["ho-h"]);
+            assert_eq!(with.reveal_changes.labels.len(), 1);
+            assert_eq!(with.reveal_changes.blind_labels, 6);
+        } else {
+            assert_eq!(with.reveal_changes, without.reveal_changes);
+        }
+        let held = with.holdout.as_ref().expect("a holdout position");
+        assert_eq!((held.positions, held.open), (1, open));
+        assert_eq!(
+            held.unlabelled_rows,
+            [("ho-p".to_string(), vec!["u1".to_string()])]
+        );
+        if open {
+            let pick = held
+                .arms
+                .iter()
+                .find(|a| a.spec.id == ARM_B)
+                .expect("the pick, read over the holdout");
+            assert_eq!((pick.all.positions, pick.all.never[0]), (1, 1));
+        } else {
+            assert!(held.arms.is_empty(), "nothing is read of a sealed holdout");
+        }
+    }
+}
+
+/// The `w` read through `read_run`: its arms are read over the development positions only, and its
+/// holdout is `Empty` without a holdout position (opened or not: M3), `Sealed` with one, and `Open` on
+/// the holdout's own read once opened (here a copy of a development position, so the pick holds and is
+/// recommended). The summary's receipt from `w = 1`, labelled development, reads development only.
+/// Kills: the `w` read over every position; `Open(&[])` for an opened run without a holdout; `Sealed`
+/// without a holdout position; a receipt from every position.
+#[test]
+fn read_run_hands_the_w_read_development_arms_and_the_holdout_state() {
+    let (ps, specs) = weight_fixture();
+    for open in [false, true] {
+        let read = read_run(&refs(&ps), &specs, ARM_A, 0.01, open);
+        let w = read.weight.expect("weighted arms");
+        assert_eq!(w.reason, Some(WeightReason::HoldoutEmpty), "{open}");
+        assert!(read.holdout.is_none());
+    }
+    let mut h = ps[0].clone();
+    h.id = "ho-x-a".to_string();
+    h.draft = "ho-x".to_string();
+    h.split = CorpusSplit::Holdout;
+    let mut all = ps.clone();
+    all.push(h);
+    let inputs = refs(&all);
+    let header = test_header(&[ARM_A, ARM_B, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
+    for open in [false, true] {
+        let read = read_run(&inputs, &specs, ARM_A, 0.01, open);
+        let w = read.weight.as_ref().expect("weighted arms");
+        for a in &w.arms {
+            assert_eq!(a.development.positions, 2, "{open}: {}", a.id);
+            assert_eq!(
+                a.holdout.as_ref().map(|(m, _)| m.positions),
+                open.then_some(1),
+                "{open}: {}",
+                a.id
+            );
+        }
+        let drafts: Vec<&str> = w.leave_out.iter().map(|(d, _)| d.as_str()).collect();
+        assert_eq!(drafts, ["d1", "d2"]);
+        if open {
+            assert_eq!((w.recommend, &w.reason), (Some(1.5), &None));
+        } else {
+            assert_eq!(w.reason, Some(WeightReason::HoldoutSealed));
+        }
+        let text = summary_of(&header, &read, &inputs);
+        let at = text
+            .find("  Receipt, w = 1 → w = 1.5 (development):\n")
+            .unwrap_or_else(|| panic!("{text}"));
+        assert!(
+            text[at..]
+                .lines()
+                .nth(1)
+                .expect("a receipt line")
+                .starts_with("    never@1 2 → 0 "),
+            "{text}"
+        );
+    }
+}
+
+/// T22, the summary and `metrics`, constructed. With a holdout position: the corpus line counts every
+/// position, the labels line and `metrics.labels` development only, and the holdout line its count and
+/// label progress. Sealed, that is all (`metrics.holdout` is `{positions, sealed, labels}`); opened, the
+/// holdout's metrics at the reference arm (here also the pick) and at each weighted arm. The worklist
+/// lists the holdout's unlabelled rows apart. Without a holdout position none of it appears.
+/// Kills: a sealed holdout's metrics printed or written; the label counts over both splits; the
+/// holdout's rows mixed into the development worklist; a holdout line without a holdout.
+#[test]
+fn the_summary_and_metrics_carry_the_holdout_count_sealed_and_its_read_opened() {
+    use engine_core::reference::tier_b_summary::metrics_of;
+    let (ps, specs) = weight_fixture();
+    let header = test_header(&[ARM_A, ARM_B, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
+    {
+        let inputs = refs(&ps);
+        let read = read_run(&inputs, &specs, ARM_A, 0.01, true);
+        let text = summary_of(&header, &read, &inputs);
+        assert!(!text.contains("holdout:"), "{text}");
+        assert!(!text.contains("holdout unlabelled"), "{text}");
+        let wire = metrics_of(&header, &read, &inputs).expect("labelled");
+        assert!(wire.get("holdout").is_none());
+        assert!(wire["worklist"].get("holdout_unlabelled_rows").is_none());
+    }
+    let mut h = ps[0].clone();
+    h.id = "ho-x-a".to_string();
+    h.draft = "ho-x".to_string();
+    h.split = CorpusSplit::Holdout;
+    h.unlabelled_rows = vec!["u1".to_string(), "u2".to_string()];
+    h.reveal.blind_labels = 4;
+    let mut all = ps.clone();
+    all.push(h);
+    let inputs = refs(&all);
+
+    let sealed = read_run(&inputs, &specs, ARM_A, 0.01, false);
+    let text = summary_of(&header, &sealed, &inputs);
+    assert!(text.contains("\n3 positions, 4 arms, "), "{text}");
+    assert!(
+        text.contains("labels: 12 options over 2 of 2 positions "),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "\nholdout: 1 positions, sealed (blind labels 4, own picks 1, unlabelled rows 2)\n"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("on the holdout"), "{text}");
+    assert!(
+        text.contains(
+            "\n  holdout unlabelled rows: 2 over 1 positions\n    ho-x-a: 2\n      u1\n      u2\n"
+        ),
+        "{text}"
+    );
+    let wire = metrics_of(&header, &sealed, &inputs).expect("labelled");
+    assert_eq!(wire["labels"]["positions"], json!(2));
+    assert_eq!(wire["labels"]["options"], json!(12));
+    let held = &wire["holdout"];
+    assert_eq!(
+        held.as_object()
+            .expect("an object")
+            .keys()
+            .collect::<Vec<_>>(),
+        ["labels", "positions", "sealed"]
+    );
+    assert_eq!(
+        (&held["positions"], &held["sealed"]),
+        (&json!(1), &json!(true))
+    );
+    assert_eq!(held["labels"]["positions"], json!(1));
+    assert_eq!(held["labels"]["blind_options"], json!(4));
+    assert_eq!(held["labels"]["own_picks"], json!(1));
+    assert_eq!(
+        wire["worklist"]["holdout_unlabelled_rows"],
+        json!([{"position": "ho-x-a", "rows": ["u1", "u2"]}])
+    );
+    assert!(array(&wire["worklist"]["unlabelled_rows"], "rows").is_empty());
+
+    let opened = read_run(&inputs, &specs, ARM_A, 0.01, true);
+    let text = summary_of(&header, &opened, &inputs);
+    let at = text
+        .find("\nholdout: 1 positions, opened (blind labels 4, own picks 1, unlabelled rows 2); never@1 / never@3 / pick@3 over it:\n")
+        .unwrap_or_else(|| panic!("{text}"));
+    let block: Vec<&str> = text[at + 1..].lines().skip(1).take(3).collect();
+    assert_eq!(
+        block,
+        [
+            "  reference = pick, roster:0.1:0.05  1/1/1  readable",
+            "  weight, roster:0.1:0.05:w1.5  0/0/1  readable",
+            "  weight, roster:0.1:0.05:w2  1/1/1  readable",
+        ],
+        "{text}"
+    );
+    let wire = metrics_of(&header, &opened, &inputs).expect("labelled");
+    let held = &wire["holdout"];
+    assert_eq!(held["sealed"], json!(false));
+    assert_eq!(held["reference"]["positions"], json!(1));
+    assert_eq!(held["reference"]["never"][0], json!(1));
+    assert_eq!(held["pick"], held["reference"]);
+}
+
+/// The labelled position under `k` 10 (narrow widths; no depth check, which the pinned run below
+/// carries), alone and beside a holdout copy whose blind entry calls the reference arm's #1 (and
+/// anything within ε of it) `never` (no rule pick is readable here, so the reference arm is where the
+/// worklist reads), the copy sealed and opened: `(alone, sealed, opened)` as normalised JSON and the
+/// two summaries.
+fn split_runs() -> &'static (Value, Value, Value, String, String) {
+    static RUNS: std::sync::OnceLock<(Value, Value, Value, String, String)> =
+        std::sync::OnceLock::new();
+    RUNS.get_or_init(|| {
+        let live = live();
+        // `depth_config`'s narrow widths keep the three runs cheap; the grid is `review_config`'s.
+        let cfg = ReviewConfig {
+            k: 10,
+            shortlist: depth_config().shortlist,
+            ..review_config()
+        };
+        let alone = run_of(&[labelled()], &cfg, &live);
+        let alone_v = normalised(&alone);
+        let reading = array(&alone_v["positions"][0]["readings"], "readings")
+            .iter()
+            .find(|r| r["arm"] == REFERENCE_ARM)
+            .expect("the reference arm's reading");
+        // The #1 and everything within ε of it `never`, so the #1 is a clear `never` (not a near tie
+        // with an unlabelled #2, which would read unjudged).
+        let ranked = array(&reading["ranked"], "ranked");
+        let first = number(&ranked[0]["value"], "the #1's value");
+        let mut copy = holdout_data("ho-blind.json");
+        for r in ranked {
+            if (first - number(&r["value"], "value")).abs() <= cfg.margin {
+                copy["verdicts"][0]["labels"][text(&r["option"], "option")] = json!("never");
+            }
+        }
+        let files = [labelled(), copy];
+        let sealed = run_of(&files, &cfg, &live);
+        let opened = run_of(
+            &files,
+            &ReviewConfig {
+                holdout_open: true,
+                ..cfg.clone()
+            },
+            &live,
+        );
+        (
+            alone_v,
+            normalised(&sealed),
+            normalised(&opened),
+            render_summary(&sealed),
+            render_summary(&opened),
+        )
+    })
+}
+
+/// T21 in a run: beside the labelled position, a holdout copy with a clear `never@1` at the reference
+/// arm changes nothing the rule reads, sealed or opened (the arms, the rule, sensitivity, second line,
+/// `never_everywhere`, `r_by_label`, the labels and the worklist of `metrics`, and the development
+/// position's own JSON), while the opened holdout read shows the `never@1`; `reveal_changes` takes the
+/// holdout in only once opened.
+/// Kills: the runner handing the rule every position; a development position written differently
+/// because a holdout one is in the run.
+#[test]
+fn a_holdout_copy_in_a_run_moves_nothing_the_rule_reads() {
+    let (alone, sealed, opened, _, _) = split_runs();
+    for (name, run) in [("sealed", sealed), ("opened", opened)] {
+        for key in [
+            "labels",
+            "arms",
+            "rule",
+            "sensitivity",
+            "second_line",
+            "never_everywhere",
+            "r_by_label",
+        ] {
+            assert_eq!(run["metrics"][key], alone["metrics"][key], "{name}: {key}");
+        }
+        for key in [
+            "unlabelled_rows",
+            "lines_at",
+            "unjudged_lines",
+            "not_judgeable",
+        ] {
+            assert_eq!(
+                run["metrics"]["worklist"][key], alone["metrics"]["worklist"][key],
+                "{name}: worklist.{key}"
+            );
+        }
+        assert_eq!(run["positions"][0], alone["positions"][0], "{name}");
+    }
+    assert_eq!(
+        opened["metrics"]["holdout"]["reference"]["never"][0],
+        json!(1)
+    );
+    assert!(sealed["metrics"]["holdout"].get("reference").is_none());
+    // `reveal_changes` reads development while sealed, both splits once opened (the copy's blind labels
+    // and pick count there; it has no `scored` entry, so no draft of it is revealed).
+    let reveal = |run: &Value| run["metrics"]["reveal_changes"].clone();
+    assert_eq!(reveal(sealed), reveal(alone));
+    let (o, a) = (reveal(opened), reveal(alone));
+    assert!(number(&o["blind_labels"], "n") > number(&a["blind_labels"], "n"));
+    assert_eq!(
+        number(&o["blind_picks"], "n"),
+        number(&a["blind_picks"], "n") + 1.0
+    );
+    assert_eq!(o["drafts_revealed"], a["drafts_revealed"]);
+}
+
+/// Every object key anywhere under `v`.
+fn keys_under(v: &Value, into: &mut BTreeSet<String>) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o {
+                into.insert(k.clone());
+                keys_under(x, into);
+            }
+        }
+        Value::Array(a) => a.iter().for_each(|x| keys_under(x, into)),
+        _ => {}
+    }
+}
+
+/// T22 in a run. Sealed, the holdout position is written with its ranked keys kept and emptied
+/// (`readings`, `reference_ranking`, every `menu` best; `depth_check.top_3` is the pinned run's), no key that carries a rank
+/// or a value anywhere in it, and on every row a `band` that is the page's split of the opened run's
+/// `reach` and `margin` (both bands occur at `k` 10); no `reach`. Everything else is the opened run's.
+/// `split` is written on the holdout position only, `run.holdout_open` on the opened run only, and the
+/// summary and `metrics` carry the sealed holdout's count, not its read. Opened, all of it is present.
+/// Kills: sealing only the printout; an absent key (the page builder maps them unguarded); `band` from
+/// another rule; `reach` left in; `split` on every position.
+#[test]
+fn a_sealed_holdout_position_is_written_with_nothing_ranked_or_valued() {
+    let (_, sealed, opened, sealed_text, opened_text) = split_runs();
+    assert!(sealed["run"].get("holdout_open").is_none());
+    assert_eq!(opened["run"]["holdout_open"], json!(true));
+    for run in [sealed, opened] {
+        assert!(run["positions"][0].get("split").is_none());
+        assert_eq!(run["positions"][1]["split"], "holdout");
+    }
+    let (s, o) = (&sealed["positions"][1], &opened["positions"][1]);
+
+    assert_eq!(s["readings"], json!([]));
+    assert_eq!(s["reference_ranking"], json!([]));
+    assert!(!array(&o["readings"], "readings").is_empty());
+    assert!(!array(&o["reference_ranking"], "ranking").is_empty());
+    let menu_bests = |p: &Value| -> Vec<Value> {
+        p["menu"]
+            .as_object()
+            .expect("menu")
+            .values()
+            .flat_map(|entries| {
+                array(entries, "menu entries")
+                    .iter()
+                    .map(|e| e["best"].clone())
+            })
+            .collect()
+    };
+    assert!(!menu_bests(s).is_empty());
+    assert!(menu_bests(s).iter().all(Value::is_null));
+    assert!(menu_bests(o).iter().any(|b| !b.is_null()));
+
+    let mut sealed_keys = BTreeSet::new();
+    keys_under(s, &mut sealed_keys);
+    let mut opened_keys = BTreeSet::new();
+    keys_under(o, &mut opened_keys);
+    for key in [
+        "rank",
+        "value",
+        "reach",
+        "gain_logit",
+        "gain_pp",
+        "mover_win_pct",
+        "best_in_pool",
+    ] {
+        assert!(!sealed_keys.contains(key), "sealed: {key}");
+        assert!(opened_keys.contains(key), "opened: {key}");
+    }
+
+    let (so, oo) = (
+        s["options"].as_object().expect("options"),
+        o["options"].as_object().expect("options"),
+    );
+    assert_eq!(so.keys().collect::<Vec<_>>(), oo.keys().collect::<Vec<_>>());
+    let mut bands = BTreeSet::new();
+    for (id, opt) in so {
+        let open = &oo[id];
+        let expected = (open["row"] == json!(true)).then(|| {
+            let blind =
+                open["reach"].as_u64().is_some_and(|r| r <= 5) || open["margin"] == json!(true);
+            if blind {
+                "blind"
+            } else {
+                "later"
+            }
+        });
+        assert_eq!(opt.get("band").and_then(Value::as_str), expected, "{id}");
+        bands.extend(expected);
+        assert!(open.get("band").is_none(), "{id}");
+        assert!(open.get("reach").is_some(), "{id}");
+        let mut a = opt.clone();
+        a.as_object_mut().expect("an option").remove("band");
+        let mut b = open.clone();
+        b.as_object_mut().expect("an option").remove("reach");
+        assert_eq!(a, b, "{id}");
+    }
+    assert_eq!(bands, BTreeSet::from(["blind", "later"]));
+
+    let strip = |p: &Value| {
+        let mut p = p.clone();
+        let o = p.as_object_mut().expect("a position");
+        for key in ["readings", "reference_ranking", "menu", "options"] {
+            o.remove(key);
+        }
+        p
+    };
+    assert_eq!(strip(s), strip(o));
+
+    assert!(
+        sealed_text.contains("\nholdout: 1 positions, sealed (blind labels "),
+        "{sealed_text}"
+    );
+    assert!(!sealed_text.contains("over it:"), "{sealed_text}");
+    assert!(
+        opened_text.contains("; never@1 / never@3 / pick@3 over it:\n"),
+        "{opened_text}"
+    );
+    assert_eq!(sealed["metrics"]["holdout"]["sealed"], json!(true));
+    assert_eq!(opened["metrics"]["holdout"]["sealed"], json!(false));
+}
+
+/// The sealed run of the two holdout copies alone (`ho-blind.json`, `ho-scored.json`; `k` 10, one arm,
+/// the depth check), pinned in `runs/sealed-run.json` for the page's test (Task 5; Node never runs
+/// Rust). Holdout positions only, so every ranked key is emptied and nothing the floor's data moves is
+/// written. `UPDATE_SEALED_RUN=1` rewrites the file.
+/// Kills: any drift in the sealed write the page reads (a key renamed, added or dropped).
+#[test]
+fn the_sealed_run_of_the_holdout_copies_is_pinned_for_the_page() {
+    let cfg = ReviewConfig {
+        k: 10,
+        ..depth_config()
+    };
+    let run = run_value(
+        &[
+            holdout_data("ho-blind.json"),
+            holdout_data("ho-scored.json"),
+        ],
+        &cfg,
+        &live(),
+    );
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data/tier-b-review/runs/sealed-run.json");
+    if std::env::var("UPDATE_SEALED_RUN").as_deref() == Ok("1") {
+        let text = serde_json::to_string_pretty(&run).expect("serialises") + "\n";
+        std::fs::write(&path, text).expect("write the pinned run");
+    }
+    let pinned: Value = serde_json::from_str(
+        &std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
+    )
+    .expect("the pinned run is JSON");
+    assert_eq!(
+        run, pinned,
+        "re-pin with UPDATE_SEALED_RUN=1 if the change is meant"
+    );
+
+    assert!(run["run"].get("holdout_open").is_none());
+    let positions = array(&run["positions"], "positions");
+    assert_eq!(positions.len(), 2);
+    let mut bands = BTreeSet::new();
+    for p in positions {
+        assert_eq!(p["split"], "holdout");
+        assert_eq!(p["readings"], json!([]));
+        assert_eq!(p["reference_ranking"], json!([]));
+        // The depth check keeps its verdicts (no rank or value) and empties its top three.
+        assert_eq!(p["depth_check"]["top_3"], json!([]));
+        assert!(p["depth_check"]["stable"].is_boolean());
+        for opt in p["options"].as_object().expect("options").values() {
+            assert!(opt.get("reach").is_none());
+            bands.extend(opt.get("band").and_then(Value::as_str).map(String::from));
+        }
+    }
+    assert_eq!(
+        bands,
+        BTreeSet::from(["blind".to_string(), "later".to_string()])
+    );
 }

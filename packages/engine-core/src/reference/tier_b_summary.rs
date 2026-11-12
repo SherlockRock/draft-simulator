@@ -7,10 +7,12 @@
 //!
 //! Every `[n; 4]` array in `metrics` is indexed by `ks` (`[1, 3, 5, 10]`, `SCORE_KS`).
 
+use super::tier_b::CorpusSplit;
 use super::tier_b_review::{OwnPick, PositionScore, ReviewRun, RunHeader, SCORE_KS};
 use super::tier_b_rule::{
-    grid_axes, receipt, ArmRole, ArmScore, Axis, Edge, EdgeSide, LineState, Metrics, PositionInput,
-    RBucket, Read, Receipt, RuleOutcome, Split, WeightArm, WeightRead, FLOOR_RATIOS,
+    grid_axes, readable_metrics, receipt, ArmRole, ArmScore, Axis, Edge, EdgeSide, HoldoutRead,
+    LineState, Metrics, PositionInput, RBucket, Read, Receipt, RuleOutcome, Split, WeightArm,
+    WeightRead, FLOOR_RATIOS,
 };
 use serde_json::{json, Value};
 
@@ -42,6 +44,15 @@ pub fn label_counts(positions: &[&PositionInput]) -> LabelCounts {
             usize::from(!s.current.labels.is_empty() || s.current.own_pick.is_some());
     }
     c
+}
+
+/// The positions of one split (engine slice B design § 5): label counts are kept per split.
+fn of_split<'a>(inputs: &[&'a PositionInput], split: CorpusSplit) -> Vec<&'a PositionInput> {
+    inputs
+        .iter()
+        .copied()
+        .filter(|p| p.split == split)
+        .collect()
 }
 
 fn ids(arm: &ArmScore, keep: impl Fn(&PositionScore) -> bool) -> Vec<&str> {
@@ -211,12 +222,46 @@ pub fn metrics_json_of(run: &ReviewRun) -> Option<Value> {
     metrics_of(&run.run, &run.read, &inputs)
 }
 
+/// The label counts as `metrics` writes them (`labels`, and the holdout's own).
+fn labels_json(c: &LabelCounts) -> Value {
+    json!({
+        "positions": c.positions,
+        "labelled_positions": c.labelled_positions,
+        "options": c.options,
+        "blind_options": c.blind_options,
+        "scored_only_options": c.options.saturating_sub(c.blind_options),
+        "own_picks": c.own_picks,
+        "blind_picks": c.blind_picks,
+    })
+}
+
+/// `metrics.holdout` (engine slice B design § 5): sealed, the count and the label progress only;
+/// opened, also the holdout's metrics at the reference arm and at the P x Q pick (`null` without one).
+fn holdout_json(h: &RunHeader, read: &Read, held: &HoldoutRead, counts: &LabelCounts) -> Value {
+    let mut v = json!({
+        "positions": held.positions,
+        "sealed": !held.open,
+        "labels": labels_json(counts),
+    });
+    if let (true, Value::Object(o)) = (held.open, &mut v) {
+        let at = |id: Option<&str>| {
+            id.and_then(|id| held.arms.iter().find(|a| a.spec.id == id))
+                .map_or(Value::Null, |a| metrics_json(&a.all))
+        };
+        o.insert("reference".to_string(), at(Some(&h.reference_arm)));
+        o.insert("pick".to_string(), at(read.rule.pick.as_deref()));
+    }
+    v
+}
+
 /// The same from its parts, so a constructed `Read` can be shown without running a search.
 pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Option<Value> {
-    let counts = label_counts(inputs);
-    if counts.labelled_positions == 0 {
+    // Present when any position, of either split, carries a label or an own pick; `labels` counts the
+    // development positions, `holdout.labels` the holdout's.
+    if label_counts(inputs).labelled_positions == 0 {
         return None;
     }
+    let counts = label_counts(&of_split(inputs, CorpusSplit::Development));
     let r_by_label: Vec<Value> = RBucket::ALL
         .iter()
         .enumerate()
@@ -284,6 +329,20 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
     // Present only when weighted arms exist (a run without them serialises as before).
     if let (Some(w), Value::Object(o)) = (&read.weight, &mut block) {
         o.insert("weight".to_string(), weight_json(w));
+    }
+    // Present only when the run has holdout positions.
+    if let (Some(held), Value::Object(o)) = (&read.holdout, &mut block) {
+        let counts = label_counts(&of_split(inputs, CorpusSplit::Holdout));
+        o.insert("holdout".to_string(), holdout_json(h, read, held, &counts));
+        if let Some(Value::Object(w)) = o.get_mut("worklist") {
+            w.insert(
+                "holdout_unlabelled_rows".to_string(),
+                held.unlabelled_rows
+                    .iter()
+                    .map(|(p, rows)| json!({"position": p, "rows": rows}))
+                    .collect(),
+            );
+        }
     }
     Some(block)
 }
@@ -508,6 +567,61 @@ fn weight_text(read: &Read, w: &WeightRead) -> Vec<String> {
     out
 }
 
+fn unlabelled_count(rows: &[(String, Vec<String>)]) -> usize {
+    rows.iter().map(|(_, r)| r.len()).sum()
+}
+
+/// The holdout line (engine slice B design § 5): sealed, its count and label progress only; opened,
+/// also the holdout's cells at the reference arm, the P x Q pick and each weighted arm.
+fn holdout_text(
+    h: &RunHeader,
+    read: &Read,
+    held: &HoldoutRead,
+    counts: &LabelCounts,
+) -> Vec<String> {
+    let mut out = vec![format!(
+        "holdout: {} positions, {} (blind labels {}, own picks {}, unlabelled rows {}){}",
+        held.positions,
+        if held.open { "opened" } else { "sealed" },
+        counts.blind_options,
+        counts.own_picks,
+        unlabelled_count(&held.unlabelled_rows),
+        if held.open {
+            "; never@1 / never@3 / pick@3 over it:"
+        } else {
+            ""
+        }
+    )];
+    if !held.open {
+        return out;
+    }
+    let line = |name: &str, a: &ArmScore| {
+        format!(
+            "  {name}, {}  {}",
+            a.spec.id,
+            side_text(&a.all, readable_metrics(&a.all))
+        )
+    };
+    let find = |id: &str| held.arms.iter().find(|a| a.spec.id == id);
+    match (
+        find(&h.reference_arm),
+        read.rule.pick.as_deref().and_then(find),
+    ) {
+        (Some(r), Some(p)) if r.spec.id == p.spec.id => out.push(line("reference = pick", r)),
+        (r, p) => {
+            for (name, arm) in [("reference", r), ("pick", p)] {
+                if let Some(a) = arm {
+                    out.push(line(name, a));
+                }
+            }
+        }
+    }
+    for a in held.arms.iter().filter(|a| a.spec.role == ArmRole::Weight) {
+        out.push(line("weight", a));
+    }
+    out
+}
+
 fn pick_or_none(p: &Option<String>) -> &str {
     p.as_deref().unwrap_or("none readable")
 }
@@ -529,7 +643,10 @@ pub fn render_summary(run: &ReviewRun) -> String {
 
 /// The same from its parts, so a constructed `Read` can be shown without running a search.
 pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> String {
-    let counts = label_counts(inputs);
+    // The corpus line counts every position; the labels line the development ones, the holdout line
+    // the holdout's (engine slice B design § 5).
+    let corpus = label_counts(inputs);
+    let counts = label_counts(&of_split(inputs, CorpusSplit::Development));
     let mut out = Vec::<String>::new();
     out.push(format!(
         "Tier B review summary: run {} (engine {}{}, data fm {} / meta {} / positions patch {})",
@@ -560,12 +677,12 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
     }
     out.push(format!(
         "{} positions, {} arms, margin ε {}, reference arm {}",
-        counts.positions,
+        corpus.positions,
         h.arms.len(),
         h.margin,
         h.reference_arm
     ));
-    if counts.labelled_positions == 0 {
+    if corpus.labelled_positions == 0 {
         out.push(String::new());
         out.push("No labels yet: nothing to read.".to_string());
         return out.join("\n") + "\n";
@@ -584,6 +701,10 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         "read from the current fold, no blind answer: {} labels, {} own picks",
         read.fallbacks.labels, read.fallbacks.picks
     ));
+    if let Some(held) = &read.holdout {
+        let counts = label_counts(&of_split(inputs, CorpusSplit::Holdout));
+        out.extend(holdout_text(h, read, held, &counts));
+    }
 
     // The P x Q table.
     out.push(String::new());
@@ -808,6 +929,18 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
     for (p, rows) in &read.worklist.unlabelled_rows {
         out.push(format!("    {p}: {}", rows.len()));
         out.extend(rows.iter().map(|r| format!("      {r}")));
+    }
+    // The holdout's rows apart (option ids only, which the page shows anyway).
+    if let Some(held) = &read.holdout {
+        out.push(format!(
+            "  holdout unlabelled rows: {} over {} positions",
+            unlabelled_count(&held.unlabelled_rows),
+            held.unlabelled_rows.len()
+        ));
+        for (p, rows) in &held.unlabelled_rows {
+            out.push(format!("    {p}: {}", rows.len()));
+            out.extend(rows.iter().map(|r| format!("      {r}")));
+        }
     }
     out.push(format!(
         "  #1 lines at {} with no line verdict: {} ({} not judgeable on the page: it offers a verdict only on the reference arm's #1 line)",

@@ -21,7 +21,7 @@ use super::oracle::{Mode, OracleInput};
 use super::search::{search, RankedAction, SearchOutcome, SearchParams, Shortlist};
 use super::state::{Action, Entry, Pools, Position};
 use super::tier_b::{
-    Category, Label, Loaded, OptionKey, ResolvedVerdicts, TierBError, TierBFixture,
+    Category, CorpusSplit, Label, Loaded, OptionKey, ResolvedVerdicts, TierBError, TierBFixture,
 };
 use super::tier_b_rule::{
     canonical_line, line_text, read_run, ArmInput, ArmRole, ArmSpec, Fold, LabelChange, PickChange,
@@ -71,6 +71,9 @@ pub struct ReviewConfig {
     pub positions_patch: String,
     /// The meta's `sources.positions.playableRule`, verbatim (design § 3); `None` where the meta has none.
     pub playable_rule: Option<serde_json::Value>,
+    /// Write the holdout positions in full (`TIER_B_HOLDOUT=open`); sealed otherwise (engine slice B
+    /// design § 5).
+    pub holdout_open: bool,
 }
 
 /// One rule and price. The ids are `pool_or_roster` and `roster:<P>:<Q>` with `f64`'s shortest display;
@@ -194,7 +197,23 @@ pub struct RunHeader {
     pub margin: f64,
     pub reference_arm: String,
     pub arms: Vec<ArmWire>,
+    /// Written only on an opened run (`true`): the page reads a holdout position as sealed without it.
+    #[serde(skip_serializing_if = "is_false")]
+    pub holdout_open: bool,
 }
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_development(s: &CorpusSplit) -> bool {
+    *s == CorpusSplit::Development
+}
+
+/// The page's own split of the rows (`BLIND_REACH` in `scripts/tier-b/review-logic.mjs`): a row
+/// reached at this rank or better, or in a margin set, is labelled blind. The sealed write's `band`
+/// reads it, since a sealed option carries no `reach`.
+pub const BLIND_REACH: usize = 5;
 
 #[derive(Debug, Serialize)]
 pub struct DataStamp {
@@ -303,13 +322,19 @@ pub struct SideWire {
 pub struct OptionRead {
     pub action: Vec<String>,
     pub comp: Option<CompWire>,
-    /// The option's best rank over the roster arms; `null` where none of them ranked it.
-    pub reach: Option<usize>,
+    /// The option's best rank over the roster arms; `null` where none of them ranked it. Absent (the
+    /// outer `None`) on a sealed holdout position, where `band` stands in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reach: Option<Option<usize>>,
     /// `reach` at most K, or in a roster arm's margin set at 3: the options a label is asked for.
     pub row: bool,
     /// In at least one roster arm's margin set at 3 (#3 or above, or within ε below #3, inclusive).
     /// `row` is `reach <= K || margin`.
     pub margin: bool,
+    /// On a sealed holdout position's rows only: `"blind"` or `"later"`, the page's split of the rows
+    /// (`reach <= BLIND_REACH || margin`), which is all the page needs of the `reach` it does not get.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub band: Option<&'static str>,
     pub side: Vec<SideWire>,
 }
 
@@ -461,6 +486,9 @@ pub fn draft_of(id: &str) -> String {
 pub struct PositionRead {
     pub id: String,
     pub draft: String,
+    /// Written only on a holdout position.
+    #[serde(skip_serializing_if = "is_development")]
+    pub split: CorpusSplit,
     pub category: &'static str,
     pub notes: String,
     pub mover: String,
@@ -577,6 +605,16 @@ pub fn run_review_with(
             cfg,
         )
     });
+    // The rule reads every position in memory, as scored; then a sealed holdout position is written
+    // with nothing ranked or valued (engine slice B design § 5), so opening changes only what is written.
+    let read = read_of(&positions, &arms, cfg.margin, cfg.holdout_open);
+    let mut positions = positions;
+    if !cfg.holdout_open {
+        positions
+            .iter_mut()
+            .filter(|p| p.split == CorpusSplit::Holdout)
+            .for_each(seal);
+    }
     let mut run = ReviewRun {
         schema: SCHEMA,
         run: RunHeader {
@@ -601,6 +639,7 @@ pub fn run_review_with(
             k: cfg.k,
             margin: cfg.margin,
             reference_arm: reference_kind().id(),
+            holdout_open: cfg.holdout_open,
             arms: arms
                 .iter()
                 .map(|a| ArmWire {
@@ -621,7 +660,7 @@ pub fn run_review_with(
                 })
                 .collect(),
         },
-        read: read_of(&positions, &arms, cfg.margin),
+        read,
         positions,
         load_errors,
         metrics: None,
@@ -630,8 +669,47 @@ pub fn run_review_with(
     run
 }
 
+/// A sealed holdout position as written (engine slice B design § 5): every key that ranks or values
+/// an option kept and emptied, since the page builder maps them unguarded (`readings`, which takes the
+/// ranks, values, lines and `best_in_pool` with it; `reference_ranking`; every `menu` entry's `best`;
+/// `depth_check.top_3`), and each option's `reach` replaced by the page's `band` on a row. The rest
+/// (ids, sides, `row`, `margin`, labels, verdicts, `base`, the own pick, the board, the pools,
+/// `open_roles`) is kept: the page labels it blind, and apply's staleness check reads `base`.
+fn seal(p: &mut PositionRead) {
+    p.readings.clear();
+    p.reference_ranking.clear();
+    let menu = &mut p.menu;
+    for entries in [
+        &mut menu.top,
+        &mut menu.jungle,
+        &mut menu.mid,
+        &mut menu.adc,
+        &mut menu.support,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for entry in entries {
+            entry.best = None;
+        }
+    }
+    if let Some(d) = &mut p.depth_check {
+        d.top_3.clear();
+    }
+    for o in p.options.values_mut() {
+        let reach = o.reach.take().flatten();
+        o.band = o
+            .row
+            .then_some(if reach.is_some_and(|r| r <= BLIND_REACH) || o.margin {
+                "blind"
+            } else {
+                "later"
+            });
+    }
+}
+
 /// The rule's reading of the whole run: the arms, then the floor rows, through `read_run`.
-fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64) -> Read {
+fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64, holdout_open: bool) -> Read {
     let mut specs: Vec<ArmSpec> = arms
         .iter()
         .map(|a| match a.kind {
@@ -666,7 +744,13 @@ fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64) -> Read {
         w: None,
     }));
     let inputs: Vec<&PositionInput> = positions.iter().map(|p| &p.scoring).collect();
-    read_run(&inputs, &specs, &reference_kind().id(), margin)
+    read_run(
+        &inputs,
+        &specs,
+        &reference_kind().id(),
+        margin,
+        holdout_open,
+    )
 }
 
 /// A floor row's id: `floor:0.1`, `floor:0.25`.
@@ -1380,9 +1464,10 @@ fn read_position(
                 OptionRead {
                     action: ids(e.key.action, u),
                     comp: e.key.comp.as_ref().map(|c| comp_wire(c, u)),
-                    reach: e.reach,
+                    reach: Some(e.reach),
                     row: e.row,
                     margin: e.margin,
+                    band: None,
                     side: side_wire(&e.side, u),
                 },
             )
@@ -1431,6 +1516,7 @@ fn read_position(
     PositionRead {
         id: fx.id.clone(),
         draft: draft_of(&fx.id),
+        split: fx.split,
         scoring,
         depth_check,
         open_roles: open
@@ -1983,6 +2069,7 @@ fn scoring_of(
         arms: arm_inputs,
         unlabelled_rows,
         r_labels,
+        split: fx.split,
         reveal: RevealRead {
             revealed: resolved.revealed,
             blind_labels: resolved.blind.len(),

@@ -18,6 +18,13 @@
 //!   TIER_B_DEPTH_CHECK   [on]; `0` turns it off
 //!   TIER_B_FIXTURES      [<repo>/packages/engine-core/fixtures/tier-b]
 //!   TIER_B_RUN_ID        [the current UTC time, YYYY-MM-DDTHH:MM:SSZ]
+//!   TIER_B_HOLDOUT       [sealed]; `open` writes the holdout positions in full (`run.holdout_open`).
+//!                        Any other value is a usage error. `pnpm tier-b:review --open-holdout` sets it
+//!                        and records the run; do not set it by hand.
+//!
+//! A split error in the corpus (a holdout fixture whose draft does not start with `ho-`, a development
+//! one whose draft does, a bad `split` on an `ho-` draft, an `ho-` fixture that does not load for any
+//! other reason) stops the run with exit 2, naming the file, before any search.
 
 #[path = "../../tests/common/mod.rs"]
 mod common;
@@ -109,6 +116,13 @@ fn main() {
     let Some(json_path) = var("TIER_B_JSON").map(PathBuf::from) else {
         die("TIER_B_JSON is required: the path the run JSON is written to");
     };
+    let holdout_open = match var("TIER_B_HOLDOUT").as_deref() {
+        None => false,
+        Some("open") => true,
+        Some(other) => die(&format!(
+            "TIER_B_HOLDOUT: only \"open\" opens the holdout, got {other:?}"
+        )),
+    };
     let widths: Vec<usize> = list("TIER_B_WIDTHS", DEFAULT_WIDTHS);
     let [singles, pairs, root_off_pool] = widths[..] else {
         die("TIER_B_WIDTHS takes three widths: singles,pairs,root_off_pool");
@@ -166,6 +180,24 @@ fn main() {
         .collect();
     let loaded = TierBFixture::load_dir(&fixtures, &live)
         .unwrap_or_else(|e| die(&format!("{}: {e}", fixtures.display())));
+    // Fail closed (engine slice B design § 5): a run that dropped a holdout position, or read it as
+    // development, would leak it into the rule. Each error names its file.
+    let split_errors: Vec<String> = loaded
+        .iter()
+        .filter_map(|l| l.as_ref().err())
+        .filter(|e| e.stops_the_run())
+        .map(ToString::to_string)
+        .collect();
+    if !split_errors.is_empty() {
+        for e in &split_errors {
+            eprintln!("tier_b_review: split error: {e}");
+        }
+        die(&format!(
+            "{} split error(s) in {}: the run stops before any search",
+            split_errors.len(),
+            fixtures.display()
+        ));
+    }
 
     let cfg = ReviewConfig {
         ps: list("TIER_B_P", DEFAULT_P),
@@ -202,6 +234,7 @@ fn main() {
         },
         positions_patch,
         playable_rule,
+        holdout_open,
     };
 
     let started = Instant::now();

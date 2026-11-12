@@ -13,13 +13,38 @@ use super::format::{Format, Slot};
 use super::live::{LiveError, LiveRoot, LiveUniverse};
 use super::node::legal_actions_under;
 use super::state::{Action, Entry, Pools, Position, PositionError};
+use super::tier_b_review::draft_of;
 use super::universe::{ChampionIdx, ChampionSet, Universe};
 use crate::draft_state::{ActionType, Side};
 use crate::feasibility::ROLES;
 use crate::pools::Role;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+
+/// Which part of the corpus a fixture belongs to (engine slice B design § 5). Named `CorpusSplit`
+/// because `tier_b_rule` already has a `Split` (the receipt's). Development is the default: a fixture
+/// without `split` is development.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CorpusSplit {
+    #[default]
+    Development,
+    Holdout,
+}
+
+impl CorpusSplit {
+    pub fn name(self) -> &'static str {
+        match self {
+            CorpusSplit::Development => "development",
+            CorpusSplit::Holdout => "holdout",
+        }
+    }
+}
+
+/// A holdout fixture's draft token starts with this, and only a holdout's does (design § 5), so
+/// `draft_of` groups by the id as it always has and no draft can mix the splits.
+pub const HOLDOUT_DRAFT_PREFIX: &str = "ho-";
 
 /// D7's tags, plus B-proper's calibration subset.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -549,6 +574,44 @@ fn why_illegal(action: Action, on_board: ChampionSet, excluded: ChampionSet) -> 
     }
 }
 
+/// The fixture's split, and the naming rule checked on it (design § 5), per file: the id's draft
+/// (`draft_of`, unchanged) starts with `ho-` exactly when the split is holdout. A bad value is an
+/// ordinary `Invalid` naming the field, except on an `ho-` draft, where it stops the run.
+fn split_of(file: &TierBFile, label: &str) -> Result<CorpusSplit, TierBError> {
+    let draft = draft_of(&file.id);
+    let ho = draft.starts_with(HOLDOUT_DRAFT_PREFIX);
+    let split = match &file.split {
+        None => CorpusSplit::Development,
+        Some(serde_json::Value::String(s)) if s == "development" => CorpusSplit::Development,
+        Some(serde_json::Value::String(s)) if s == "holdout" => CorpusSplit::Holdout,
+        Some(other) => {
+            return Err(if ho {
+                TierBError::SplitValue {
+                    label: label.to_string(),
+                    id: file.id.clone(),
+                    draft,
+                    value: other.to_string(),
+                }
+            } else {
+                TierBError::Invalid {
+                    id: file.id.clone(),
+                    field: "split".to_string(),
+                    reason: format!("must be \"development\" or \"holdout\", got {other}"),
+                }
+            });
+        }
+    };
+    if ho != (split == CorpusSplit::Holdout) {
+        return Err(TierBError::SplitName {
+            label: label.to_string(),
+            id: file.id.clone(),
+            draft,
+            split,
+        });
+    }
+    Ok(split)
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
@@ -592,6 +655,10 @@ struct TierBFile {
     /// with a string `protocolVersion`; the top-level fields win when the two disagree (warned).
     #[serde(default)]
     capture: Option<serde_json::Value>,
+    /// `"development"` (also when absent) or `"holdout"`; read as JSON and mapped by hand, so a bad
+    /// value is refused naming the field (a serde enum reports "unknown variant" without it).
+    #[serde(default)]
+    split: Option<serde_json::Value>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -616,6 +683,59 @@ pub enum TierBError {
     },
     #[error(transparent)]
     Live(#[from] LiveError),
+    /// The naming rule broken (design § 5): a holdout whose draft does not start with `ho-`, or a
+    /// development fixture whose draft does. `label` is the loader's (the file's path from
+    /// `load_file`). It stops the whole run: the binary exits 2 on it before any search.
+    #[error("{label}: {id}: split: {}", split_name_reason(.split, .draft))]
+    SplitName {
+        label: String,
+        id: String,
+        draft: String,
+        split: CorpusSplit,
+    },
+    /// A `split` that is neither value, on a fixture whose draft starts with `ho-`: fatal like
+    /// `SplitName`, since an ordinary load error would silently shrink the holdout.
+    #[error("{label}: {id}: split: must be \"development\" or \"holdout\", got {value}; the draft {draft:?} starts with \"ho-\", so the run stops")]
+    SplitValue {
+        label: String,
+        id: String,
+        draft: String,
+        value: String,
+    },
+    /// A fixture whose `id` (read best effort from the raw JSON) names an `ho-` draft and that fails
+    /// to load for any other reason (a misspelled key, a bad position, a refused verdict): fatal like
+    /// `SplitName`, since an ordinary load error would drop it and silently shrink the holdout.
+    #[error("{label}: {id}: a holdout fixture (draft {draft:?}) that does not load stops the run: {reason}")]
+    HoldoutUnloadable {
+        label: String,
+        id: String,
+        draft: String,
+        reason: String,
+    },
+}
+
+fn split_name_reason(split: &CorpusSplit, draft: &str) -> String {
+    match split {
+        CorpusSplit::Holdout => format!(
+            "a holdout fixture's draft must start with \"{HOLDOUT_DRAFT_PREFIX}\", and {draft:?} does not; the run stops"
+        ),
+        CorpusSplit::Development => format!(
+            "only a holdout fixture's draft may start with \"{HOLDOUT_DRAFT_PREFIX}\", and {draft:?} is development; the run stops"
+        ),
+    }
+}
+
+impl TierBError {
+    /// A split error stops the whole run (design § 5, fail closed): unlike an ordinary malformed
+    /// fixture it is never listed and skipped.
+    pub fn stops_the_run(&self) -> bool {
+        matches!(
+            self,
+            TierBError::SplitName { .. }
+                | TierBError::SplitValue { .. }
+                | TierBError::HoldoutUnloadable { .. }
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -645,6 +765,7 @@ pub struct TierBFixture {
     pub pools_raw: Option<serde_json::Value>,
     pub capture: Option<serde_json::Value>,
     pub path: Option<PathBuf>,
+    pub split: CorpusSplit,
 }
 
 /// A second, lenient read of the file for its `verdicts` and `pools`, kept as written.
@@ -735,7 +856,32 @@ impl TierBFixture {
         Ok(paths.iter().map(|p| Self::load_file(p, live)).collect())
     }
 
+    /// One fixture from its JSON text. `label` names it in errors (`load_file` passes the path). Fail
+    /// closed (design § 5): any ordinary error on a file whose raw `id` names an `ho-` draft becomes
+    /// `HoldoutUnloadable`, which stops the run.
     pub fn from_json(raw: &str, label: &str, live: &LiveUniverse) -> Result<Loaded, TierBError> {
+        Self::read_json(raw, label, live).map_err(|e| {
+            if e.stops_the_run() {
+                return e;
+            }
+            let id = serde_json::from_str::<serde_json::Value>(raw)
+                .ok()
+                .and_then(|v| v.get("id")?.as_str().map(String::from));
+            match id.map(|id| (draft_of(&id), id)) {
+                Some((draft, id)) if draft.starts_with(HOLDOUT_DRAFT_PREFIX) => {
+                    TierBError::HoldoutUnloadable {
+                        label: label.to_string(),
+                        id,
+                        draft,
+                        reason: e.to_string(),
+                    }
+                }
+                _ => e,
+            }
+        })
+    }
+
+    fn read_json(raw: &str, label: &str, live: &LiveUniverse) -> Result<Loaded, TierBError> {
         let file: TierBFile = serde_json::from_str(raw).map_err(|source| TierBError::Json {
             label: label.to_string(),
             source,
@@ -753,6 +899,7 @@ impl TierBFixture {
             field: field.to_string(),
             reason,
         };
+        let split = split_of(&file, label)?;
         let spec_err = |e: super::entries::SpecError| {
             let (field, reason) = e.field_and_reason();
             TierBError::Invalid {
@@ -945,6 +1092,16 @@ impl TierBFixture {
                 "{id}: role_verdict: no role question at a ban root; the report skips it"
             ));
         }
+        // A sealed holdout should never have been revealed (design § 5): said, and still written sealed.
+        if split == CorpusSplit::Holdout
+            && verdicts_raw
+                .iter()
+                .any(|v| v.get("mode").and_then(serde_json::Value::as_str) == Some("scored"))
+        {
+            warnings.push(format!(
+                "{id}: split: a sealed holdout position has been revealed (a scored verdict entry); the run still writes it sealed"
+            ));
+        }
         // The graded verdicts. At a ban root there is no option to judge: warned, not read (a ban
         // inside the horizon ties on the board, review design D3 iii).
         let verdicts = if file.verdicts.is_empty() {
@@ -1068,6 +1225,7 @@ impl TierBFixture {
                 pools_raw,
                 capture: file.capture,
                 path: None,
+                split,
             },
             warnings,
             notes,

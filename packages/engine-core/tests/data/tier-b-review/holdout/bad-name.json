@@ -1,0 +1,236 @@
+{
+  "id": "labelled-position",
+  "category": "off-pool",
+  "split": "holdout",
+  "notes": "TEST DATA for the Tier B review tool's development / holdout split: labelled-position.json marked holdout under its own, non-ho- id, which breaks the naming rule (TierBError::SplitName). Loaded from a temp directory on its own. Not a real fixture.",
+  "source": {
+    "fm_version": "fm-2026-09-01-6880daa",
+    "meta_version": "16.13.1",
+    "captured": "2026-10-04"
+  },
+  "format": "standard",
+  "position": [
+    {
+      "slot": 0,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zilean"
+    },
+    {
+      "slot": 1,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Qiyana"
+    },
+    {
+      "slot": 2,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Zaahen"
+    },
+    {
+      "slot": 3,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Naafiri"
+    },
+    {
+      "slot": 4,
+      "side": "Blue",
+      "kind": "ban",
+      "champion": "Ivern"
+    },
+    {
+      "slot": 5,
+      "side": "Red",
+      "kind": "ban",
+      "champion": "Ambessa"
+    },
+    {
+      "slot": 6,
+      "side": "Blue",
+      "kind": "pick",
+      "champion": "Rumble"
+    },
+    {
+      "slot": 7,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Vi"
+    },
+    {
+      "slot": 8,
+      "side": "Red",
+      "kind": "pick",
+      "champion": "Locke"
+    }
+  ],
+  "pools": {
+    "blue": {
+      "top": [
+        "Rumble",
+        "Riven",
+        "Camille",
+        "Ambessa",
+        "KSante",
+        "Aurora",
+        "Zaahen",
+        "Yone"
+      ],
+      "jungle": [
+        "Naafiri",
+        "Qiyana",
+        "LeeSin",
+        "JarvanIV",
+        "MonkeyKing",
+        "XinZhao",
+        "Vi",
+        "Shyvana"
+      ],
+      "mid": [
+        "Locke",
+        "Syndra",
+        "Nasus",
+        "Ahri",
+        "Galio",
+        "Cassiopeia",
+        "Orianna",
+        "Ryze"
+      ],
+      "adc": [
+        "Yunara",
+        "Ziggs",
+        "Aphelios",
+        "Ezreal",
+        "Kaisa",
+        "Kalista",
+        "Lucian",
+        "Zeri"
+      ],
+      "support": [
+        "Bard",
+        "Alistar",
+        "Lulu",
+        "Milio",
+        "Nautilus",
+        "Nami",
+        "Leona",
+        "Renata"
+      ]
+    },
+    "red": {
+      "top": [
+        "Sion",
+        "KSante",
+        "Zaahen",
+        "Ornn",
+        "DrMundo",
+        "Aatrox",
+        "Malphite",
+        "Renekton"
+      ],
+      "jungle": [
+        "JarvanIV",
+        "Ivern",
+        "Shyvana",
+        "XinZhao",
+        "Vi",
+        "MonkeyKing",
+        "Zaahen",
+        "Aatrox"
+      ],
+      "mid": [
+        "Zilean",
+        "Locke",
+        "Galio",
+        "Chogath",
+        "Orianna",
+        "Ryze",
+        "Syndra",
+        "Viktor"
+      ],
+      "adc": [
+        "Ezreal",
+        "Caitlyn",
+        "Jhin",
+        "Jinx",
+        "Kaisa",
+        "Ashe",
+        "Sivir",
+        "Varus"
+      ],
+      "support": [
+        "Bard",
+        "Neeko",
+        "Seraphine",
+        "Rakan",
+        "Amumu",
+        "Alistar",
+        "Braum",
+        "Nami"
+      ]
+    }
+  },
+  "our_side": "Blue",
+  "actual_next": [
+    "MonkeyKing",
+    "Galio"
+  ],
+  "verdict": {
+    "off_pool": false
+  },
+  "role_verdict": {
+    "action": [
+      "MonkeyKing",
+      "Galio"
+    ],
+    "roles": [
+      "jungle",
+      "mid"
+    ],
+    "ok": true
+  },
+  "verdicts": [
+    {
+      "started": "2026-11-09T14:10:05Z",
+      "finished": "2026-11-09T14:12:41Z",
+      "mode": "blind",
+      "from": {
+        "run": "2026-11-09T14:03:22Z",
+        "rev": 17
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "would_pick": [
+        "MonkeyKing",
+        "Galio"
+      ],
+      "labels": {
+        "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio": "play",
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "never"
+      },
+      "note": "Syndra mid is not this team."
+    },
+    {
+      "started": "2026-11-09T14:31:00Z",
+      "finished": "2026-11-09T14:33:18Z",
+      "mode": "scored",
+      "from": {
+        "run": "2026-11-09T14:03:22Z",
+        "rev": 31
+      },
+      "fm_version": "fm-2026-09-01-6880daa",
+      "positions_patch": "16.19",
+      "labels": {
+        "MonkeyKing+Syndra|top=Rumble,jungle=MonkeyKing,mid=Syndra": "maybe",
+        "Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri": "play"
+      },
+      "line": {
+        "option": "Galio+MonkeyKing|top=Rumble,jungle=MonkeyKing,mid=Galio",
+        "line": "Zyra",
+        "ok": false
+      }
+    }
+  ],
+  "review": "2026-10-04 user (scored read, role maps): stay."
+}
