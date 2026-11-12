@@ -30,8 +30,9 @@ use engine_core::reference::tier_b_review::{
 };
 use engine_core::reference::tier_b_rule::{
     canonical_line, choose_arm, grid_axes, line_text, read_arms, read_run, readable_metrics,
-    ArmInput, ArmRole, ArmScore, ArmSpec, Axis, Edge, EdgeSide, Fold, FoldKind, LabelChange,
-    LineState, Metrics, PickChange, PositionInput, RBucket, RevealRead, TopLine,
+    weight_read, ArmInput, ArmRole, ArmScore, ArmSpec, Axis, Edge, EdgeSide, Fold, FoldKind,
+    HoldoutState, LabelChange, LineState, Metrics, PickChange, PositionInput, RBucket, RevealRead,
+    TopLine, WeightReason,
 };
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 use serde::Deserialize;
@@ -5262,4 +5263,557 @@ fn weighted_arms_leave_the_axes_the_rows_and_the_sensitivity_alone() {
         weighted.all.never[0], 0,
         "the weighted arm reads on its own rows"
     );
+}
+
+// ---- Task 3 (slice B): the `w` read (engine design § 4, T13-T19) -------------------------------------
+
+/// The reference arm of the `w` read: `ARM_A` at `w₀ = 1`.
+const W0: f64 = 1.0;
+
+fn weight_spec(w: f64) -> ArmSpec {
+    ArmSpec {
+        id: format!("roster:0.1:0.05:w{w}"),
+        role: ArmRole::Weight,
+        p: Some(0.1),
+        q: Some(0.05),
+        w: Some(w),
+    }
+}
+
+/// A weighted arm that reads as the metrics say (`arm_with`'s cached metrics).
+fn warm(w: f64, never_1: usize, never_3: usize, pick_3: usize) -> ArmScore {
+    arm_with(weight_spec(w), never_1, never_3, pick_3)
+}
+
+/// The reference arm of the `w` read, reading as the metrics say.
+fn wref(never_1: usize, never_3: usize, pick_3: usize) -> ArmScore {
+    arm_with(roster_spec(0.1, 0.05), never_1, never_3, pick_3)
+}
+
+/// The `w` read on a development-only list (the holdout empty).
+fn dev_read(arms: &[ArmScore]) -> engine_core::reference::tier_b_rule::WeightRead {
+    weight_read(arms, ARM_A, W0, HoldoutState::Empty).expect("a weighted arm is present")
+}
+
+fn dev_pick(arms: &[ArmScore]) -> Option<f64> {
+    dev_read(arms).pick
+}
+
+/// T13. Each key alone decides between `w = 1` and a weight, in the order `never@1`, `never@3`,
+/// `pick@3`, the last by most; another roster arm that would win every key is not on the `w` axis, and
+/// the weights are readable (`readable_metrics`, not `readable()`, which is false on every weight).
+/// Mutation per key: drop `never@1` (case 1 keeps w = 1), drop `never@3` (case 2), drop `pick@3` (case 3
+/// and 4), fewest instead of most `pick@3` (case 4), the keys read in another order (case 1 or 2);
+/// reading `readable()` (every weight unreadable: all four cases pick w = 1); reading every arm of the
+/// run, not the `w` axis (the roster arm wins).
+#[test]
+fn each_key_alone_decides_between_one_and_a_weight() {
+    let rival = arm_with(roster_spec(0.15, 0.05), 0, 0, 99);
+    let cases: [(ArmScore, ArmScore, f64); 4] = [
+        // never@1 alone, though the weight is worse on both other keys.
+        (wref(1, 0, 9), warm(2.0, 0, 5, 0), 2.0),
+        // never@3 alone, among arms tied on never@1.
+        (wref(1, 2, 9), warm(2.0, 1, 1, 0), 2.0),
+        // pick@3 alone, a larger count wins.
+        (wref(1, 1, 4), warm(2.0, 1, 1, 5), 2.0),
+        // pick@3 the other way: the weight has fewer, so w = 1 stays.
+        (wref(1, 1, 5), warm(2.0, 1, 1, 4), 1.0),
+    ];
+    for (i, (reference, weight, want)) in cases.into_iter().enumerate() {
+        let arms = [rival.clone(), reference, weight];
+        assert_eq!(dev_pick(&arms), Some(want), "case {}", i + 1);
+    }
+}
+
+/// T13. A three-key tie keeps `w = 1`; two tied weights go to the fewest steps from `w = 1` along the
+/// sorted `w` axis (`w₀` on it), then the smaller `w`. An unreadable weight is still on the axis, and
+/// steps count positions on the axis, not distance in `w`.
+/// Mutation: `w₀` missing from the axis
+/// or steps in `w` itself (case 3: 1.5 is nearer to 1 in value than 0.1); the smaller `w` before the
+/// steps (case 2); the larger `w` on equal steps (case 3); an unreadable weight dropped from the axis
+/// (case 4).
+#[test]
+fn ties_keep_one_then_the_fewest_steps_then_the_smaller_w() {
+    // 1: a three-key tie of all three keeps w = 1, though 0.5 is the smaller w.
+    let arms = [wref(1, 1, 1), warm(0.5, 1, 1, 1), warm(2.0, 1, 1, 1)];
+    assert_eq!(dev_pick(&arms), Some(1.0));
+    // 2: axis [0.25, 0.5, 1, 1.5]; 0.25 and 1.5 tie, 1.5 is one step away and 0.25 two.
+    let arms = [
+        wref(2, 2, 0),
+        warm(0.25, 1, 1, 0),
+        warm(0.5, 2, 2, 0),
+        warm(1.5, 1, 1, 0),
+    ];
+    assert_eq!(dev_pick(&arms), Some(1.5));
+    // 3: axis [0.1, 1, 1.5]; both one step away, the smaller w wins (by value 1.5 would be nearer).
+    let arms = [wref(2, 2, 0), warm(0.1, 1, 1, 0), warm(1.5, 1, 1, 0)];
+    assert_eq!(dev_pick(&arms), Some(0.1));
+    // 4: axis [0.25, 0.5, 1, 2] with 0.5 unreadable: 0.25 is two steps, 2 is one.
+    let mut unreadable = warm(0.5, 0, 0, 9);
+    unreadable.all.unjudged = [1, 0, 0, 0];
+    let arms = [
+        wref(2, 2, 0),
+        warm(0.25, 1, 1, 0),
+        unreadable,
+        warm(2.0, 1, 1, 0),
+    ];
+    assert_eq!(dev_pick(&arms), Some(2.0));
+}
+
+/// T14. An unreadable weight is named and left out (its keys are the best; it is not picked); the read
+/// still lists it, unreadable. An unreadable reference arm leaves no read (no pick, no recommendation,
+/// no reason); a weight that does not speak at every position is unreadable too.
+/// Mutation: an unreadable weight picked; unreadable weights dropped from the list; an unreadable
+/// reference arm read anyway; `speaking == positions` not required.
+#[test]
+fn an_unreadable_weight_is_named_and_left_out_and_an_unreadable_reference_gives_no_read() {
+    let mut judged = warm(3.0, 0, 0, 9);
+    judged.all.unjudged = [0, 1, 0, 0];
+    let mut silent = warm(4.0, 0, 0, 9);
+    silent.all.speaking = 2;
+    let arms = [wref(2, 2, 0), judged, silent, warm(2.0, 1, 1, 0)];
+    let read = dev_read(&arms);
+    assert_eq!(read.pick, Some(2.0));
+    let listed: Vec<(f64, bool)> = read
+        .arms
+        .iter()
+        .map(|a| (a.w, a.development_readable))
+        .collect();
+    assert_eq!(
+        listed,
+        [(1.0, true), (3.0, false), (4.0, false), (2.0, true)],
+        "the reference first with w₀, then each weight in run order"
+    );
+    assert_eq!((read.p, read.q), (0.1, 0.05));
+
+    let mut reference = wref(2, 2, 0);
+    reference.all.unjudged = [1, 1, 0, 0];
+    let read = dev_read(&[reference, warm(2.0, 0, 0, 9)]);
+    assert_eq!((read.pick, read.recommend), (None, None));
+    assert!(read.reason.is_none());
+}
+
+/// No weighted arm in the run: no read at all.
+/// Mutation: a read made of the reference arm alone.
+#[test]
+fn no_weighted_arm_is_no_read() {
+    let arms = [wref(1, 1, 1), arm_with(roster_spec(0.15, 0.05), 0, 0, 9)];
+    assert!(weight_read(&arms, ARM_A, W0, HoldoutState::Empty).is_none());
+}
+
+fn open_read(
+    dev: &[ArmScore],
+    hold: &[ArmScore],
+) -> engine_core::reference::tier_b_rule::WeightRead {
+    weight_read(dev, ARM_A, W0, HoldoutState::Open(hold)).expect("a weighted arm is present")
+}
+
+/// T15. A pick better on `never@1` and worse on `never@3` on the holdout is blocked, naming `never@3`;
+/// each key blocks alone (`never@1` worse, `pick@3` lower); equal on every key is not worse; and a pick
+/// that is better everywhere is recommended.
+/// Mutation: a lexicographic holdout comparison (case 1 passes); a key dropped (its case passes); `<`
+/// where the rule is `<=` (the equal case blocks).
+#[test]
+fn the_holdout_is_read_per_key_not_lexicographically() {
+    // Development: w2 beats w = 1 strictly.
+    let dev = [wref(2, 2, 1), warm(2.0, 0, 0, 3)];
+    let blocked = |hold_pick: ArmScore| open_read(&dev, &[wref(1, 2, 2), hold_pick]);
+    // 1: better on never@1 (0 < 1), worse on never@3 (3 > 2).
+    let read = blocked(warm(2.0, 0, 3, 2));
+    assert_eq!(read.recommend, None);
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::WorseOnHoldout { key: "never@3" })
+    );
+    // 2: worse on never@1 alone.
+    let read = blocked(warm(2.0, 2, 2, 2));
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::WorseOnHoldout { key: "never@1" })
+    );
+    // 3: worse on pick@3 alone (a lower count is worse).
+    let read = blocked(warm(2.0, 1, 2, 1));
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::WorseOnHoldout { key: "pick@3" })
+    );
+    // 4: equal on every key is not worse.
+    let read = blocked(warm(2.0, 1, 2, 2));
+    assert_eq!(read.recommend, Some(2.0));
+    assert_eq!(read.reason, None);
+    // 5: better everywhere.
+    let read = blocked(warm(2.0, 0, 0, 5));
+    assert_eq!(read.recommend, Some(2.0));
+    // The holdout's own metrics ride along on every arm, readable.
+    assert!(read
+        .arms
+        .iter()
+        .all(|a| a.holdout.as_ref().is_some_and(|h| h.1)));
+}
+
+/// Three development positions in three drafts, read at the reference arm, `w2` and `w3`. The reference
+/// has the `never` first everywhere; `w2` at d1 and d2, `w3` at d1 only. Whole: `w3` wins (1 against 2).
+/// Without d1 `w3` wins (0 against 1); without d2 `w2` and `w3` tie at 1 and the nearer `w2` is picked;
+/// without d3 `w3` wins again.
+fn leave_out_arms() -> Vec<ArmScore> {
+    let (w2, w3) = ("roster:0.1:0.05:w2", "roster:0.1:0.05:w3");
+    let mk = |id: &str, draft: &str, a: &[(u8, f64)], b: &[(u8, f64)]| {
+        rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            None,
+            &[(ARM_A, &BAD_C2_AT_2), (w2, a), (w3, b)],
+        )
+    };
+    let (bad, good) = (&BAD_C2_AT_2[..], &GOOD_C2_AT_2[..]);
+    let ps = [
+        mk("p1", "d1", bad, bad),
+        mk("p2", "d2", bad, good),
+        mk("p3", "d3", good, good),
+    ];
+    let specs = [roster_spec(0.1, 0.05), weight_spec(2.0), weight_spec(3.0)];
+    read_arms(&refs(&ps), &specs, FoldKind::Rule, 0.01)
+}
+
+/// T16. With a draft left out the pick changes: the development pick is `w3` and the read stays at 1,
+/// naming d2, the draft whose absence picks `w2`; "the same `w` is picked" is the test, not "still beats
+/// `w = 1`" (`w2` does at d2 too); every draft is listed in order with the pick it gives.
+/// Mutation: leave-one-draft-out ignored; the draft kept (`without_draft` not applied); the test read as
+/// "some weight still beats 1"; the first moving draft not the one named.
+#[test]
+fn a_pick_that_moves_without_one_draft_stays_at_one() {
+    let dev = leave_out_arms();
+    let hold = [wref(1, 1, 1), warm(3.0, 0, 0, 2)];
+    let read = open_read(&dev, &hold);
+    assert_eq!(read.pick, Some(3.0));
+    assert_eq!(
+        read.leave_out,
+        [
+            ("d1".to_string(), Some(3.0)),
+            ("d2".to_string(), Some(2.0)),
+            ("d3".to_string(), Some(3.0)),
+        ]
+    );
+    assert_eq!(read.recommend, None);
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::PickMovesWithout {
+            draft: "d2".to_string()
+        })
+    );
+    // The other way round: with the same pick everywhere the weight is recommended. Drop the arm that
+    // makes d2 move (w2 never as good) and every leave-out gives w3.
+    let steady: Vec<ArmScore> = dev
+        .iter()
+        .filter(|a| a.spec.id != "roster:0.1:0.05:w2")
+        .cloned()
+        .collect();
+    let read = open_read(&steady, &hold);
+    assert_eq!(read.recommend, Some(3.0));
+    assert_eq!(read.reason, None);
+    assert!(read.leave_out.iter().all(|(_, p)| *p == Some(3.0)));
+}
+
+/// T17. A sealed or empty holdout reads "w stays 1" whatever the development read, with its own reason;
+/// and the reasons come in design § 4's order: no weight beating 1 comes before the holdout's, and the
+/// holdout's own before unreadable, worse and the moving pick.
+/// Mutation: the holdout step skipped when there is none; the reasons in another order (each pair here
+/// pins one adjacent pair).
+#[test]
+fn a_sealed_or_empty_holdout_keeps_one_and_the_reasons_come_in_order() {
+    let dev = [wref(2, 2, 1), warm(2.0, 0, 0, 3)];
+    for (state, want) in [
+        (HoldoutState::Sealed, WeightReason::HoldoutSealed),
+        (HoldoutState::Empty, WeightReason::HoldoutEmpty),
+    ] {
+        let read = weight_read(&dev, ARM_A, W0, state).expect("read");
+        assert_eq!(read.pick, Some(2.0), "the development read stands");
+        assert_eq!(read.recommend, None);
+        assert_eq!(read.reason, Some(want));
+    }
+    // No weight beats 1: the reason is that, not the holdout's.
+    let dev_flat = [wref(0, 0, 3), warm(2.0, 1, 1, 0)];
+    let read = weight_read(&dev_flat, ARM_A, W0, HoldoutState::Sealed).expect("read");
+    assert_eq!(read.pick, Some(1.0));
+    assert_eq!(read.reason, Some(WeightReason::NoWeightBeatsOne));
+    // Unreadable before worse: the pick is worse on the holdout and also has an unjudged@3.
+    let mut unjudged = warm(2.0, 5, 5, 0);
+    unjudged.all.unjudged = [0, 1, 0, 0];
+    let read = open_read(&dev, &[wref(0, 0, 3), unjudged]);
+    assert!(matches!(
+        read.reason,
+        Some(WeightReason::HoldoutUnreadable { .. })
+    ));
+    // Worse before the moving pick (the d2 fixture, a holdout where w3 is worse).
+    let read = open_read(&leave_out_arms(), &[wref(0, 0, 3), warm(3.0, 1, 0, 3)]);
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::WorseOnHoldout { key: "never@1" })
+    );
+}
+
+/// T18. An opened holdout with one `unjudged@3` at the pick reads "w stays 1 (the holdout is not
+/// readable at <w> ...)" though every key of the pick is better; the reference arm's own unreadability
+/// is named first, at `w = 1`; a holdout arm that does not speak counts as `silent`; a pick missing
+/// from the holdout arms is unreadable too.
+/// Mutation: an unreadable holdout read as not worse; the reference checked after the pick; `silent`
+/// not counted; `unjudged` summed over metrics instead of counted as positions (the position unjudged at both k counts twice).
+#[test]
+fn an_unreadable_opened_holdout_is_a_reason_never_not_worse() {
+    let dev = [wref(2, 2, 1), warm(2.0, 0, 0, 3)];
+    // Positions, not metric sums: one position unjudged at both k = 1 and k = 3 counts once.
+    let (w2, positions) = (weight_spec(2.0), [(0u8, "h1"), (0u8, "h2")]);
+    let ps: Vec<PositionInput> = positions
+        .iter()
+        .map(|(_, id)| {
+            rpos(
+                id,
+                id,
+                Side::Blue,
+                None,
+                &LABELS,
+                None,
+                &[(ARM_A, &BAD_C2_AT_2), (&w2.id, &GOOD_C2_AT_2)],
+            )
+        })
+        .collect();
+    let mut held = read_arms(
+        &refs(&ps),
+        &[roster_spec(0.1, 0.05), w2],
+        FoldKind::Rule,
+        0.01,
+    );
+    let mut rows = held[1].rows.clone();
+    rows[0].score.as_mut().expect("speaks").unjudged = [true, true, false, false];
+    held[1] = ArmScore::new(held[1].spec.clone(), rows);
+    assert_eq!(
+        held[1].all.unjudged[..2],
+        [1, 1],
+        "the premise: the sums say 2"
+    );
+    let read = open_read(&dev, &held);
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::HoldoutUnreadable {
+            at: 2.0,
+            unjudged: 1,
+            silent: 0
+        })
+    );
+    assert_eq!(
+        read.reason.as_ref().map(|r| r.text(W0)).as_deref(),
+        Some("the holdout is not readable at w = 2 (1 unjudged at 1 or 3, 0 silent)")
+    );
+    // The reference unreadable on the holdout, with one silent position: named first, at w = 1.
+    let mut reference = wref(1, 1, 1);
+    reference.all.speaking = 2;
+    let read = open_read(&dev, &[reference, warm(2.0, 0, 0, 9)]);
+    assert_eq!(
+        read.reason,
+        Some(WeightReason::HoldoutUnreadable {
+            at: 1.0,
+            unjudged: 0,
+            silent: 1
+        })
+    );
+    // No holdout positions at all (a read over none is never readable).
+    let mut none = wref(0, 0, 0);
+    none.all.positions = 0;
+    none.all.speaking = 0;
+    let read = open_read(&dev, &[none, warm(2.0, 0, 0, 9)]);
+    assert!(matches!(
+        read.reason,
+        Some(WeightReason::HoldoutUnreadable { at, .. }) if at == 1.0
+    ));
+}
+
+/// The fixture of T19 and the wire tests: two drafts, the reference arm and B at the grid, a weight that
+/// ranks every position well (w1.5) and one that does not (w2).
+fn weight_fixture() -> (Vec<PositionInput>, Vec<ArmSpec>) {
+    let (w15, w2) = ("roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2");
+    let ps: Vec<PositionInput> = ["d1", "d2"]
+        .iter()
+        .map(|d| {
+            rpos(
+                &format!("{d}-a"),
+                d,
+                Side::Blue,
+                None,
+                &LABELS,
+                Some(2),
+                &[
+                    (ARM_A, &BAD_C2_AT_2),
+                    (ARM_B, &BAD_C2_AT_2),
+                    (w15, &GOOD_C2_AT_2),
+                    (w2, &BAD_C2_AT_2),
+                ],
+            )
+        })
+        .collect();
+    let mut specs = specs_ab();
+    specs.push(weight_spec(1.5));
+    specs.push(weight_spec(2.0));
+    (ps, specs)
+}
+
+/// T19. Through `read_run`: the read exists (the development pick is 1.5), the block follows the floor
+/// rows and names P and Q on its first line, prints `never@1 / never@3 / pick@3` for every `w` (`pick@3`
+/// too: 2 of 2 at each), then the pick, the verdict with its reason (all positions are development
+/// until the split, so the holdout is empty), the leave-one-out line and the receipt from `w = 1`. Absent
+/// when no weighted arm is in the run.
+/// Mutation: the block printed without weighted arms; `pick@3` missing; P and Q not named; the receipt
+/// missing; the block before the floor rows.
+#[test]
+fn the_summary_prints_the_w_block_with_pick_at_3_for_every_w() {
+    let (ps, specs) = weight_fixture();
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let weight = read.weight.as_ref().expect("weighted arms are present");
+    assert_eq!(weight.pick, Some(1.5));
+    assert_eq!(weight.reason, Some(WeightReason::HoldoutEmpty));
+    let header = test_header(&[ARM_A, ARM_B, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
+    let text = summary_of(&header, &read, &inputs);
+    let start = text
+        .find("Synergy weight (at P 0.1 Q 0.05)")
+        .unwrap_or_else(|| panic!("no block\n{text}"));
+    assert!(
+        text.find("Floor rows").expect("the floor rows") < start,
+        "the block follows the floor rows\n{text}"
+    );
+    let block: Vec<&str> = text[start..].lines().take(8).collect();
+    assert_eq!(
+        block,
+        [
+            "Synergy weight (at P 0.1 Q 0.05): never@1 / never@3 / pick@3 on development",
+            "  w = 1 (the reference)  2/2/2  readable",
+            "  w = 1.5  0/0/2  readable",
+            "  w = 2  2/2/2  readable",
+            "  development pick: w = 1.5",
+            "  verdict: w stays 1 (the holdout is empty)",
+            "  each draft left out: d1 → w = 1.5, d2 → w = 1.5",
+            "  Receipt, w = 1 → w = 1.5 (development):",
+        ]
+    );
+    let receipt = text[start..]
+        .lines()
+        .nth(8)
+        .expect("a receipt line follows");
+    assert!(receipt.starts_with("    never@1 2 → 0 "), "{receipt}");
+
+    // Without weighted arms there is no block and no key.
+    let plain = [rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+    )];
+    let inputs = refs(&plain);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    assert!(read.weight.is_none());
+    let header = test_header(&[ARM_A, ARM_B]);
+    assert!(!summary_of(&header, &read, &inputs).contains("Synergy weight"));
+    let wire = engine_core::reference::tier_b_summary::metrics_of(&header, &read, &inputs)
+        .expect("labelled");
+    assert!(wire.get("weight").is_none());
+}
+
+/// The block names an unreadable weight and why, and prints the holdout beside development when it is
+/// open, with a verdict line that recommends.
+/// Mutation: an unreadable weight printed as readable; the holdout cell missing when open; a
+/// recommendation worded as "stays".
+#[test]
+fn the_block_names_an_unreadable_weight_and_shows_an_open_holdout() {
+    let (ps, specs) = weight_fixture();
+    let inputs = refs(&ps);
+    let mut read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let mut judged = warm(2.0, 2, 2, 2);
+    judged.all.unjudged = [1, 1, 0, 0];
+    let dev = [wref(2, 2, 2), warm(1.5, 0, 0, 2), judged];
+    let hold = [wref(1, 1, 1), warm(1.5, 0, 0, 2), warm(2.0, 1, 1, 1)];
+    read.weight = weight_read(&dev, ARM_A, W0, HoldoutState::Open(&hold));
+    let header = test_header(&[ARM_A, ARM_B]);
+    let text = summary_of(&header, &read, &inputs);
+    assert!(
+        text.contains("  w = 1.5  0/0/2  readable  | holdout 0/0/2  readable\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "  w = 2  ≥2/≥2/2  not readable: 1 unjudged at k = 1, 1 at k = 3  | holdout 1/1/1  readable\n"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("  verdict: w = 1.5 recommended\n"), "{text}");
+}
+
+/// `metrics.weight`, as design § 4 gives it: `at`, `w0`, `arms` (the reference first with `w₀`, each with
+/// `development` and `readable` and the arm's metrics, and `holdout` only when opened), `pick`,
+/// `verdict` with `recommend` and the reason text, `leave_out`. Absent without weighted arms.
+/// Mutation: a field renamed or missing; `holdout` always written; the reason not text; the reference
+/// arm not first.
+#[test]
+fn metrics_weight_is_the_design_shape_and_the_holdout_only_when_open() {
+    let (ps, specs) = weight_fixture();
+    let inputs = refs(&ps);
+    let header = test_header(&[ARM_A, ARM_B, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
+    let mut read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let wire = engine_core::reference::tier_b_summary::metrics_of(&header, &read, &inputs)
+        .expect("labelled");
+    let w = &wire["weight"];
+    assert_eq!(w["at"], json!({"p": 0.1, "q": 0.05}));
+    assert_eq!(w["w0"], json!(1.0));
+    assert_eq!(w["pick"], json!(1.5));
+    assert_eq!(
+        w["verdict"],
+        json!({"recommend": null, "reason": "the holdout is empty"})
+    );
+    assert_eq!(
+        w["leave_out"],
+        json!([{"draft": "d1", "pick": 1.5}, {"draft": "d2", "pick": 1.5}])
+    );
+    let arms = array(&w["arms"], "weight arms");
+    let ids: Vec<&str> = arms.iter().map(|a| a["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, [ARM_A, "roster:0.1:0.05:w1.5", "roster:0.1:0.05:w2"]);
+    assert_eq!(arms[0]["w"], json!(1.0));
+    assert_eq!(arms[1]["w"], json!(1.5));
+    for a in arms {
+        assert!(
+            a.get("holdout").is_none(),
+            "sealed or empty: no holdout key"
+        );
+        assert_eq!(a["development"]["readable"], json!(true));
+        assert_eq!(a["development"]["positions"], json!(2));
+    }
+    let first_two = |v: &Value| (v[0].clone(), v[1].clone());
+    assert_eq!(
+        first_two(&arms[1]["development"]["never"]),
+        (json!(0), json!(0))
+    );
+    assert_eq!(
+        first_two(&arms[0]["development"]["never"]),
+        (json!(2), json!(2))
+    );
+    assert_eq!(
+        first_two(&arms[0]["development"]["pick"]),
+        (json!(0), json!(2))
+    );
+
+    // Opened: `holdout` rides on every arm, with its own readable.
+    let dev: Vec<ArmScore> = read.arms.clone();
+    let hold = [wref(1, 1, 1), warm(1.5, 0, 0, 2), warm(2.0, 1, 1, 1)];
+    read.weight = weight_read(&dev, ARM_A, W0, HoldoutState::Open(&hold));
+    let wire = engine_core::reference::tier_b_summary::metrics_of(&header, &read, &inputs)
+        .expect("labelled");
+    let w = &wire["weight"];
+    assert_eq!(w["verdict"], json!({"recommend": 1.5, "reason": null}));
+    for a in array(&w["arms"], "weight arms") {
+        assert_eq!(a["holdout"]["readable"], json!(true));
+        assert_eq!(a["holdout"]["positions"], json!(3));
+    }
 }

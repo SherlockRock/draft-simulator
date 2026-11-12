@@ -9,8 +9,8 @@
 
 use super::tier_b_review::{OwnPick, PositionScore, ReviewRun, RunHeader, SCORE_KS};
 use super::tier_b_rule::{
-    grid_axes, ArmRole, ArmScore, Axis, Edge, EdgeSide, LineState, Metrics, PositionInput, RBucket,
-    Read, Receipt, RuleOutcome, Split, FLOOR_RATIOS,
+    grid_axes, receipt, ArmRole, ArmScore, Axis, Edge, EdgeSide, LineState, Metrics, PositionInput,
+    RBucket, Read, Receipt, RuleOutcome, Split, WeightArm, WeightRead, FLOOR_RATIOS,
 };
 use serde_json::{json, Value};
 
@@ -168,6 +168,43 @@ fn outcome_json(o: &RuleOutcome) -> Value {
     })
 }
 
+/// One side of a weighted arm in `metrics.weight`: `readable`, then the arm's metrics as `arms[]` emits them.
+fn weight_side_json(m: &Metrics, readable: bool) -> Value {
+    let mut v = metrics_json(m);
+    if let Value::Object(o) = &mut v {
+        o.insert("readable".to_string(), json!(readable));
+    }
+    v
+}
+
+fn weight_arm_json(a: &WeightArm) -> Value {
+    let mut v = json!({
+        "w": a.w,
+        "id": a.id,
+        "development": weight_side_json(&a.development, a.development_readable),
+    });
+    if let (Some((m, readable)), Value::Object(o)) = (&a.holdout, &mut v) {
+        o.insert("holdout".to_string(), weight_side_json(m, *readable));
+    }
+    v
+}
+
+/// `metrics.weight` (engine design § 4). `w0` is the reference arm's `w`, the first of `arms`.
+fn weight_json(w: &WeightRead) -> Value {
+    let w0 = w.arms.first().map_or(f64::NAN, |a| a.w);
+    json!({
+        "at": {"p": w.p, "q": w.q},
+        "w0": w0,
+        "arms": w.arms.iter().map(weight_arm_json).collect::<Vec<_>>(),
+        "pick": w.pick,
+        "verdict": {
+            "recommend": w.recommend,
+            "reason": w.reason.as_ref().map(|r| r.text(w0)),
+        },
+        "leave_out": w.leave_out.iter().map(|(d, p)| json!({"draft": d, "pick": p})).collect::<Vec<_>>(),
+    })
+}
+
 /// The `metrics` block, or `None` when the run holds no label and no own pick.
 pub fn metrics_json_of(run: &ReviewRun) -> Option<Value> {
     let inputs: Vec<&PositionInput> = run.positions.iter().map(|p| &p.scoring).collect();
@@ -189,7 +226,7 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
         })
         .collect();
     let reveal = &read.reveal_changes;
-    Some(json!({
+    let mut block = json!({
         "ks": SCORE_KS,
         "margin": h.margin,
         "reference": h.reference_arm,
@@ -243,7 +280,12 @@ pub fn metrics_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Opti
                 .collect::<Vec<_>>(),
             "not_judgeable": read.worklist.not_judgeable(),
         },
-    }))
+    });
+    // Present only when weighted arms exist (a run without them serialises as before).
+    if let (Some(w), Value::Object(o)) = (&read.weight, &mut block) {
+        o.insert("weight".to_string(), weight_json(w));
+    }
+    Some(block)
 }
 
 // ---- the text ---------------------------------------------------------------------------------------
@@ -359,6 +401,109 @@ fn receipt_text(r: &Receipt) -> Vec<String> {
             arrow(s.from.never[1], s.to.never[1]),
             arrow(s.from.pick[1], s.to.pick[1]),
         ));
+    }
+    out
+}
+
+/// Why an arm is not readable, in the words of the `w` block.
+fn unreadable_why(m: &Metrics) -> String {
+    let mut parts = Vec::new();
+    if m.positions == 0 {
+        parts.push("no positions".to_string());
+    }
+    if m.speaking < m.positions {
+        parts.push(format!(
+            "{} of {} positions do not speak",
+            m.positions - m.speaking,
+            m.positions
+        ));
+    }
+    if m.unjudged[0] > 0 || m.unjudged[1] > 0 {
+        parts.push(format!(
+            "{} unjudged at k = 1, {} at k = 3",
+            m.unjudged[0], m.unjudged[1]
+        ));
+    }
+    format!("not readable: {}", parts.join("; "))
+}
+
+fn side_text(m: &Metrics, readable: bool) -> String {
+    if readable {
+        format!("{}  readable", cell(m))
+    } else {
+        format!("{}  {}", cell(m), unreadable_why(m))
+    }
+}
+
+/// The block of the `w` read (engine design § 4), after the floor rows.
+fn weight_text(read: &Read, w: &WeightRead) -> Vec<String> {
+    let w0 = w.arms.first().map_or(f64::NAN, |a| a.w);
+    let open = w.arms.iter().any(|a| a.holdout.is_some());
+    let mut out = vec![String::new()];
+    out.push(format!(
+        "Synergy weight (at P {} Q {}): never@1 / never@3 / pick@3 on development{}",
+        w.p,
+        w.q,
+        if open { " and on the holdout" } else { "" }
+    ));
+    for (i, a) in w.arms.iter().enumerate() {
+        let mut line = format!(
+            "  w = {}{}  {}",
+            a.w,
+            if i == 0 { " (the reference)" } else { "" },
+            side_text(&a.development, a.development_readable)
+        );
+        if let Some((m, readable)) = &a.holdout {
+            line.push_str(&format!("  | holdout {}", side_text(m, *readable)));
+        }
+        out.push(line);
+    }
+    let w_text = |p: Option<f64>| p.map_or("no pick".to_string(), |p| format!("w = {p}"));
+    match w.pick {
+        None => out.push(format!(
+            "  no read: the reference arm (w = {w0}) is not readable on development"
+        )),
+        Some(p) => {
+            out.push(format!("  development pick: w = {p}"));
+            match (&w.recommend, &w.reason) {
+                (Some(r), _) => out.push(format!("  verdict: w = {r} recommended")),
+                (None, Some(why)) => {
+                    out.push(format!("  verdict: w stays {w0} ({})", why.text(w0)))
+                }
+                (None, None) => {}
+            }
+        }
+    }
+    if w.pick.is_some() {
+        out.push(format!(
+            "  each draft left out: {}",
+            if w.leave_out.is_empty() {
+                "none".to_string()
+            } else {
+                w.leave_out
+                    .iter()
+                    .map(|(d, p)| format!("{d} → {}", w_text(*p)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        ));
+    }
+    // The receipt from `w₀` to a pick that is a weight, over the development positions.
+    let find = |id: &str| read.arms.iter().find(|a| a.spec.id == id);
+    if let (Some(pick), Some(r)) = (
+        w.pick
+            .filter(|p| *p != w0)
+            .and_then(|p| w.arms.iter().find(|a| a.w == p)),
+        w.arms.first().and_then(|a| find(&a.id)),
+    ) {
+        if let Some(p) = find(&pick.id) {
+            let rc = receipt(r, p);
+            out.push(format!(
+                "  Receipt, w = {w0} → w = {} (development):",
+                pick.w
+            ));
+            out.extend(receipt_text(&rc).into_iter().map(|l| format!("    {l}")));
+        }
     }
     out
 }
@@ -547,6 +692,10 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
             row.all.positions,
             row.unknown_r_kept
         ));
+    }
+
+    if let Some(w) = &read.weight {
+        out.extend(weight_text(read, w));
     }
 
     // The rule.

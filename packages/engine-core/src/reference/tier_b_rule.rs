@@ -9,6 +9,7 @@
 //! **Pre-registered:** the three keys and their order, ε, the grid, the tie-break, what "readable"
 //! means and the blind fold are design § 4's. None is a knob.
 
+use super::live::DEFAULT_SYNERGY_WEIGHT;
 use super::state::Action;
 use super::tier_b::{Label, OptionKey};
 use super::tier_b_review::{score_ranking, OwnPick, PositionScore, ScoredAction, TopClassName};
@@ -640,7 +641,7 @@ pub fn choose_arm(arms: &[ArmScore], reference: &str) -> RuleOutcome {
     }
 }
 
-fn receipt(reference: &ArmScore, pick: &ArmScore) -> Receipt {
+pub(super) fn receipt(reference: &ArmScore, pick: &ArmScore) -> Receipt {
     let held: BTreeMap<&str, bool> = pick
         .rows
         .iter()
@@ -752,6 +753,275 @@ impl Worklist {
     }
 }
 
+// ---- the w read (engine design § 4, pre-registered) --------------------------------------------------
+
+/// One arm of the `w` read: the reference (`w₀`) or a weighted arm, read over the development positions
+/// and, when the holdout is open, over the holdout positions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeightArm {
+    pub w: f64,
+    pub id: String,
+    pub development: Metrics,
+    pub development_readable: bool,
+    /// The holdout metrics and whether they are readable; `None` unless the holdout is open.
+    pub holdout: Option<(Metrics, bool)>,
+}
+
+/// Why `w` stays at `w₀`, in the order design § 4 step 5 gives them (the first that applies).
+#[derive(Clone, Debug, PartialEq)]
+pub enum WeightReason {
+    NoWeightBeatsOne,
+    HoldoutSealed,
+    HoldoutEmpty,
+    /// The holdout is read but not readable at `at` (`w₀` first, then the pick): `unjudged` is
+    /// the positions unjudged at k = 1 or k = 3 there, `silent` the positions that do not speak.
+    HoldoutUnreadable {
+        at: f64,
+        unjudged: usize,
+        silent: usize,
+    },
+    WorseOnHoldout {
+        key: &'static str,
+    },
+    PickMovesWithout {
+        draft: String,
+    },
+}
+
+impl WeightReason {
+    /// The words the summary and `metrics.weight.verdict.reason` carry. `w0` names the weight that stays.
+    pub fn text(&self, w0: f64) -> String {
+        match self {
+            WeightReason::NoWeightBeatsOne => {
+                format!("no weight beats w = {w0} on development")
+            }
+            WeightReason::HoldoutSealed => "the holdout is sealed".to_string(),
+            WeightReason::HoldoutEmpty => "the holdout is empty".to_string(),
+            WeightReason::HoldoutUnreadable {
+                at,
+                unjudged,
+                silent,
+            } => format!(
+                "the holdout is not readable at w = {at} ({unjudged} unjudged at 1 or 3, {silent} silent)"
+            ),
+            WeightReason::WorseOnHoldout { key } => format!("worse on the holdout at {key}"),
+            WeightReason::PickMovesWithout { draft } => {
+                format!("the pick moves without {draft}")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeightRead {
+    /// The reference arm's P and Q, which every arm of the read shares.
+    pub p: f64,
+    pub q: f64,
+    /// The reference arm (`w₀`) first, then each weighted arm in run order.
+    pub arms: Vec<WeightArm>,
+    /// The development pick (`w₀` when no weight beats it); `None` when the reference arm is unreadable
+    /// on development, which leaves no read.
+    pub pick: Option<f64>,
+    pub recommend: Option<f64>,
+    /// Why `recommend` is `None`; `None` too when there is no read at all.
+    pub reason: Option<WeightReason>,
+    /// The development pick with each development draft left out in turn.
+    pub leave_out: Vec<(String, Option<f64>)>,
+}
+
+/// The holdout, as the `w` read sees it.
+#[derive(Clone, Copy, Debug)]
+pub enum HoldoutState<'a> {
+    Sealed,
+    Empty,
+    /// The same arms read over the holdout positions.
+    Open(&'a [ArmScore]),
+}
+
+/// Step 2 over the arms of the `w` axis: among the readable ones (`readable_metrics`, whatever the
+/// role) the fewest `never@1`, then the fewest `never@3`, then the most `pick@3`; still tied, `w₀` if
+/// among them, else the fewest steps from it along the sorted `w` axis (every arm of the read on it,
+/// `w₀` included), then the smaller `w`. `None` when the reference arm is not readable (no read).
+fn pick_weight(axis_arms: &[(&ArmScore, f64)], reference: &ArmScore, w0: f64) -> Option<f64> {
+    if !readable_metrics(&reference.all) {
+        return None;
+    }
+    let key = |a: &ArmScore| {
+        (
+            a.all.never[0],
+            a.all.never[1],
+            std::cmp::Reverse(a.all.pick[1]),
+        )
+    };
+    let best = axis_arms
+        .iter()
+        .filter(|(a, _)| readable_metrics(&a.all))
+        .map(|(a, _)| key(a))
+        .min()?;
+    let tied: Vec<f64> = axis_arms
+        .iter()
+        .filter(|(a, _)| readable_metrics(&a.all) && key(a) == best)
+        .map(|(_, w)| *w)
+        .collect();
+    if tied.contains(&w0) {
+        return Some(w0);
+    }
+    let mut axis: Vec<f64> = axis_arms.iter().map(|(_, w)| *w).collect();
+    axis.sort_by(f64::total_cmp);
+    axis.dedup();
+    let at = |w: f64| axis.iter().position(|x| *x == w).unwrap_or(0);
+    let from = at(w0);
+    tied.into_iter().min_by(|a, b| {
+        at(*a)
+            .abs_diff(from)
+            .cmp(&at(*b).abs_diff(from))
+            .then(a.total_cmp(b))
+    })
+}
+
+/// The `w` read of engine design § 4, pre-registered. `arms` are the reference arm (`reference`, at
+/// `w₀`) and the weighted arms (`ArmRole::Weight`), read over the DEVELOPMENT positions only, so
+/// `arm.all` is development's sums; every other arm in the list is ignored. `holdout` is the same arms
+/// read over the holdout positions, when it is open. `None` when the run has no weighted arm.
+///
+/// 1. readable is `readable_metrics`, never `readable()` (false on a weighted arm by design);
+/// 2. the development pick, `pick_weight`;
+/// 3. the holdout: pick and `w₀` readable there, and the pick not worse on any KEY (`never@1` <=,
+///    `never@3` <=, `pick@3` >=), not lexicographically;
+/// 4. each development draft left out in turn: step 2 picks the same `w`;
+/// 5. recommended only if the pick is not `w₀` and 3 and 4 pass; else the first reason that applies.
+pub fn weight_read(
+    arms: &[ArmScore],
+    reference: &str,
+    w0: f64,
+    holdout: HoldoutState<'_>,
+) -> Option<WeightRead> {
+    let weights: Vec<(&ArmScore, f64)> = arms
+        .iter()
+        .filter(|a| a.spec.role == ArmRole::Weight)
+        .filter_map(|a| a.spec.w.map(|w| (a, w)))
+        .collect();
+    if weights.is_empty() {
+        return None;
+    }
+    let reference_arm = arms.iter().find(|a| a.spec.id == reference)?;
+    let mut axis_arms: Vec<(&ArmScore, f64)> = vec![(reference_arm, w0)];
+    axis_arms.extend(weights.iter().copied());
+
+    let held = |id: &str| match holdout {
+        HoldoutState::Open(h) => h.iter().find(|a| a.spec.id == id),
+        _ => None,
+    };
+    let listed: Vec<WeightArm> = axis_arms
+        .iter()
+        .map(|(a, w)| WeightArm {
+            w: *w,
+            id: a.spec.id.clone(),
+            development: a.all.clone(),
+            development_readable: readable_metrics(&a.all),
+            holdout: held(&a.spec.id).map(|h| (h.all.clone(), readable_metrics(&h.all))),
+        })
+        .collect();
+    let mut read = WeightRead {
+        p: reference_arm.spec.p.unwrap_or(f64::NAN),
+        q: reference_arm.spec.q.unwrap_or(f64::NAN),
+        arms: listed,
+        pick: pick_weight(&axis_arms, reference_arm, w0),
+        recommend: None,
+        reason: None,
+        leave_out: Vec::new(),
+    };
+    // No pick: the reference arm is unreadable on development, so there is no read.
+    let Some(pick) = read.pick else {
+        return Some(read);
+    };
+
+    // Step 4: each development draft left out in turn, on the arms of the axis only.
+    let drafts: BTreeSet<&str> = reference_arm
+        .rows
+        .iter()
+        .map(|r| r.draft.as_str())
+        .collect();
+    for d in drafts {
+        let kept: Vec<ArmScore> = axis_arms.iter().map(|(a, _)| a.without_draft(d)).collect();
+        let kept_axis: Vec<(&ArmScore, f64)> = kept
+            .iter()
+            .zip(&axis_arms)
+            .map(|(k, (_, w))| (k, *w))
+            .collect();
+        read.leave_out
+            .push((d.to_string(), pick_weight(&kept_axis, &kept[0], w0)));
+    }
+
+    // Step 5, the reasons in design § 4's order.
+    let pick_arm = axis_arms
+        .iter()
+        .find(|(_, w)| *w == pick)
+        .map(|(a, _)| *a)
+        .expect("the pick is on the axis");
+    let reason = if pick_arm.spec.id == reference_arm.spec.id {
+        Some(WeightReason::NoWeightBeatsOne)
+    } else {
+        match holdout {
+            HoldoutState::Sealed => Some(WeightReason::HoldoutSealed),
+            HoldoutState::Empty => Some(WeightReason::HoldoutEmpty),
+            HoldoutState::Open(_) => {
+                // `w₀` first, then the pick: an unreadable opened holdout is a reason, never "not worse".
+                let on_holdout = [(reference_arm, w0), (pick_arm, pick)]
+                    .iter()
+                    .map(|(a, w)| (held(&a.spec.id), *w))
+                    .collect::<Vec<_>>();
+                let unreadable = on_holdout
+                    .iter()
+                    .find(|(h, _)| !h.is_some_and(|h| readable_metrics(&h.all)));
+                if let Some((h, w)) = unreadable {
+                    let m = h.map(|h| &h.all);
+                    // Positions unjudged at k = 1 or k = 3 (one that is both counts once).
+                    let unjudged = h.map_or(0, |h| {
+                        h.rows
+                            .iter()
+                            .filter(|r| {
+                                r.score
+                                    .as_ref()
+                                    .is_some_and(|s| s.unjudged[0] || s.unjudged[1])
+                            })
+                            .count()
+                    });
+                    Some(WeightReason::HoldoutUnreadable {
+                        at: *w,
+                        unjudged,
+                        silent: m.map_or(0, |m| m.positions - m.speaking),
+                    })
+                } else {
+                    let (r, p) = (
+                        &on_holdout[0].0.expect("readable").all,
+                        &on_holdout[1].0.expect("readable").all,
+                    );
+                    let worse = [
+                        ("never@1", p.never[0] > r.never[0]),
+                        ("never@3", p.never[1] > r.never[1]),
+                        ("pick@3", p.pick[1] < r.pick[1]),
+                    ]
+                    .into_iter()
+                    .find(|(_, worse)| *worse)
+                    .map(|(key, _)| WeightReason::WorseOnHoldout { key });
+                    worse.or_else(|| {
+                        read.leave_out
+                            .iter()
+                            .find(|(_, again)| *again != Some(pick))
+                            .map(|(draft, _)| WeightReason::PickMovesWithout {
+                                draft: draft.clone(),
+                            })
+                    })
+                }
+            }
+        }
+    };
+    read.recommend = reason.is_none().then_some(pick);
+    read.reason = reason;
+    Some(read)
+}
+
 #[derive(Clone, Debug)]
 pub struct Read {
     /// The rule fold's reading of every arm and floor row.
@@ -764,6 +1034,8 @@ pub struct Read {
     pub reveal_changes: RevealChanges,
     pub fallbacks: Fallbacks,
     pub worklist: Worklist,
+    /// The `w` read; `None` when no weighted arm is in the run.
+    pub weight: Option<WeightRead>,
 }
 
 /// Positions with a clear `never` at #1 at every readable arm: no P or Q fixes those. Empty when no arm
@@ -899,6 +1171,14 @@ pub fn read_run(
         unjudged_lines,
     };
 
+    // Until the split (slice B, task 4) every position is development and the holdout is empty.
+    let weight = weight_read(
+        &arms,
+        reference,
+        DEFAULT_SYNERGY_WEIGHT,
+        HoldoutState::Empty,
+    );
+
     Read {
         never_everywhere: never_everywhere(&arms),
         fallbacks: Fallbacks {
@@ -917,6 +1197,7 @@ pub fn read_run(
         r_by_label,
         reveal_changes: reveal,
         worklist,
+        weight,
     }
 }
 
