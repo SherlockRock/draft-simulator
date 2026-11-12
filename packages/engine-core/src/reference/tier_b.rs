@@ -864,9 +864,17 @@ impl TierBFixture {
             if e.stops_the_run() {
                 return e;
             }
+            // The raw `id`, else (a file that is not JSON, or has no string `id`) the label's file
+            // stem: a fixture's id is its file name, so an `ho-` file fails closed either way.
             let id = serde_json::from_str::<serde_json::Value>(raw)
                 .ok()
-                .and_then(|v| v.get("id")?.as_str().map(String::from));
+                .and_then(|v| v.get("id")?.as_str().map(String::from))
+                .or_else(|| {
+                    std::path::Path::new(label)
+                        .file_stem()?
+                        .to_str()
+                        .map(String::from)
+                });
             match id.map(|id| (draft_of(&id), id)) {
                 Some((draft, id)) if draft.starts_with(HOLDOUT_DRAFT_PREFIX) => {
                     TierBError::HoldoutUnloadable {

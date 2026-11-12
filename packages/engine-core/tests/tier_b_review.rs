@@ -5992,6 +5992,27 @@ fn a_holdout_fixture_that_does_not_load_stops_the_run() {
     }
 }
 
+/// An `ho-` file that is not JSON, or has no string `id`, fails closed on its file name (a fixture's id
+/// is its file name); the same on a development file name stays an ordinary error.
+/// Kills: the file-name fallback dropped (the broken `ho-` file would quietly shrink the holdout).
+#[test]
+fn a_holdout_file_that_is_not_json_stops_the_run_by_its_name() {
+    let live = live();
+    let ho = "fixtures/2026-12-02-ho-supp-pinch-slot-9.json";
+    for raw in ["{ not json", r#"{"id": 7}"#] {
+        let err = TierBFixture::from_json(raw, ho, &live).expect_err("refused");
+        assert!(err.stops_the_run(), "{raw}: {err}");
+        assert!(
+            matches!(&err, TierBError::HoldoutUnloadable { label, id, draft, .. }
+                if label == ho && id == "2026-12-02-ho-supp-pinch-slot-9" && draft == "ho-supp"),
+            "{raw}: {err:?}"
+        );
+        let err = TierBFixture::from_json(raw, "fixtures/2026-12-02-supp-pinch-slot-9.json", &live)
+            .expect_err("refused");
+        assert!(!err.stops_the_run(), "{raw}: {err}");
+    }
+}
+
 /// T20 through `load_dir` (which `load_file` and the binary go through): the two holdout copies load as
 /// holdout, the revealed one with the warning and the blind one without; the misnamed copy's error
 /// carries its path. A `SplitName` reaching `run_review` is listed among `load_errors` like any other
