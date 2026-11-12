@@ -1,0 +1,350 @@
+{
+  "request": "fetch-matches-by-number-next",
+  "context": {
+    "id_serie": "11f18dd3-3fd7-6e6c-9281-a4e63dbef157",
+    "number": null,
+    "before": false
+  },
+  "reply": {
+    "matches": [
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 1787273071,
+        "config": {
+          "integrations": [
+            {
+              "LeagueOfLegends": {
+                "code_tournament": null,
+                "id_game": 1,
+                "is_done": true,
+                "key_encryption": null,
+                "participants": [
+                  {
+                    "id_champion": 897,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000001",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Top",
+                    "lane_team": "Top",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 62,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000002",
+                    "id_participant": null,
+                    "id_spell_0": 11,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Jungle",
+                    "lane_team": "Jungle",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 115,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000003",
+                    "id_participant": null,
+                    "id_spell_0": 12,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Mid",
+                    "lane_team": "Mid",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 145,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000004",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 21,
+                    "lane_esclub": null,
+                    "lane_player": "Bot",
+                    "lane_team": "Bot",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 497,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000005",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 7,
+                    "lane_esclub": null,
+                    "lane_player": "Support",
+                    "lane_team": "Support",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 2,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000006",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 6,
+                    "lane_esclub": null,
+                    "lane_player": "Top",
+                    "lane_team": "Top",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 254,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000007",
+                    "id_participant": null,
+                    "id_spell_0": 11,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Jungle",
+                    "lane_team": "Jungle",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 143,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000008",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Mid",
+                    "lane_team": "Mid",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 81,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000009",
+                    "id_participant": null,
+                    "id_spell_0": 21,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Bot",
+                    "lane_team": "Bot",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 43,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000010",
+                    "id_participant": null,
+                    "id_spell_0": 7,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Support",
+                    "lane_team": "Support",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  }
+                ],
+                "time_end": 1787273063,
+                "time_start": 1787271271,
+                "winner_side": 1
+              }
+            }
+          ]
+        },
+        "id_match": "11f18dd3-400a-43a3-ab46-045e1301f3d8",
+        "id_serie": "11f18dd3-3fd7-6e6c-9281-a4e63dbef157",
+        "is_esr_applied": true,
+        "is_ready": true,
+        "number": 0,
+        "time_end": 1787273063,
+        "time_start": 1787271271,
+        "time_start_ready_check": 1787271324
+      },
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 1787275581,
+        "config": {
+          "integrations": [
+            {
+              "LeagueOfLegends": {
+                "code_tournament": null,
+                "id_game": 2,
+                "is_done": true,
+                "key_encryption": null,
+                "participants": [
+                  {
+                    "id_champion": 799,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000006",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Top",
+                    "lane_team": "Top",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 75,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000007",
+                    "id_participant": null,
+                    "id_spell_0": 11,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Jungle",
+                    "lane_team": "Jungle",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 61,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000008",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Mid",
+                    "lane_team": "Mid",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 202,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000009",
+                    "id_participant": null,
+                    "id_spell_0": 21,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Bot",
+                    "lane_team": "Bot",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 89,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000010",
+                    "id_participant": null,
+                    "id_spell_0": 7,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Support",
+                    "lane_team": "Support",
+                    "name_riot_game": null,
+                    "side": 1,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 58,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000001",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Top",
+                    "lane_team": "Top",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 56,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000002",
+                    "id_participant": null,
+                    "id_spell_0": 11,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Jungle",
+                    "lane_team": "Jungle",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 84,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000003",
+                    "id_participant": null,
+                    "id_spell_0": 12,
+                    "id_spell_1": 4,
+                    "lane_esclub": null,
+                    "lane_player": "Mid",
+                    "lane_team": "Mid",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 910,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000004",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 12,
+                    "lane_esclub": null,
+                    "lane_player": "Bot",
+                    "lane_team": "Bot",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  },
+                  {
+                    "id_champion": 432,
+                    "id_oauth_riot": "fake-oauth-0000000000000000000000000000000000000000000000000000000000000000005",
+                    "id_participant": null,
+                    "id_spell_0": 4,
+                    "id_spell_1": 7,
+                    "lane_esclub": null,
+                    "lane_player": "Support",
+                    "lane_team": "Support",
+                    "name_riot_game": null,
+                    "side": 2,
+                    "statistics": null,
+                    "tag_riot": null
+                  }
+                ],
+                "time_end": 1787275572,
+                "time_start": 1787273906,
+                "winner_side": 2
+              }
+            }
+          ]
+        },
+        "id_match": "11f19cf9-7a9c-0039-88a9-6c2b7f684b29",
+        "id_serie": "11f18dd3-3fd7-6e6c-9281-a4e63dbef157",
+        "is_esr_applied": true,
+        "is_ready": true,
+        "number": 1,
+        "time_end": 1787275572,
+        "time_start": 1787273906,
+        "time_start_ready_check": 1787273976
+      }
+    ]
+  }
+}

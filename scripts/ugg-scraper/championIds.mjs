@@ -6,16 +6,11 @@ import { dirname, join } from "path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CDRAGON_PATH = join(__dirname, "..", "..", "data", "raw", "cdragon-champions.json");
 
-// CDragon's alias casing drifts from the canonical alias used by champion-meta.json,
-// the engine and the frontend catalog. Normalise the known divergences so every
-// consumer of loadIdToAlias emits engine-canonical aliases.
-const ALIAS_OVERRIDES = {
-  FiddleSticks: "Fiddlesticks",
-};
+// The alias rule lives in the backend helper (shared with the esclub adapter).
+// Default import + destructure: named imports from CJS are not guaranteed.
+import championAlias from "../../backend/utils/championAlias.js";
 
-export function canonicalizeAlias(alias) {
-  return ALIAS_OVERRIDES[alias] ?? alias;
-}
+export const { canonicalizeAlias } = championAlias;
 
 // { [numericId]: alias } — alias is the canonical string id used by the engine
 // and the frontend champion catalog.

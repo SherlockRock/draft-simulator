@@ -1,0 +1,28 @@
+{
+  "request": "fetch-groups-by-number-next",
+  "context": {
+    "id_round": "11f1c28a-aee0-1159-9fcf-e5e99c8f2f12",
+    "number": null,
+    "before": false
+  },
+  "reply": {
+    "groups": [
+      {
+        "awaiting_status": "InitiatePending",
+        "awaiting_time_start": 1791403632,
+        "config": {
+          "format": {
+            "Default": {}
+          }
+        },
+        "id_group": "11f1c28a-af0c-b4e2-b788-f87c2ba0a341",
+        "id_group_demotion_hard": null,
+        "id_group_demotion_soft": null,
+        "id_group_promotion_hard": null,
+        "id_group_promotion_soft": null,
+        "id_round": "11f1c28a-aee0-1159-9fcf-e5e99c8f2f12",
+        "number": 0
+      }
+    ]
+  }
+}

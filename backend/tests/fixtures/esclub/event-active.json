@@ -1,0 +1,26 @@
+{
+  "request": "fetch-event-active",
+  "context": {
+    "id_event_active": "11f1bc5f-4b33-e263-9b1e-aa8ed4a49d2d"
+  },
+  "reply": {
+    "events": [
+      {
+        "awaiting_status": "TerminateDefault",
+        "awaiting_time_start": 1791849653,
+        "config": {
+          "free_agent": null,
+          "integrations": [],
+          "is_recurring": false
+        },
+        "extra": {
+          "expected_duration": 4
+        },
+        "id_event_active": "11f1bc5f-4b33-e263-9b1e-aa8ed4a49d2d",
+        "id_event_passive": "11f1bc5f-24d0-90a9-8b74-a88e7e110096",
+        "name": "NA Premier Season 1",
+        "time_start": 1791849653
+      }
+    ]
+  }
+}

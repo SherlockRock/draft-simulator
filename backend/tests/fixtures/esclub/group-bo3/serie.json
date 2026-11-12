@@ -1,0 +1,31 @@
+{
+  "request": "fetch-serie",
+  "context": {
+    "id_serie": "11f1c28a-af6b-071b-93aa-058d0cf4fd47"
+  },
+  "reply": {
+    "series": [
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 1794366000,
+        "best_of": 3,
+        "id_parent": "11f1c28a-af0c-b4e2-b788-f87c2ba0a341",
+        "id_serie": "11f1c28a-af6b-071b-93aa-058d0cf4fd47",
+        "id_serie_loser": null,
+        "id_serie_winner": null,
+        "is_scrim": false,
+        "number": 25,
+        "number_event_stage": 0,
+        "number_group": 0,
+        "number_round": 0,
+        "time_start": 1791444120,
+        "time_start_agreed": 1794366000,
+        "time_start_computed": 1794366000,
+        "time_start_default": 1794272400,
+        "time_start_forced": null,
+        "type_parent": "Group",
+        "type_serie": "SerieDefault"
+      }
+    ]
+  }
+}
