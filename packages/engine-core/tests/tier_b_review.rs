@@ -5,30 +5,33 @@
 mod common;
 
 use common::{load_production_data_from, repo_root};
+use engine_core::cancellation::CancelHandle;
 use engine_core::draft_state::{ActionType, Side};
 use engine_core::fm::FmWeights;
 use engine_core::pools::Role;
 use engine_core::reference::entries::SpecError;
 use engine_core::reference::feasibility::{
-    arrangement, open_roles, placements, FeasibilityMemo, Price, SidePlacement,
+    action_charge, arrangement, open_roles, placements, FeasibilityMemo, FeasibilityRule, Price,
+    SidePlacement,
 };
 use engine_core::reference::format::{Format, Slot};
 use engine_core::reference::live::LiveUniverse;
 use engine_core::reference::node::{LeafEnd, LeafKind};
-use engine_core::reference::search::Shortlist;
+use engine_core::reference::oracle::{Mode, OracleInput};
+use engine_core::reference::search::{search, SearchParams, Shortlist};
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{
     Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
 use engine_core::reference::tier_b_review::{
-    draft_of, floor_keep, opponent_charge, render_summary, run_review, score_ranking, summary_of,
-    ArmWire, DataStamp, EngineStamp, OwnPick, PositionScore, ReviewConfig, ReviewRun, RunHeader,
-    ScoredAction, SearchStamp, TopClassName, WidthsWire,
+    draft_of, floor_keep, opponent_charge, render_summary, run_review, run_review_with,
+    score_ranking, summary_of, ArmWire, DataStamp, EngineStamp, OwnPick, PositionScore,
+    ReviewConfig, ReviewRun, RunHeader, ScoredAction, SearchStamp, TopClassName, WidthsWire,
 };
 use engine_core::reference::tier_b_rule::{
-    canonical_line, choose_arm, line_text, read_arms, read_run, ArmInput, ArmRole, ArmScore,
-    ArmSpec, Axis, Edge, EdgeSide, Fold, FoldKind, LabelChange, LineState, Metrics, PickChange,
-    PositionInput, RBucket, RevealRead, TopLine,
+    canonical_line, choose_arm, grid_axes, line_text, read_arms, read_run, readable_metrics,
+    ArmInput, ArmRole, ArmScore, ArmSpec, Axis, Edge, EdgeSide, Fold, FoldKind, LabelChange,
+    LineState, Metrics, PickChange, PositionInput, RBucket, RevealRead, TopLine,
 };
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 use serde::Deserialize;
@@ -1079,6 +1082,7 @@ fn review_config() -> ReviewConfig {
             dirty: Some(false),
         },
         positions_patch: "16.19".to_string(),
+        playable_rule: None,
     }
 }
 
@@ -2251,6 +2255,7 @@ fn the_binary_writes_the_run_in_struct_order_and_refuses_no_output_path() {
         .env("TIER_B_JSON", &out)
         .env("TIER_B_FIXTURES", &dir)
         .env("TIER_B_P", "0.1")
+        .env("TIER_B_W", "1")
         .env("TIER_B_Q", "0.05")
         .env("TIER_B_WIDTHS", "10,20,30")
         .env("TIER_B_K", "3")
@@ -2348,6 +2353,7 @@ fn zero_jobs_is_one_job() {
         .env("TIER_B_JSON", &out)
         .env("TIER_B_FIXTURES", &dir)
         .env("TIER_B_P", "0.1")
+        .env("TIER_B_W", "1")
         .env("TIER_B_Q", "0.05")
         .env("TIER_B_WIDTHS", "10,20,30")
         .env("TIER_B_DEPTH_CHECK", "0")
@@ -2849,6 +2855,7 @@ fn roster_spec(p: f64, q: f64) -> ArmSpec {
         role: ArmRole::Roster,
         p: Some(p),
         q: Some(q),
+        w: None,
     }
 }
 
@@ -2877,6 +2884,7 @@ fn grid_of(ps: &[f64], qs: &[f64], f: impl Fn(f64, f64) -> (usize, usize, usize)
             role: ArmRole::PoolOrRoster,
             p: None,
             q: None,
+            w: None,
         },
         0,
         0,
@@ -3377,12 +3385,14 @@ fn a_floor_row_is_scored_through_the_seam_and_never_selected() {
         role: ArmRole::PoolOrRoster,
         p: None,
         q: None,
+        w: None,
     });
     specs.push(ArmSpec {
         id: "floor:0.25".to_string(),
         role: ArmRole::Floor,
         p: None,
         q: None,
+        w: None,
     });
     let ps = [p];
     let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
@@ -4259,6 +4269,7 @@ fn test_header(arm_ids: &[&str]) -> RunHeader {
             fm_version: "fm-test".to_string(),
             meta_version: "meta-test".to_string(),
             positions_patch: "16.19".to_string(),
+            playable_rule: None,
         },
         search: SearchStamp {
             horizon: 2,
@@ -4280,6 +4291,7 @@ fn test_header(arm_ids: &[&str]) -> RunHeader {
                 rule: "roster",
                 p: None,
                 q: None,
+                w: None,
             })
             .collect(),
     }
@@ -4440,6 +4452,7 @@ fn the_binary_writes_summary_txt_beside_the_run_json() {
         .env("TIER_B_JSON", dir.join("run.json"))
         .env("TIER_B_FIXTURES", &fixtures)
         .env("TIER_B_P", "0.1")
+        .env("TIER_B_W", "1")
         .env("TIER_B_Q", "0.05")
         .env("TIER_B_WIDTHS", "10,20,30")
         .env("TIER_B_K", "3")
@@ -4569,6 +4582,7 @@ fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() 
             role: ArmRole::Floor,
             p: None,
             q: None,
+            w: None,
         });
     }
     let read = read_run(&inputs, &specs, ARM_A, 0.01);
@@ -4793,6 +4807,7 @@ fn a_floor_rows_unjudged_cell_gets_an_upper_bound() {
         role: ArmRole::Floor,
         p: None,
         q: None,
+        w: None,
     });
     let ps = [p];
     let inputs = refs(&ps);
@@ -4800,4 +4815,451 @@ fn a_floor_rows_unjudged_cell_gets_an_upper_bound() {
     let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
     assert!(text.contains("floor:0.1  r < 0.1  ≥0/"), "{text}");
     assert!(text.contains("  floor:0.1  ≤1 / "), "{text}");
+}
+
+// ---- Slice B, task 2: the runner's weighted arms (engine-synergy-weight-and-floor design § 3, T7-T12) ---
+
+fn weighted_universes(ws: &[f64]) -> Vec<LiveUniverse> {
+    let base = live();
+    ws.iter()
+        .map(|w| weighted_live(*w, &base))
+        .collect::<Vec<_>>()
+}
+
+/// The shipped FM and meta at synergy weight `w` (the same build as `live()`).
+fn weighted_live(w: f64, base: &LiveUniverse) -> LiveUniverse {
+    let root = repo_root();
+    let fm = FmWeights::from_json_str(
+        &std::fs::read_to_string(root.join("data/compiled/fm-weights.json"))
+            .expect("fm-weights.json"),
+    )
+    .expect("fm-weights parses");
+    let (_, meta) = load_production_data_from(&root.join("data/compiled/champion-meta.json"));
+    LiveUniverse::build_weighted(&fm, &base.meta_version, &meta, w)
+        .unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn weighted_run(ws: &[f64]) -> ReviewRun {
+    let base = live();
+    let weighted = weighted_universes(ws);
+    let corpus = vec![load(&labelled(), &base)];
+    run_review_with(&corpus, &base, &weighted, &review_config())
+}
+
+fn arm_ids(run: &ReviewRun) -> Vec<&str> {
+    run.run.arms.iter().map(|a| a.id.as_str()).collect()
+}
+
+fn weighted_spec(w: f64) -> ArmSpec {
+    ArmSpec {
+        id: format!("roster:0.1:0.05:w{w}"),
+        role: ArmRole::Weight,
+        p: Some(0.1),
+        q: Some(0.05),
+        w: Some(w),
+    }
+}
+
+/// T7. Universes at 0.5 and 2 add `roster:0.1:0.05:w0.5` and `:w2` after today's arms, in the order
+/// given; `w` is in the JSON on those two only; `run_review` gives none; the metrics call them `weight`.
+/// Kills: a weighted arm at `w = 1`; `w` serialised everywhere; a weighted arm tagged `roster`.
+#[test]
+fn weighted_universes_add_weighted_arms_after_the_grid() {
+    let plain = base_review();
+    let run = weighted_run(&[0.5, 2.0]);
+    let mut want: Vec<String> = arm_ids(plain).iter().map(|s| s.to_string()).collect();
+    assert!(want.iter().all(|id| !id.contains(":w")));
+    want.push("roster:0.1:0.05:w0.5".to_string());
+    want.push("roster:0.1:0.05:w2".to_string());
+    assert_eq!(arm_ids(&run), want);
+    let json = serde_json::to_value(&run).expect("serialises");
+    for arm in array(&json["run"]["arms"], "arms") {
+        let id = text(&arm["id"], "id");
+        let weighted = id.contains(":w");
+        assert_eq!(arm.get("w").is_some(), weighted, "{id}");
+        if weighted {
+            assert_eq!(arm["rule"], "roster");
+            assert_eq!(arm["p"], 0.1);
+            assert_eq!(arm["q"], 0.05);
+        }
+    }
+    assert_eq!(json["run"]["arms"][want.len() - 2]["w"], 0.5);
+    assert_eq!(json["run"]["arms"][want.len() - 1]["w"], 2.0);
+    // The summary and the metrics read them without the rule seeing them.
+    let metrics = run.metrics.as_ref().expect("the labelled run has metrics");
+    for arm in array(&metrics["arms"], "metrics arms") {
+        if text(&arm["id"], "id").contains(":w") {
+            assert_eq!(arm["role"], "weight");
+            assert_eq!(arm["readable"], false);
+        }
+    }
+    let plain_json = serde_json::to_value(plain).expect("serialises");
+    assert!(plain_json["run"]["arms"]
+        .as_array()
+        .expect("arms")
+        .iter()
+        .all(|a| a.get("w").is_none()));
+    // A universe at the base weight adds no arm; `-0.0` reads as 0.
+    let base = live();
+    let corpus = vec![load(&labelled(), &base)];
+    let same = run_review_with(
+        &corpus,
+        &base,
+        &weighted_universes(&[1.0]),
+        &review_config(),
+    );
+    assert_eq!(arm_ids(&same), arm_ids(plain));
+    let zero = run_review_with(
+        &corpus,
+        &base,
+        &[weighted_live(-0.0, &base)],
+        &review_config(),
+    );
+    assert_eq!(arm_ids(&zero).last(), Some(&"roster:0.1:0.05:w0"));
+}
+
+/// Searches `fixture`'s root at P 0.1, Q 0.05 in `u` with the test config's shortlist and horizon.
+fn direct_search(
+    fx: &engine_core::reference::tier_b::TierBFixture,
+    u: &LiveUniverse,
+    cfg: &ReviewConfig,
+) -> engine_core::reference::search::SearchOutcome {
+    let position = fx.root.position(&u.universe).expect("position builds");
+    search(
+        &OracleInput {
+            position: &position,
+            universe: &u.universe,
+            pools: &fx.root.pools,
+            objective: &u.universe,
+            feasibility: FeasibilityRule::Roster,
+            mode: Mode::Horizon(cfg.horizon),
+            epsilon: 1e-9,
+            off_pool_cost: Some(0.1),
+            off_role_cost: Some(0.05),
+        },
+        &SearchParams {
+            node_budget: Some(cfg.node_budget),
+            wall_budget: std::time::Duration::from_secs(300),
+            shortlist: Some(cfg.shortlist),
+            ..SearchParams::default()
+        },
+        &CancelHandle::new(),
+        |_| {},
+    )
+    .expect("the search runs")
+}
+
+/// T9. Each weighted arm's ranked values are a direct search's on `build_weighted(w)` at the same P
+/// and Q; the top value differs from the reference arm's.
+/// Kills: every arm searching the `w = 1` universe.
+#[test]
+fn each_weighted_arm_searches_its_own_universe() {
+    let ws = [0.5, 2.0];
+    let run = weighted_run(&ws);
+    let base = live();
+    let cfg = review_config();
+    let fx = loaded(&labelled(), &base).fixture;
+    let reading = |id: &str| {
+        run.positions[0]
+            .readings
+            .iter()
+            .find(|r| r.arm == id)
+            .unwrap_or_else(|| panic!("{id}"))
+    };
+    let reference_top = reading(REFERENCE_ARM).ranked[0].value;
+    let mut differs = false;
+    for w in ws {
+        let u = weighted_live(w, &base);
+        let direct = direct_search(&fx, &u, &cfg);
+        let got = reading(&format!("roster:0.1:0.05:w{w}"));
+        assert!(!got.ranked.is_empty());
+        // Option by option: an option id is the action's spelling, then `|` and the comp.
+        let direct_by_action: HashMap<String, u64> = direct
+            .ranked
+            .iter()
+            .map(|r| {
+                let key = OptionKey {
+                    action: r.action,
+                    comp: None,
+                };
+                (key.id(&u.universe), r.value.to_bits())
+            })
+            .collect();
+        for r in &got.ranked {
+            let action = r.option.split('|').next().expect("an option id");
+            assert_eq!(
+                direct_by_action.get(action),
+                Some(&r.value.to_bits()),
+                "w {w}: {} at {}",
+                r.option,
+                r.value
+            );
+        }
+        assert_eq!(
+            got.ranked[0].value.to_bits(),
+            direct.ranked[0].value.to_bits()
+        );
+        differs |= got.ranked[0].value.to_bits() != reference_top.to_bits();
+    }
+    assert!(differs, "no weighted arm differs from the reference arm");
+}
+
+/// T10. For every action a weighted arm ranks, the arrangement and the charge read the same in the
+/// `w = 1` universe as in the weighted one.
+/// Kills: a trace that reads synergy (the claim of design § 3 that lets the catalog use the base).
+#[test]
+fn traces_do_not_read_the_weight() {
+    let base = live();
+    let cfg = review_config();
+    let fx = loaded(&labelled(), &base).fixture;
+    let pools = &fx.root.pools;
+    let base_position = fx.root.position(&base.universe).expect("position");
+    let root = base_position.next_slot().expect("next slot");
+    for w in [0.5, 2.0, 3.0] {
+        let u = weighted_live(w, &base);
+        let position = fx.root.position(&u.universe).expect("position");
+        let direct = direct_search(&fx, &u, &cfg);
+        let price = Price::of(0.1, 0.05);
+        let (mut m1, mut m2) = (FeasibilityMemo::new(price), FeasibilityMemo::new(price));
+        let c1 = action_charge(
+            &mut m1,
+            FeasibilityRule::Roster,
+            root.side,
+            &base_position,
+            pools,
+            &base.universe,
+        );
+        let c2 = action_charge(
+            &mut m2,
+            FeasibilityRule::Roster,
+            root.side,
+            &position,
+            pools,
+            &u.universe,
+        );
+        assert!(!direct.ranked.is_empty());
+        for r in &direct.ranked {
+            let a1 = arrangement(
+                &mut m1,
+                root.side,
+                &base_position,
+                pools,
+                &base.universe,
+                r.action,
+            );
+            let a2 = arrangement(&mut m2, root.side, &position, pools, &u.universe, r.action);
+            assert_eq!(a1, a2, "w {w}");
+            assert_eq!(c1.of(r.action), c2.of(r.action), "w {w}");
+        }
+    }
+}
+
+/// T11, catalog. An option that reaches the top K only at a weighted arm is a row (found on the corpus
+/// at both w 0.5 (Ahri+Leona) and w 2 (three Katarina/Lulu/Zeri pairs); no construction needed).
+/// Kills: `reach`, rows and the margin set over the `w = 1` arms only.
+#[test]
+fn an_option_reaching_the_top_only_at_a_weighted_arm_is_a_row() {
+    let plain = serde_json::to_value(base_review()).expect("serialises");
+    let rows = |run: &Value| -> BTreeSet<String> {
+        run["positions"][0]["options"]
+            .as_object()
+            .expect("options")
+            .iter()
+            .filter(|(_, o)| o["row"] == true)
+            .map(|(id, _)| id.clone())
+            .collect()
+    };
+    let plain_rows = rows(&plain);
+    let mut found = Vec::new();
+    for w in [0.5, 2.0] {
+        let run = serde_json::to_value(weighted_run(&[w])).expect("serialises");
+        let new: Vec<String> = rows(&run).difference(&plain_rows).cloned().collect();
+        assert!(plain_rows.is_subset(&rows(&run)), "w {w} dropped a row");
+        found.push((w, new));
+    }
+    eprintln!("rows brought by a weighted arm: {found:?}");
+    assert!(
+        found.iter().any(|(_, new)| !new.is_empty()),
+        "no weight brings a new row on the corpus: {found:?}"
+    );
+}
+
+/// T11, the rule, on cached metrics. A weighted arm with the best keys loses to a roster arm and leaves
+/// the rule outcome as it was; `readable()` is false and `readable_metrics` true on the same judged
+/// metrics; zero positions are never readable. (The axes, `never_everywhere` and the sensitivity line
+/// are pinned on real rows in `weighted_arms_leave_the_axes_the_rows_and_the_sensitivity_alone`.)
+/// Kills: a weighted arm tagged `Roster`; `readable()` changed instead of split; a vacuous read.
+#[test]
+fn weighted_arms_feed_the_catalog_not_the_rule() {
+    let without = default_grid(|p, q| {
+        if (p, q) == (0.1, 0.05) {
+            (1, 1, 5)
+        } else {
+            (2, 2, 2)
+        }
+    });
+    let mut with = without.clone();
+    with.push(arm_with(weighted_spec(2.0), 0, 0, 99));
+    with.push(arm_with(weighted_spec(0.5), 0, 0, 99));
+    let a = choose_arm(&without, REF);
+    let b = choose_arm(&with, REF);
+    assert_eq!(a, b);
+    assert_eq!(b.pick.as_deref(), Some(REF));
+    assert_eq!((b.roster_arms, b.readable), (48, 48));
+    let weighted = with.last().expect("the weighted arm");
+    assert!(!weighted.readable());
+    assert!(readable_metrics(&weighted.all));
+    assert!(!readable_metrics(&Metrics::default()));
+    let mut silent = weighted.all.clone();
+    silent.speaking -= 1;
+    assert!(!readable_metrics(&silent));
+}
+
+/// T12. `run.data.playable_rule` is the config's block verbatim, and the summary header names the floor
+/// only when the block carries `minOwnShare`.
+/// Kills: a stamp rewritten or dropped; a header that names a floor that is not there.
+#[test]
+fn the_data_stamp_carries_the_playable_rule() {
+    let rule = json!({"minOwnShare": 0.02, "source": "test"});
+    let cfg = ReviewConfig {
+        playable_rule: Some(rule.clone()),
+        ..review_config()
+    };
+    let run = run_of(&[labelled()], &cfg, &live());
+    let json = serde_json::to_value(&run).expect("serialises");
+    assert_eq!(json["run"]["data"]["playable_rule"], rule);
+    let first = render_summary(&run);
+    let header = first.lines().next().expect("header");
+    assert!(header.ends_with(", playable floor 2 %"), "{header}");
+    // A block without `minOwnShare`: stamped, not named.
+    let other = ReviewConfig {
+        playable_rule: Some(json!({"source": "test"})),
+        ..review_config()
+    };
+    let run = run_of(&[labelled()], &other, &live());
+    assert!(!render_summary(&run).contains("playable floor"));
+    assert!(
+        serde_json::to_value(&run).expect("serialises")["run"]["data"]["playable_rule"].is_object()
+    );
+    // None: neither.
+    let plain = base_review();
+    assert!(!render_summary(plain).contains("playable floor"));
+    let json = serde_json::to_value(plain).expect("serialises");
+    assert!(json["run"]["data"].get("playable_rule").is_none());
+}
+
+/// T7, the binary. `TIER_B_W` drops the default and repeats, reads `-0` as 0 (one arm `w0`, never
+/// `w-0`), and refuses what `build_weighted` refuses with exit 2 before any search.
+/// Kills: a weighted arm at 1; a repeated arm; an arm id `w-0`; a negative or NaN weight accepted.
+#[test]
+fn the_binary_reads_the_weights_and_refuses_a_bad_one() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let out = std::env::temp_dir().join(format!("tier-b-review-w-{}.json", std::process::id()));
+    let command = |w: &str| {
+        let mut c = std::process::Command::new(exe);
+        c.env("TIER_B_JSON", &out)
+            .env("TIER_B_FIXTURES", &dir)
+            .env("TIER_B_P", "0.1")
+            .env("TIER_B_Q", "0.05")
+            .env("TIER_B_W", w)
+            .env("TIER_B_WIDTHS", "10,20,30")
+            .env("TIER_B_DEPTH_CHECK", "0")
+            .env("TIER_B_JOBS", "2")
+            .env("TIER_B_RUN_ID", "2026-11-09T00:00:00Z");
+        c
+    };
+    let ran = command("1,2,2,-0,0,1").output().expect("the binary runs");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let run: Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).expect("run.json")).expect("json");
+    let ids: Vec<&str> = array(&run["run"]["arms"], "arms")
+        .iter()
+        .map(|a| text(&a["id"], "id"))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "pool_or_roster",
+            "roster:0.1:0.05",
+            "roster:0.1:0.05:w2",
+            "roster:0.1:0.05:w0"
+        ]
+    );
+    // The stamp is the meta's `sources.positions.playableRule` verbatim, absent where the meta has none.
+    let meta: Value = serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("data/compiled/champion-meta.json"))
+            .expect("champion-meta.json"),
+    )
+    .expect("meta parses");
+    assert_eq!(
+        run["run"]["data"].get("playable_rule"),
+        meta["sources"]["positions"].get("playableRule")
+    );
+    let _ = std::fs::remove_file(&out);
+    for bad in ["-0.5", "nan", "inf", "x"] {
+        let refused = command(bad).output().expect("the binary runs");
+        assert_eq!(refused.status.code(), Some(2), "{bad}");
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("TIER_B_W"),
+            "{bad}"
+        );
+        assert!(!out.exists(), "{bad}: a search ran");
+    }
+}
+
+/// T11, through `read_run` on constructed positions with rows. Two positions where the `never` is first
+/// at both roster arms; a weighted arm placed OFF the roster grid (P 0.2, Q 0.3) ranks every position
+/// well, so counting it would add P 0.2 and Q 0.3 to the axes, clear `never_everywhere`, and move the
+/// sensitivity line. With it as `ArmRole::Weight` all three, the rule outcome and the roster arms'
+/// scores are those of the run without it.
+/// Kills: a weighted arm counted by `grid_axes`, `never_everywhere`, `choose_arm` or the sensitivity.
+#[test]
+fn weighted_arms_leave_the_axes_the_rows_and_the_sensitivity_alone() {
+    const WARM: &str = "roster:0.2:0.3:w2";
+    let positions = |with_weighted: bool| -> Vec<PositionInput> {
+        ["d1", "d2"]
+            .iter()
+            .map(|d| {
+                let mut arms: Vec<(&str, &[(u8, f64)])> =
+                    vec![(ARM_A, &BAD_C2_AT_2), (ARM_B, &BAD_C2_AT_2)];
+                if with_weighted {
+                    arms.push((WARM, &GOOD_C2_AT_2));
+                }
+                rpos(d, d, Side::Blue, None, &LABELS, None, &arms)
+            })
+            .collect()
+    };
+    let mut specs = specs_ab();
+    let plain = positions(false);
+    let without = read_run(&refs(&plain), &specs, ARM_A, 0.01);
+    specs.push(ArmSpec {
+        id: WARM.to_string(),
+        role: ArmRole::Weight,
+        p: Some(0.2),
+        q: Some(0.3),
+        w: Some(2.0),
+    });
+    let weighted_inputs = positions(true);
+    let with = read_run(&refs(&weighted_inputs), &specs, ARM_A, 0.01);
+    // The rows bite: both positions are clear nevers at both roster arms, and the weighted arm is not.
+    assert_eq!(without.never_everywhere, ["d1", "d2"]);
+    assert_eq!(with.never_everywhere, without.never_everywhere);
+    assert_eq!(grid_axes(&without.arms), (vec![0.1, 0.15], vec![0.05]));
+    assert_eq!(grid_axes(&with.arms), grid_axes(&without.arms));
+    assert_eq!(with.rule, without.rule);
+    assert_eq!(with.sensitivity, without.sensitivity);
+    assert_eq!(with.rule.roster_arms, 2);
+    let weighted = with.arms.last().expect("the weighted arm");
+    assert_eq!(weighted.spec.id, WARM);
+    assert!(!weighted.readable());
+    assert!(readable_metrics(&weighted.all));
+    assert_eq!(
+        weighted.all.never[0], 0,
+        "the weighted arm reads on its own rows"
+    );
 }

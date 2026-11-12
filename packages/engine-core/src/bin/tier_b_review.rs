@@ -7,6 +7,10 @@
 //!                        written beside it
 //!   TIER_B_P             [0.08,0.09,0.095,0.1,0.105,0.11,0.12,0.15]
 //!   TIER_B_Q             [0,0.02,0.05,0.08,0.1,0.15]
+//!   TIER_B_W             [0.5,1,1.5,2,3]  synergy weights; each w other than the default 1 adds one
+//!                        weighted arm at the reference P and Q, searched in its own universe. A
+//!                        repeat, and 1, add nothing; `-0` is read as 0; a value the universe refuses
+//!                        (negative, NaN, infinite) is a usage error before any search
 //!   TIER_B_WIDTHS        [30,60,100]  singles, pairs, root off-pool
 //!   TIER_B_HORIZON       [2]
 //!   TIER_B_K             [10]
@@ -19,11 +23,11 @@
 mod common;
 
 use engine_core::fm::FmWeights;
-use engine_core::reference::live::LiveUniverse;
+use engine_core::reference::live::{LiveUniverse, DEFAULT_SYNERGY_WEIGHT};
 use engine_core::reference::search::Shortlist;
 use engine_core::reference::tier_b::TierBFixture;
 use engine_core::reference::tier_b_review::{
-    render_summary, run_review, EngineStamp, ReviewConfig, NEAR_TIE_MARGIN,
+    render_summary, run_review_with, EngineStamp, ReviewConfig, NEAR_TIE_MARGIN,
 };
 use serde_json::Value;
 use std::io::Write;
@@ -34,6 +38,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_P: &str = "0.08,0.09,0.095,0.1,0.105,0.11,0.12,0.15";
 const DEFAULT_Q: &str = "0,0.02,0.05,0.08,0.1,0.15";
+const DEFAULT_W: &str = "0.5,1,1.5,2,3";
 const DEFAULT_WIDTHS: &str = "30,60,100";
 const NODE_BUDGET: u64 = 20_000_000;
 
@@ -136,8 +141,29 @@ fn main() {
     let positions_patch = text_at(&["sources", "positions", "decidingPatch"])
         .unwrap_or_else(|| die("champion-meta.json has no sources.positions.decidingPatch"));
     let (_, meta) = common::load_production_data_from(&meta_path);
-    let live = LiveUniverse::build(&fm, &version, &meta)
+    let playable_rule = meta_json
+        .get("sources")
+        .and_then(|v| v.get("positions"))
+        .and_then(|v| v.get("playableRule"))
+        .cloned();
+    // `-0` is read as 0 (`+ 0.0`), so it can never make a second arm id `w-0`; a repeat of any weight,
+    // and the default, add no arm.
+    let mut weights: Vec<f64> = Vec::new();
+    for w in list::<f64>("TIER_B_W", DEFAULT_W) {
+        let w = w + 0.0;
+        if w != DEFAULT_SYNERGY_WEIGHT && !weights.contains(&w) {
+            weights.push(w);
+        }
+    }
+    let live = LiveUniverse::build_weighted(&fm, &version, &meta, DEFAULT_SYNERGY_WEIGHT)
         .unwrap_or_else(|e| die(&format!("the live universe: {e}")));
+    let weighted: Vec<LiveUniverse> = weights
+        .iter()
+        .map(|w| {
+            LiveUniverse::build_weighted(&fm, &version, &meta, *w)
+                .unwrap_or_else(|e| die(&format!("TIER_B_W: {e}")))
+        })
+        .collect();
     let loaded = TierBFixture::load_dir(&fixtures, &live)
         .unwrap_or_else(|e| die(&format!("{}: {e}", fixtures.display())));
 
@@ -175,10 +201,11 @@ fn main() {
             .map(|status| !status.is_empty()),
         },
         positions_patch,
+        playable_rule,
     };
 
     let started = Instant::now();
-    let run = run_review(&loaded, &live, &cfg);
+    let run = run_review_with(&loaded, &live, &weighted, &cfg);
     let file = std::fs::File::create(&json_path)
         .unwrap_or_else(|e| die(&format!("{}: {e}", json_path.display())));
     let mut out = std::io::BufWriter::new(file);

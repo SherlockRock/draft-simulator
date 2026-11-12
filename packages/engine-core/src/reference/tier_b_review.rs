@@ -69,13 +69,17 @@ pub struct ReviewConfig {
     pub run_id: String,
     pub engine: EngineStamp,
     pub positions_patch: String,
+    /// The meta's `sources.positions.playableRule`, verbatim (design § 3); `None` where the meta has none.
+    pub playable_rule: Option<serde_json::Value>,
 }
 
-/// One rule and price. The ids are `pool_or_roster` and `roster:<P>:<Q>` with `f64`'s shortest display.
+/// One rule and price. The ids are `pool_or_roster` and `roster:<P>:<Q>` with `f64`'s shortest display;
+/// a weighted arm (a roster arm searched in a universe of synergy weight `w`) is `roster:<P>:<Q>:w<w>`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ArmKind {
     PoolOrRoster,
     Roster { p: f64, q: f64 },
+    Weighted { p: f64, q: f64, w: f64 },
 }
 
 #[derive(Clone, Debug)]
@@ -89,13 +93,14 @@ impl ArmKind {
         match self {
             ArmKind::PoolOrRoster => "pool_or_roster".to_string(),
             ArmKind::Roster { p, q } => format!("roster:{p}:{q}"),
+            ArmKind::Weighted { p, q, w } => format!("roster:{p}:{q}:w{w}"),
         }
     }
 
     fn rule(self) -> FeasibilityRule {
         match self {
             ArmKind::PoolOrRoster => FeasibilityRule::PoolOrRoster,
-            ArmKind::Roster { .. } => FeasibilityRule::Roster,
+            ArmKind::Roster { .. } | ArmKind::Weighted { .. } => FeasibilityRule::Roster,
         }
     }
 
@@ -103,14 +108,21 @@ impl ArmKind {
     fn price(self, universe: &Universe) -> Price {
         match self {
             ArmKind::PoolOrRoster => Price::of(universe.off_pool_cost(), 0.0),
-            ArmKind::Roster { p, q } => Price::of(p, q),
+            ArmKind::Roster { p, q } | ArmKind::Weighted { p, q, .. } => Price::of(p, q),
         }
+    }
+
+    /// A roster arm of the P x Q grid or a weighted one: both count in the catalog (`reach`, rows, the
+    /// margin set), only the first is the rule's.
+    fn is_roster_like(self) -> bool {
+        matches!(self, ArmKind::Roster { .. } | ArmKind::Weighted { .. })
     }
 }
 
 /// `pool_or_roster`, then `roster` over Q-major, P-minor, then the reference arm if the grid lacks it.
+/// Then one weighted arm per weighted weight, in the order given, at the reference arm's P and Q.
 /// A repeated id is kept once.
-fn build_arms(cfg: &ReviewConfig) -> Vec<Arm> {
+fn build_arms(cfg: &ReviewConfig, weights: &[f64]) -> Vec<Arm> {
     let mut kinds = vec![ArmKind::PoolOrRoster];
     for q in &cfg.qs {
         for p in &cfg.ps {
@@ -118,6 +130,13 @@ fn build_arms(cfg: &ReviewConfig) -> Vec<Arm> {
         }
     }
     kinds.push(reference_kind());
+    for w in weights {
+        kinds.push(ArmKind::Weighted {
+            p: DEFAULT_OFF_POOL_COST,
+            q: DEFAULT_OFF_ROLE_COST,
+            w: *w,
+        });
+    }
     let mut arms: Vec<Arm> = Vec::new();
     for kind in kinds {
         let id = kind.id();
@@ -182,6 +201,9 @@ pub struct DataStamp {
     pub fm_version: String,
     pub meta_version: String,
     pub positions_patch: String,
+    /// The meta's `sources.positions.playableRule`, verbatim; skipped when the meta has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playable_rule: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -207,6 +229,9 @@ pub struct ArmWire {
     pub p: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub q: Option<f64>,
+    /// The synergy weight, on weighted arms only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -475,13 +500,43 @@ pub struct PositionRead {
 
 // ---- the run ----------------------------------------------------------------------------------------
 
-/// Runs every loaded position at every arm and reads the results into one `ReviewRun`.
+/// Runs every loaded position at every arm and reads the results into one `ReviewRun`: no weighted arm.
 pub fn run_review(
     loaded: &[Result<Loaded, TierBError>],
     live: &LiveUniverse,
     cfg: &ReviewConfig,
 ) -> ReviewRun {
-    let arms = build_arms(cfg);
+    run_review_with(loaded, live, &[], cfg)
+}
+
+/// `run_review` with one weighted arm per `weighted` universe (design § 3), each searched in its own
+/// universe at the reference arm's P and Q. Everything else reads `base`. A universe whose weight is
+/// `base`'s adds no arm (that arm already exists).
+pub fn run_review_with(
+    loaded: &[Result<Loaded, TierBError>],
+    base: &LiveUniverse,
+    weighted: &[LiveUniverse],
+    cfg: &ReviewConfig,
+) -> ReviewRun {
+    let live = base;
+    // `+ 0.0` turns a `-0.0` into `0.0`, so no arm id reads `w-0`.
+    let weights: Vec<f64> = weighted
+        .iter()
+        .map(|u| u.synergy_weight + 0.0)
+        .filter(|w| *w != base.synergy_weight)
+        .collect();
+    let arms = build_arms(cfg, &weights);
+    // The universe each arm is searched in: its own `w`'s, else the base.
+    let arm_live: Vec<&LiveUniverse> = arms
+        .iter()
+        .map(|a| match a.kind {
+            ArmKind::Weighted { w, .. } => weighted
+                .iter()
+                .find(|u| u.synergy_weight == w)
+                .expect("a weighted arm is built from a weighted universe"),
+            _ => base,
+        })
+        .collect();
     let mut oks: Vec<&Loaded> = Vec::new();
     let mut load_errors = Vec::new();
     for l in loaded {
@@ -496,7 +551,7 @@ pub fn run_review(
             &oks[n / n_arms].fixture,
             arms[n % n_arms].kind,
             cfg.horizon,
-            live,
+            arm_live[n % n_arms],
             cfg,
         )
     });
@@ -531,6 +586,7 @@ pub fn run_review(
                 fm_version: live.fm_version.clone(),
                 meta_version: live.meta_version.clone(),
                 positions_patch: cfg.positions_patch.clone(),
+                playable_rule: cfg.playable_rule.clone(),
             },
             search: SearchStamp {
                 horizon: cfg.horizon,
@@ -551,12 +607,16 @@ pub fn run_review(
                     id: a.id.clone(),
                     rule: a.kind.rule().wire_name(),
                     p: match a.kind {
-                        ArmKind::Roster { p, .. } => Some(p),
+                        ArmKind::Roster { p, .. } | ArmKind::Weighted { p, .. } => Some(p),
                         ArmKind::PoolOrRoster => None,
                     },
                     q: match a.kind {
-                        ArmKind::Roster { q, .. } => Some(q),
+                        ArmKind::Roster { q, .. } | ArmKind::Weighted { q, .. } => Some(q),
                         ArmKind::PoolOrRoster => None,
+                    },
+                    w: match a.kind {
+                        ArmKind::Weighted { w, .. } => Some(w),
+                        _ => None,
                     },
                 })
                 .collect(),
@@ -580,12 +640,21 @@ fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64) -> Read {
                 role: ArmRole::PoolOrRoster,
                 p: None,
                 q: None,
+                w: None,
             },
             ArmKind::Roster { p, q } => ArmSpec {
                 id: a.id.clone(),
                 role: ArmRole::Roster,
                 p: Some(p),
                 q: Some(q),
+                w: None,
+            },
+            ArmKind::Weighted { p, q, w } => ArmSpec {
+                id: a.id.clone(),
+                role: ArmRole::Weight,
+                p: Some(p),
+                q: Some(q),
+                w: Some(w),
             },
         })
         .collect();
@@ -594,6 +663,7 @@ fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64) -> Read {
         role: ArmRole::Floor,
         p: None,
         q: None,
+        w: None,
     }));
     let inputs: Vec<&PositionInput> = positions.iter().map(|p| &p.scoring).collect();
     read_run(&inputs, &specs, &reference_kind().id(), margin)
@@ -649,7 +719,7 @@ fn search_one(
         Ok(position) => {
             let (off_pool_cost, off_role_cost) = match arm {
                 ArmKind::PoolOrRoster => (None, None),
-                ArmKind::Roster { p, q } => (Some(p), Some(q)),
+                ArmKind::Roster { p, q } | ArmKind::Weighted { p, q, .. } => (Some(p), Some(q)),
             };
             search(
                 &OracleInput {
@@ -1110,7 +1180,7 @@ fn read_position(
             view.ranks = ranks(&values);
             let top = rank_prefix(&view.ranks, cfg.k);
             seeds.extend(o.ranked.iter().take(top).map(|r| r.action));
-            if matches!(arm.kind, ArmKind::Roster { .. }) {
+            if arm.kind.is_roster_like() {
                 let m = margin_len(o, cfg.margin);
                 seeds.extend(o.ranked.iter().take(m).map(|r| r.action));
             }
@@ -1193,7 +1263,7 @@ fn read_position(
         let charge = pick_root
             .then(|| action_charge(&mut memo, arm.kind.rule(), mover, &position, pools, u));
         let mut trace_memo = FeasibilityMemo::new(price);
-        let roster = matches!(arm.kind, ArmKind::Roster { .. });
+        let roster = arm.kind.is_roster_like();
         let margin = margin_len(outcome, cfg.margin);
         let best_in = view.best_in_pool.map(|i| &outcome.ranked[i]);
         let mut best_in_pool = None;

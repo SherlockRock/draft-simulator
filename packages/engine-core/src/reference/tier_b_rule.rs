@@ -30,6 +30,9 @@ pub enum ArmRole {
     Roster,
     /// A comparison row: the reference ranking with options removed. Never selectable.
     Floor,
+    /// A roster arm at the reference P and Q searched at a synergy weight `w ≠ w₀`. Feeds the catalog
+    /// and the `w` read, never the P × Q rule.
+    Weight,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,6 +41,8 @@ pub struct ArmSpec {
     pub role: ArmRole,
     pub p: Option<f64>,
     pub q: Option<f64>,
+    /// The synergy weight, on `ArmRole::Weight` arms only.
+    pub w: Option<f64>,
 }
 
 /// One label fold: the labels, and the own pick it reads (`None`: no view, or not answered).
@@ -309,6 +314,12 @@ pub struct ArmScore {
     pub unknown_r_kept: usize,
 }
 
+/// Readable whatever the arm's role: positions > 0, every position speaks, `unjudged@1` and
+/// `unjudged@3` both 0. A read over no positions is never readable.
+pub fn readable_metrics(m: &Metrics) -> bool {
+    m.positions > 0 && m.speaking == m.positions && m.unjudged[0] == 0 && m.unjudged[1] == 0
+}
+
 impl ArmScore {
     pub fn new(spec: ArmSpec, rows: Vec<PositionRow>) -> ArmScore {
         let all = Metrics::sum(&rows);
@@ -324,11 +335,7 @@ impl ArmScore {
     /// `unjudged@3` is left (the second does not imply the first). `pool_or_roster` and the floor rows
     /// are never selectable.
     pub fn readable(&self) -> bool {
-        self.spec.role == ArmRole::Roster
-            && self.all.positions > 0
-            && self.all.speaking == self.all.positions
-            && self.all.unjudged[0] == 0
-            && self.all.unjudged[1] == 0
+        self.spec.role == ArmRole::Roster && readable_metrics(&self.all)
     }
 
     pub fn without_draft(&self, draft: &str) -> ArmScore {

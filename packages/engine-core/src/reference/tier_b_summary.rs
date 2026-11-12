@@ -93,6 +93,7 @@ fn role_name(role: ArmRole) -> &'static str {
         ArmRole::PoolOrRoster => "pool_or_roster",
         ArmRole::Roster => "roster",
         ArmRole::Floor => "floor",
+        ArmRole::Weight => "weight",
     }
 }
 
@@ -398,6 +399,20 @@ pub fn summary_of(h: &RunHeader, read: &Read, inputs: &[&PositionInput]) -> Stri
         h.data.meta_version,
         h.data.positions_patch,
     ));
+    // The floor shows in the header only when the data carries one (design § 3).
+    if let Some(share) = h
+        .data
+        .playable_rule
+        .as_ref()
+        .and_then(|r| r.get("minOwnShare"))
+        .and_then(Value::as_f64)
+    {
+        let line = out.last_mut().expect("the header line was just pushed");
+        line.push_str(&format!(
+            ", playable floor {} %",
+            (share * 1e8).round() / 1e6
+        ));
+    }
     out.push(format!(
         "{} positions, {} arms, margin ε {}, reference arm {}",
         counts.positions,
