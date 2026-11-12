@@ -67,6 +67,11 @@ describe("TeamSchema (canvas payload team)", () => {
         expect(TeamSchema.safeParse(withoutFlag).success).toBe(true);
     });
 
+    it("parses a team whose colours have a null key (canvas loads must not fail)", () => {
+        const team = { ...imported, colors: { primary: "#112233", secondary: null } };
+        expect(TeamSchema.safeParse(team).success).toBe(true);
+    });
+
     it("parses an imported team with a null owner", () => {
         expect(TeamSchema.safeParse(imported).success).toBe(true);
     });

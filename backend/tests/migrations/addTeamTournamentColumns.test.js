@@ -179,7 +179,9 @@ describe("add-team-tournament-columns migration: down", () => {
     const selects = rawSql(calls).filter((sql) => /^SELECT/i.test(sql));
     expect(selects).toHaveLength(1);
     // Either kind of row blocks: OR, not AND (review M1).
-    expect(selects[0]).toMatch(/source = 'esclub' OR "?owner_id"? IS NULL/);
+    expect(selects[0]).toMatch(
+      /source = 'esclub' OR "?owner_id"? IS NULL OR "?tournament_id"? IS NOT NULL/,
+    );
     expect(rawSql(calls).filter((sql) => !/^SELECT/i.test(sql))).toEqual([]);
     for (const method of [
       "removeColumn", "removeIndex", "removeConstraint", "changeColumn",

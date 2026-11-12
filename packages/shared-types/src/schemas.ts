@@ -207,11 +207,13 @@ export const TeamSchema = z.object({
   // external_id / external_org_id are import bookkeeping the client never
   // reads in T1, so they are not modelled (zod strips unknown keys).
   acronym: z.string().nullable().optional(),
-  // JSONB column; tolerant of missing keys (unknown keys are stripped).
+  // JSONB column; tolerant of missing or null keys (unknown keys are
+  // stripped): Team1/Team2 ride in the canvas payload, so a strict shape here
+  // would fail a whole canvas load on one odd colour.
   colors: z
     .object({
-      primary: z.string().optional(),
-      secondary: z.string().optional(),
+      primary: z.string().nullable().optional(),
+      secondary: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),

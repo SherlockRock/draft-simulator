@@ -188,4 +188,9 @@ module.exports = {
   stripUpdateSql,
   stripBreakdownSql,
   customGroupsHoldingCountSql,
+  // The text predicates the statements above are built from, exported so the
+  // dry-run kit can run them on known values against the real server (a check
+  // the logged counts cannot give: they come from the same SQL).
+  isPlaceholderSql: isPlaceholder,
+  isStorableSql: isStorable,
 };

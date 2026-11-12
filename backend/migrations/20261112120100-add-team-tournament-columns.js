@@ -6,8 +6,9 @@
 // tournament_id = NULL, so every existing team becomes a pickup team with the
 // same owner and roster. No other data is written.
 //
-// down: refuses (throws, changes nothing) if any team has source = 'esclub' or
-// owner_id IS NULL, because those rows cannot exist in the old shape. Otherwise
+// down: refuses (throws, changes nothing) if any team has source = 'esclub',
+// owner_id IS NULL or a tournament_id: the old shape cannot hold the first two
+// and would silently lose the third (branch review M1). Otherwise
 // it reverses up: drops the indexes and constraints, restores owner_id NOT NULL
 // and removes the columns.
 
@@ -126,14 +127,15 @@ module.exports = {
       const rows = await queryInterface.sequelize.query(
         `SELECT id FROM "Teams"
            WHERE source = 'esclub' OR owner_id IS NULL
+              OR tournament_id IS NOT NULL
            LIMIT 1`,
         { type: "SELECT", transaction },
       );
       if (rows && rows.length > 0) {
         throw new Error(
           "Cannot reverse add-team-tournament-columns: Teams has rows with " +
-            "source = 'esclub' or owner_id IS NULL, which the old schema cannot " +
-            "hold. Delete or reassign them first.",
+            "source = 'esclub', owner_id IS NULL or a tournament_id, which the " +
+            "old schema cannot hold. Delete or reassign them first.",
         );
       }
 
