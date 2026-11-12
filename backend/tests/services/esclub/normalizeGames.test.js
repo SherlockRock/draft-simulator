@@ -409,6 +409,54 @@ describe("synthetic variants", () => {
       expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
       expect(r.failed[0].reason).toContain("already in the draft");
     });
+    it("a played champion that is the other team's pick: that game fails, the series does not", () => {
+      // blue plays a champion red drafted; the red player who drafted it plays something else
+      const r = run((d) => {
+        const redPlayer = onSide(d, 2)[0];
+        onSide(d, 1)[0].id_champion = redPlayer.id_champion;
+        redPlayer.id_champion = spares[0];
+      });
+      expect(r.series.games.map((g) => g.number)).toEqual([0]);
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+    });
+    it("one pick unplayed but two champions played outside the picks: the game fails", () => {
+      const r = run((d) => {
+        onSide(d, 2)[0].id_champion = spares[0];
+        const extra = clone(onSide(d, 2)[1]);
+        extra.id_champion = spares[1];
+        lolOf(d).participants.push(extra);
+      });
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+      expect(r.failed[0].reason).toContain("1 picks");
+    });
+    it("two picks unplayed but one champion played outside the picks: the game fails", () => {
+      const r = run((d) => {
+        const [a, b] = onSide(d, 2);
+        a.id_champion = spares[0];
+        lolOf(d).participants.splice(lolOf(d).participants.indexOf(b), 1);
+      });
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+      expect(r.failed[0].reason).toContain("2 picks");
+    });
+    it("a skipped ban and a substitution in the same game both apply", () => {
+      const placeholder = resources.find((x) => x.id_external === "-1").id_game_resource;
+      let was;
+      const r = run((d) => {
+        d.choices[id1].find((x) => x.is_final && x.number === 3).id_game_resource = placeholder;
+        const p = onSide(d, 2)[0];
+        was = championAliasForKey(p.id_champion);
+        p.id_champion = spares[0];
+      });
+      expect(r.failed).toEqual([]);
+      const g = r.series.games[1];
+      expect(g.picks[getPicksArrayIndex(3, g.firstPick)]).toBe("");
+      expect(g.picks[slotOf(was)]).toBe(championAliasForKey(spares[0]));
+      expect(g.substitutions).toHaveLength(1);
+      expect(g.picks.filter((p) => p === "")).toHaveLength(1);
+    });
     it("a played champion the catalog does not know: the game fails (EsclubUnknownChampion)", () => {
       const r = run((d) => { onSide(d, 1)[0].id_champion = 999999; });
       expect(r.failed).toHaveLength(1);
@@ -519,5 +567,16 @@ describe("synthetic variants", () => {
         expect(g.picks[slot]).toBe(replaced.get(slot) ?? championAliasForKey(byRes.get(c.id_game_resource).id_external));
       }
     }
+    // The substituted slot, worked out from the raw choice and not from `substitutions`:
+    // under red first pick, Vi sits where the Xin Zhao choice's number puts it.
+    const g0 = r.series.games[0];
+    const xin = group.choices[g0.externalMatchId].find(
+      (c) => c.is_final && c.type_choice === "PickCharacter" && championAliasForKey(byRes.get(c.id_game_resource).id_external) === "XinZhao"
+    );
+    const xinSlot = getPicksArrayIndex(xin.number, "red");
+    expect(xinSlot).not.toBe(getPicksArrayIndex(xin.number, "blue"));
+    expect(g0.picks[xinSlot]).toBe("Vi");
+    expect(g0.picks).not.toContain("XinZhao");
+    expect(g0.substitutions.map((s) => s.slot)).toEqual([xinSlot]);
   });
 });

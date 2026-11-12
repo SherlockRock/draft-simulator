@@ -156,6 +156,7 @@ const iso = (unixSeconds) =>
  * Participants matched by picked champion decide; a locked PickSide row decides when
  * there are no matched participants; both must agree when both exist.
  * @returns {Map<string, "blue"|"red">|null} null when nothing decides
+ * @throws {EsclubDraftMismatch} when one roster's picks were played on both sides (that game only)
  */
 function rosterSides(rosterIds, finals, allChoices, participants, byResource, matchId) {
   const fail = (msg) => new EsclubProtocolChanged(`esclub: match ${matchId}: ${msg}`);
@@ -169,10 +170,18 @@ function rosterSides(rosterIds, finals, allChoices, participants, byResource, ma
     const matches = participants.filter((p) => p.id_champion === key);
     if (matches.length === 0) continue;
     const sides = new Set(matches.map((p) => SIDE_BY_NUMBER[p.side]));
-    if (sides.size !== 1 || sides.has(undefined)) throw fail(`participant side for champion ${key} is not 1 or 2`);
+    if (sides.has(undefined)) throw fail(`participant side for champion ${key} is not 1 or 2`);
+    if (sides.size !== 1) throw fail(`champion ${key} was played on both sides`);
     const side = [...sides][0];
     const known = fromParticipants.get(c.id_team_roster_source);
-    if (known && known !== side) throw fail(`roster ${c.id_team_roster_source} has picks on both sides`);
+    if (known && known !== side) {
+      // One roster's picks were played on both sides: the game did not follow
+      // its draft (say, a champion this roster drafted was played by the other
+      // team). That is this game's problem, not the protocol's.
+      throw new EsclubDraftMismatch(
+        `esclub: match ${matchId}: roster ${c.id_team_roster_source} has picks that were played on both sides`
+      );
+    }
     fromParticipants.set(c.id_team_roster_source, side);
   }
   let resolved = null;
@@ -371,6 +380,7 @@ function normalizeGame(match, draft, choices, teams, byResource) {
   // The champion played replaces the one drafted where the two differ.
   const substitutions = [];
   const playedKeyByNumber = new Map();
+  const drafted = [...picks];
   for (const s of playedSubstitutions(finals, sideOf, participants, byResource, id)) {
     const played = championAliasForKey(s.playedKey);
     if (!played) {
@@ -378,11 +388,11 @@ function normalizeGame(match, draft, choices, teams, byResource) {
         `esclub: match ${id}: champion key ${JSON.stringify(s.playedKey)} was played on ${s.side} and is not in the catalog`
       );
     }
-    if (picks.includes(played)) {
+    if (drafted.includes(played)) {
       throw new EsclubDraftMismatch(`esclub: match ${id}: ${played} was played on ${s.side} and is already in the draft`);
     }
     const slot = getPicksArrayIndex(s.number, firstPick);
-    substitutions.push({ side: s.side, slot, drafted: picks[slot], played });
+    substitutions.push({ side: s.side, slot, drafted: drafted[slot], played });
     picks[slot] = played;
     playedKeyByNumber.set(s.number, s.playedKey);
   }
