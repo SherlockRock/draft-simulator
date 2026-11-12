@@ -1219,7 +1219,11 @@ describe("placeholder team names never count", () => {
     it("a team search for Team 1 counts no games", () => {
         const groups = [makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "DOG" })];
         const drafts = [
-            makeDraft("d1", fullPicks(), { group_id: "g1", completed: true, winner: "blue" })
+            makeDraft("d1", fullPicks(), {
+                group_id: "g1",
+                completed: true,
+                winner: "blue"
+            })
         ];
         const results = computeSearchResults(
             drafts,
