@@ -11,7 +11,8 @@ and the reply payload's `context`.
 - Season `11f1bc5f-4b33-e263-9b1e-aa8ed4a49d2d`, its stage list, the
   "Regular Season" stage, its round, the round's group, the group's series
   (45, from a `null` cursor), the stage's team rosters, and the LoL game
-  resources (champions by Riot key, and the two Side resources).
+  resources (champions by Riot key, and the two Side resources), and one
+  roster's schedule of played series (21, groups and bracket rounds).
 - `group-bo3/`: a finished 2–0 Bo3 under a Group (CoinToss side selection,
   Riot IDs present). Game 0's red roster drafted Xin Zhao and the participant
   played Vi.

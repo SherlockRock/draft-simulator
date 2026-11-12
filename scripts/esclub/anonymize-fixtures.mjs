@@ -26,6 +26,7 @@ const MANIFEST = {
   "rounds.json": "a04-rounds.json",
   "team-rosters.json": "a05-team-rosters.json",
   "game-resources.json": "a06-game-resources.json",
+  "team-roster-schedule.json": "a09-schedule-roster.json",
   "groups-of-round.json": "b01-groups-of-round.json",
   "series-of-group.json": "b02-series-of-group.json",
   "group-bo3/serie.json": "a07-serie-group.json",

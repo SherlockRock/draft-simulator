@@ -25,7 +25,7 @@ describe("esclub fixtures are anonymised", () => {
   const all = files(DIR).map((path) => ({ path, fixture: JSON.parse(readFileSync(path, "utf8")) }));
 
   it("every fixture has the recorded shape", () => {
-    expect(all.length).toBe(26);
+    expect(all.length).toBe(27);
     for (const { fixture } of all) {
       expect(typeof fixture.request).toBe("string");
       expect(fixture.context).toBeTypeOf("object");
