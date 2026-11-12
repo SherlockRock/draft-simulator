@@ -6,7 +6,7 @@
 //!   TIER_B_JSON          output path (required: a usage error before any search); `summary.txt` is
 //!                        written beside it
 //!   TIER_B_P             [0.08,0.09,0.095,0.1,0.105,0.11,0.12,0.15]
-//!   TIER_B_Q             [0,0.02,0.05,0.08,0.1,0.15]
+//!   TIER_B_Q             [0,0.02,0.05,0.08,0.1,0.15,0.2,0.25,0.3,0.4]
 //!   TIER_B_W             [0.5,1,1.5,2,3]  synergy weights; each w other than the default 1 adds one
 //!                        weighted arm at the reference P and Q, searched in its own universe. A
 //!                        repeat, and 1, add nothing; `-0` is read as 0; a value the universe refuses
@@ -44,7 +44,7 @@ use std::str::FromStr;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_P: &str = "0.08,0.09,0.095,0.1,0.105,0.11,0.12,0.15";
-const DEFAULT_Q: &str = "0,0.02,0.05,0.08,0.1,0.15";
+const DEFAULT_Q: &str = "0,0.02,0.05,0.08,0.1,0.15,0.2,0.25,0.3,0.4";
 const DEFAULT_W: &str = "0.5,1,1.5,2,3";
 const DEFAULT_WIDTHS: &str = "30,60,100";
 const NODE_BUDGET: u64 = 20_000_000;
