@@ -19,6 +19,7 @@ const {
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const { withoutPlaceholderTeamNames } = require("../utils/teamPlaceholders");
 const Pool = require("../models/Pool.js");
 const {
   destroyPoolsForCanvas,
@@ -1544,7 +1545,9 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
         positionX: positionX ?? 50,
         positionY: positionY ?? 50,
         versus_draft_id: versusDraftId,
-        metadata: {
+        // No "Team 1"/"Team 2" placeholder is stored (T0): the VersusDraft
+        // columns keep their defaults, the group metadata leaves the key absent.
+        metadata: withoutPlaceholderTeamNames({
           blueTeamName: versusDraft.blueTeamName,
           redTeamName: versusDraft.redTeamName,
           length: versusDraft.length,
@@ -1558,7 +1561,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           // save, so a derived value there would reset a user's correction in
           // the very request that saved it (R1 path 1).
           gameType: deriveGameType(versusDraft.competitive),
-        },
+        }),
       },
       { transaction: t },
     );
@@ -1808,11 +1811,13 @@ router.post(
           name: data.name,
           type: "series",
           versus_draft_id: versusDraft.id,
-          metadata: {
+          // Stripped last: getSeriesMetadata copies the VersusDraft's names,
+          // which default to "Team 1"/"Team 2" (T0).
+          metadata: withoutPlaceholderTeamNames({
             ...group.metadata,
             ...getSeriesMetadata(versusDraft),
             gameType: convertedGameType,
-          },
+          }),
           ...teamLinkUpdates,
         },
         { transaction: t },
@@ -2315,6 +2320,13 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
           };
         }
       }
+    }
+
+    // The one place the final metadata is known: it may come from
+    // mergeGroupMetadata alone or from the getSeriesMetadata spread above.
+    // Strip here so no branch can store a "Team 1"/"Team 2" placeholder (T0).
+    if (updates.metadata) {
+      updates.metadata = withoutPlaceholderTeamNames(updates.metadata);
     }
 
     await group.update(updates, { transaction: t });

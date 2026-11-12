@@ -34,6 +34,7 @@ const {
 } = require("../helpers");
 const { planCanvasGroupImport } = require("../services/canvasGroupImport");
 const { touchCanvasTimestamp } = require("../services/canvasWriteGuards");
+const { withoutPlaceholderTeamNames } = require("../utils/teamPlaceholders");
 
 const VALID_CHAMPION_IDS = new Set(
   championData.champions.map((champion) => champion.id),
@@ -1425,11 +1426,13 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             // replace it wholesale, reverting a corrected gameType — and
             // wiping layout/gridCols/rowLabels/origin — under BOTH dedupe
             // strategies, since this write precedes the overwrite branch.
-            metadata: {
+            // Stripped after the merge: a placeholder name must not survive
+            // from either side (T0).
+            metadata: withoutPlaceholderTeamNames({
               ...existingGroup.metadata,
               ...metadata,
               gameType: existingGroup.metadata?.gameType || derivedGameType,
-            },
+            }),
           },
           { transaction },
         );
@@ -1460,7 +1463,10 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
             positionX: groupPositionX,
             positionY: groupPositionY,
             versus_draft_id: series.id,
-            metadata: { ...metadata, gameType: derivedGameType },
+            metadata: withoutPlaceholderTeamNames({
+              ...metadata,
+              gameType: derivedGameType,
+            }),
           },
           { transaction },
         );
