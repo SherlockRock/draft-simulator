@@ -489,30 +489,30 @@
         {
           "position": "2026-11-09-ho-blind-pinch-slot-9",
           "rows": [
-            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
-            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
-            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
-            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
-            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
-            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
             "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona",
             "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar",
+            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
             "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
+            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
             "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona"
           ]
         },
         {
           "position": "2026-11-09-ho-scored-pinch-slot-9",
           "rows": [
-            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
-            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
-            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
-            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
-            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
-            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
             "Ahri+Leona|top=Rumble,mid=Ahri,support=Leona",
             "Alistar+Cassiopeia|top=Rumble,mid=Cassiopeia,support=Alistar",
+            "Alistar+Galio|top=Rumble,mid=Galio,support=Alistar",
+            "Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar",
             "Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar",
+            "Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona",
+            "Galio+Leona|top=Rumble,mid=Galio,support=Leona",
+            "Leona+Nasus|top=Rumble,mid=Nasus,support=Leona",
+            "Leona+Zeri|top=Rumble,adc=Zeri,support=Leona",
             "Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona"
           ]
         }

@@ -6321,9 +6321,11 @@ fn read_run_hands_the_w_read_development_arms_and_the_holdout_state() {
 /// position, the labels line and `metrics.labels` development only, and the holdout line its count and
 /// label progress. Sealed, that is all (`metrics.holdout` is `{positions, sealed, labels}`); opened, the
 /// holdout's metrics at the reference arm (here also the pick) and at each weighted arm. The worklist
-/// lists the holdout's unlabelled rows apart. Without a holdout position none of it appears.
+/// lists the holdout's unlabelled rows apart, in option-id order while sealed and as met once opened.
+/// Without a holdout position none of it appears.
 /// Kills: a sealed holdout's metrics printed or written; the label counts over both splits; the
-/// holdout's rows mixed into the development worklist; a holdout line without a holdout.
+/// holdout's rows mixed into the development worklist; a holdout line without a holdout; a sealed
+/// holdout's rows written in the order met (the rankings' order, a rank leak: review of Task 5, I1).
 #[test]
 fn the_summary_and_metrics_carry_the_holdout_count_sealed_and_its_read_opened() {
     use engine_core::reference::tier_b_summary::metrics_of;
@@ -6343,7 +6345,8 @@ fn the_summary_and_metrics_carry_the_holdout_count_sealed_and_its_read_opened() 
     h.id = "ho-x-a".to_string();
     h.draft = "ho-x".to_string();
     h.split = CorpusSplit::Holdout;
-    h.unlabelled_rows = vec!["u1".to_string(), "u2".to_string()];
+    // Met (the catalog's order, which follows the rankings) as u2 then u1.
+    h.unlabelled_rows = vec!["u2".to_string(), "u1".to_string()];
     h.reveal.blind_labels = 4;
     let mut all = ps.clone();
     all.push(h);
@@ -6414,6 +6417,14 @@ fn the_summary_and_metrics_carry_the_holdout_count_sealed_and_its_read_opened() 
     assert_eq!(held["reference"]["positions"], json!(1));
     assert_eq!(held["reference"]["never"][0], json!(1));
     assert_eq!(held["pick"], held["reference"]);
+    assert_eq!(
+        wire["worklist"]["holdout_unlabelled_rows"],
+        json!([{"position": "ho-x-a", "rows": ["u2", "u1"]}])
+    );
+    assert!(
+        text.contains("\n    ho-x-a: 2\n      u2\n      u1\n"),
+        "{text}"
+    );
 }
 
 /// The labelled position under `k` 10 (narrow widths; no depth check, which the pinned run below
@@ -6542,7 +6553,7 @@ fn keys_under(v: &Value, into: &mut BTreeSet<String>) {
 /// `split` is written on the holdout position only, `run.holdout_open` on the opened run only, and the
 /// summary and `metrics` carry the sealed holdout's count, not its read. Opened, all of it is present.
 /// Kills: sealing only the printout; an absent key (the page builder maps them unguarded); `band` from
-/// another rule; `reach` left in; `split` on every position.
+/// another rule; `reach` left in; `split` on every position; a sealed holdout's rows in rank order.
 #[test]
 fn a_sealed_holdout_position_is_written_with_nothing_ranked_or_valued() {
     let (_, sealed, opened, sealed_text, opened_text) = split_runs();
@@ -6641,6 +6652,43 @@ fn a_sealed_holdout_position_is_written_with_nothing_ranked_or_valued() {
     );
     assert_eq!(sealed["metrics"]["holdout"]["sealed"], json!(true));
     assert_eq!(opened["metrics"]["holdout"]["sealed"], json!(false));
+
+    // No rank in the order either (review of Task 5, I1): the sealed holdout's unlabelled rows go out
+    // in option-id order, in `metrics` and in the summary; opened, in the order the catalog met them,
+    // which here is not id order (so the check bites). `options` is a map, id-ordered by construction.
+    let rows = |run: &Value| -> Vec<String> {
+        let list = array(
+            &run["metrics"]["worklist"]["holdout_unlabelled_rows"],
+            "rows",
+        );
+        assert_eq!(list.len(), 1);
+        array(&list[0]["rows"], "rows")
+            .iter()
+            .map(|r| text(r, "row").to_string())
+            .collect()
+    };
+    let (sealed_rows, opened_rows) = (rows(sealed), rows(opened));
+    let mut sorted = opened_rows.clone();
+    sorted.sort();
+    assert!(sealed_rows.len() > 1);
+    assert_eq!(sealed_rows, sorted);
+    assert_ne!(
+        opened_rows, sorted,
+        "the catalog's order is not id order here"
+    );
+    let listed = |t: &str| -> Vec<String> {
+        let at = t
+            .find("\n  holdout unlabelled rows: ")
+            .expect("the holdout rows");
+        t[at + 1..]
+            .lines()
+            .skip(2)
+            .take_while(|l| l.starts_with("      "))
+            .map(|l| l.trim().to_string())
+            .collect()
+    };
+    assert_eq!(listed(sealed_text), sealed_rows);
+    assert_eq!(listed(opened_text), opened_rows);
 }
 
 /// The sealed run of the two holdout copies alone (`ho-blind.json`, `ho-scored.json`; `k` 10, one arm,

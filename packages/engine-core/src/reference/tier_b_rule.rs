@@ -1051,7 +1051,8 @@ pub struct HoldoutRead {
     pub open: bool,
     /// Every arm and floor row read over the holdout positions (the rule fold); empty while sealed.
     pub arms: Vec<ArmScore>,
-    /// The holdout's catalog rows with no label (option ids only, which the page shows anyway).
+    /// The holdout's catalog rows with no label (option ids only, which the page shows anyway): in
+    /// option-id order while sealed (the catalog's own order follows the rankings), as met once opened.
     pub unlabelled_rows: Vec<(String, Vec<String>)>,
 }
 
@@ -1218,10 +1219,18 @@ pub fn read_run(
     let holdout = (!held.is_empty()).then(|| HoldoutRead {
         positions: held.len(),
         open: holdout_open,
+        // The runner lists a position's rows in the order the catalog met them, which follows the
+        // arms' rankings: sealed, they go out in option-id order, so the list carries no rank.
         unlabelled_rows: held
             .iter()
             .filter(|p| !p.unlabelled_rows.is_empty())
-            .map(|p| (p.id.clone(), p.unlabelled_rows.clone()))
+            .map(|p| {
+                let mut rows = p.unlabelled_rows.clone();
+                if !holdout_open {
+                    rows.sort();
+                }
+                (p.id.clone(), rows)
+            })
             .collect(),
         arms: holdout_arms,
     });
