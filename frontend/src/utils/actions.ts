@@ -33,10 +33,14 @@ import {
     CardLayoutSchema,
     TeamSchema,
     TeamListRowSchema,
+    TeamsManageResponseSchema,
+    BulkTeamsResponseSchema,
+    TournamentArchiveResponseSchema,
     CanvasAnnotationSchema,
     CanvasPoolPlacementSchema
 } from "./schemas";
 import type {
+    BulkTeamAction,
     CanvasGroupMetadata,
     CanvasGroupMetadataUpdate,
     DraftPositionUpdate,
@@ -927,3 +931,17 @@ export const updateTeamRoster = async (
 ) => apiPut(`/teams/${id}/roster`, { players, region }, TeamSchema);
 
 export const deleteTeam = async (id: string) => apiDelete(`/teams/${id}`, SuccessSchema);
+
+// The Teams page's read: pickup teams, leagues and use counts (archived included).
+export const fetchTeamsManage = async () =>
+    apiGet(`/teams/manage`, TeamsManageResponseSchema);
+
+export const bulkTeams = async (action: BulkTeamAction, ids: string[]) =>
+    apiPost(`/teams/bulk`, { action, ids }, BulkTeamsResponseSchema);
+
+export const setTournamentArchived = async (id: string, archived: boolean) =>
+    apiPut(
+        `/teams/tournaments/${encodeURIComponent(id)}/archive`,
+        { archived },
+        TournamentArchiveResponseSchema
+    );

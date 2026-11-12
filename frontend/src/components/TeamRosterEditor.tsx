@@ -122,6 +122,7 @@ export const TeamRosterEditor: Component<{
         },
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["teams"] });
+            void queryClient.invalidateQueries({ queryKey: ["teamsManage"] });
             toast.success("Roster saved");
             props.onSaved();
         },

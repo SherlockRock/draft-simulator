@@ -146,7 +146,7 @@ export function emptySelection(): Selection {
 
 // Imported and tournament rows are never selectable, whatever the server flags
 // say; only a pickup team (no tournament) with an archive or delete right is.
-function isSelectable(team: ManagedTeamRow): boolean {
+export function isSelectable(team: ManagedTeamRow): boolean {
     return !team.tournament_id && (team.canArchive || team.canDelete);
 }
 
@@ -274,4 +274,69 @@ export function deleteConfirmText(rows: readonly ManagedTeamRow[]): string {
     return single
         ? `${subject} It's linked to ${linked}. Those series keep its name as plain text. This can't be undone.`
         : `${subject} They're linked to ${linked}. Those series keep their names as plain text. This can't be undone.`;
+}
+
+// ---- Page text and helpers -----------------------------------------------
+
+export function teamCountLabel(n: number): string {
+    return n === 1 ? "1 team" : `${n} teams`;
+}
+
+export function regionLabel(region: string): string {
+    return region.toUpperCase();
+}
+
+// "Archived · 2 leagues, 5 teams": teams counts every team in the group,
+// leagues' teams and archived pickup teams alike.
+export function archivedHeaderLabel(group: ArchivedGroup): string {
+    const leagues = group.tournaments.length;
+    const teams =
+        group.pickupTeams.length +
+        group.tournaments.reduce((n, t) => n + t.teams.length, 0);
+    const leagueText = leagues === 1 ? "1 league" : `${leagues} leagues`;
+    return `Archived · ${leagueText}, ${teamCountLabel(teams)}`;
+}
+
+export const NEW_TEAM_NAME_MAX = 120;
+
+// The trimmed name, or null when it is empty or longer than the server allows.
+export function parseNewTeamName(raw: string): string | null {
+    const name = raw.trim();
+    return name.length >= 1 && name.length <= NEW_TEAM_NAME_MAX ? name : null;
+}
+
+// The selected rows, in the data's order.
+export function selectedRows(
+    sel: Selection,
+    data: TeamsManageResponse
+): ManagedTeamRow[] {
+    return data.teams.filter((t) => sel.ids.has(t.id));
+}
+
+export function selectionBarLabel(summary: SelectionSummary): string {
+    return `${summary.count} selected · ${useCountLabel(summary.uses)}`;
+}
+
+// The row's title: the name, with the league's acronym when it has one.
+export function teamDisplayName(team: ManagedTeamRow): string {
+    const acronym = team.acronym?.trim();
+    return acronym ? `${team.name} (${acronym})` : team.name;
+}
+
+export function isRowSelected(
+    sel: Selection,
+    id: string,
+    scope: SelectionScope
+): boolean {
+    return sel.scope === scope && sel.ids.has(id);
+}
+
+// True when the list is non-empty and every id is selected in that scope
+// (the state of a group's select-all checkbox).
+export function allSelected(
+    sel: Selection,
+    ids: readonly string[],
+    scope: SelectionScope
+): boolean {
+    return sel.scope === scope && ids.length > 0 && ids.every((id) => sel.ids.has(id));
 }

@@ -21,6 +21,7 @@ import { initAnalytics } from "./utils/analytics";
 const ShareCanvasPage = lazy(() => import("./ShareCanvasPage"));
 const HomePage = lazy(() => import("./pages/HomePage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const TeamsPage = lazy(() => import("./pages/TeamsPage"));
 const CanvasFlowDashboard = lazy(() => import("./pages/CanvasFlowDashboard"));
 const VersusFlowDashboard = lazy(() => import("./pages/VersusFlowDashboard"));
 const DraftDetailView = lazy(() => import("./pages/DraftDetailView"));
@@ -52,6 +53,7 @@ render(
                     <Route path="/" component={UserWrapper}>
                         <Route path="/oauth2callback" component={AuthCallback} />
                         <Route path="/settings" component={SettingsPage} />
+                        <Route path="/teams" component={TeamsPage} />
                         <Route path="/scout" component={ScoutView} />
                         <Route path="/" component={HomePage} />
                         <Route path="/canvas" component={CanvasWorkflow}>

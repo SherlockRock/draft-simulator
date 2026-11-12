@@ -7,7 +7,6 @@ import { useQueryClient } from "@tanstack/solid-query";
 import { useUser, type UserData } from "../userProvider";
 import { AuthGuard } from "../components/AuthGuard";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
-import { MyTeamsSection } from "../components/MyTeamsSection";
 import {
     exportUserData,
     deleteUserAccount,
@@ -275,8 +274,22 @@ const SettingsPage: Component = () => {
                             </div>
                         </div>
 
-                        {/* My Teams Section */}
-                        <MyTeamsSection />
+                        {/* Teams moved to its own page */}
+                        <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
+                            <h2 class="mb-2 text-xl font-semibold text-darius-text-primary">
+                                Teams
+                            </h2>
+                            <p class="mb-4 text-darius-text-secondary">
+                                Your teams and leagues now have their own page.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => navigate("/teams")}
+                                class="rounded-md bg-darius-ember px-4 py-2 font-medium text-darius-text-primary transition-colors"
+                            >
+                                Go to Teams
+                            </button>
+                        </div>
 
                         {/* Data Export Section */}
                         <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">

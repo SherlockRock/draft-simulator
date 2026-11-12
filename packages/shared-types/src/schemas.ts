@@ -274,6 +274,24 @@ export const TeamsManageResponseSchema = z.object({
 });
 export type TeamsManageResponse = z.infer<typeof TeamsManageResponseSchema>;
 
+// POST /api/teams/bulk and PUT /api/teams/tournaments/:id/archive replies.
+export const BulkTeamActionSchema = z.enum(["archive", "restore", "delete"]);
+export type BulkTeamAction = z.infer<typeof BulkTeamActionSchema>;
+
+export const BulkTeamsResponseSchema = z.object({
+  action: BulkTeamActionSchema,
+  ids: z.array(z.string()),
+});
+export type BulkTeamsResponse = z.infer<typeof BulkTeamsResponseSchema>;
+
+export const TournamentArchiveResponseSchema = z.object({
+  tournament_id: z.string(),
+  archived_at: z.string().nullable(),
+});
+export type TournamentArchiveResponse = z.infer<
+  typeof TournamentArchiveResponseSchema
+>;
+
 export const CreateTeamPayloadSchema = z.object({
   name: z.string().min(1).max(120),
 });

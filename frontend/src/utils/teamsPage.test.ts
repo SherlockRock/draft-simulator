@@ -8,13 +8,22 @@ import type {
 } from "@draft-sim/shared-types";
 import {
     PAGE_INTRO,
+    archivedHeaderLabel,
     buildTeamsPageGroups,
     deleteConfirmText,
     emptySelection,
+    parseNewTeamName,
     playersLabel,
     pruneSelection,
+    regionLabel,
     selectableIds,
+    selectedRows,
+    selectionBarLabel,
     selectionSummary,
+    teamCountLabel,
+    isRowSelected,
+    allSelected,
+    teamDisplayName,
     toggleGroupSelected,
     toggleSelected,
     useCountLabel
@@ -519,5 +528,121 @@ describe("strings", () => {
         expect(deleteConfirmText([team("a", "A"), team("b", "B"), team("c", "C")])).toBe(
             "Delete 3 teams? They aren't linked to any series on your canvases. This can't be undone."
         );
+    });
+});
+
+describe("teamCountLabel and regionLabel", () => {
+    it("pluralises team counts", () => {
+        expect(teamCountLabel(0)).toBe("0 teams");
+        expect(teamCountLabel(1)).toBe("1 team");
+        expect(teamCountLabel(12)).toBe("12 teams");
+    });
+
+    it("upper-cases a region", () => {
+        expect(regionLabel("na1")).toBe("NA1");
+    });
+});
+
+describe("archivedHeaderLabel", () => {
+    const archivedGroup = (input: TeamsManageResponse) => {
+        const g = buildTeamsPageGroups(input).find((x) => x.kind === "archived");
+        if (!g || g.kind !== "archived") throw new Error("no archived group");
+        return g;
+    };
+    const old = "2026-10-01T00:00:00.000Z";
+
+    it("counts leagues and every team inside the group", () => {
+        // Old League (1 team) + two archived pickup teams
+        expect(archivedHeaderLabel(archivedGroup(data))).toBe(
+            "Archived · 1 league, 3 teams"
+        );
+    });
+
+    it("uses plural leagues and singular team", () => {
+        const g = archivedGroup({
+            tournaments: [
+                { ...tournaments[2], archived_at: old },
+                { ...tournaments[0], archived_at: old }
+            ],
+            teams: [imported("b1", "Bees", "tB")]
+        });
+        expect(archivedHeaderLabel(g)).toBe("Archived · 2 leagues, 1 team");
+    });
+
+    it("handles zero leagues", () => {
+        const g = archivedGroup({
+            tournaments: [],
+            teams: [team("x", "X", { archived_at: old })]
+        });
+        expect(archivedHeaderLabel(g)).toBe("Archived · 0 leagues, 1 team");
+    });
+});
+
+describe("parseNewTeamName", () => {
+    it("trims and accepts 1 to 120 chars", () => {
+        expect(parseNewTeamName("  Wolves ")).toBe("Wolves");
+        expect(parseNewTeamName("a".repeat(120))).toBe("a".repeat(120));
+    });
+
+    it("rejects empty, blank and too long", () => {
+        expect(parseNewTeamName("")).toBeNull();
+        expect(parseNewTeamName("   ")).toBeNull();
+        expect(parseNewTeamName("a".repeat(121))).toBeNull();
+    });
+});
+
+describe("selectedRows and selectionBarLabel", () => {
+    it("returns the selected rows from the data, in data order", () => {
+        const sel = toggleSelected(
+            toggleSelected(emptySelection(), "p1", "active"),
+            "p2",
+            "active"
+        );
+        expect(selectedRows(sel, data).map((r) => r.id)).toEqual(["p2", "p1"]);
+    });
+
+    it("is empty for an empty selection", () => {
+        expect(selectedRows(emptySelection(), data)).toEqual([]);
+    });
+
+    it("labels count and uses", () => {
+        const sel = toggleSelected(emptySelection(), "p2", "active");
+        const summary = selectionSummary(sel, selectedRows(sel, data));
+        expect(selectionBarLabel(summary)).toBe("1 selected · 4 official · 12 scrim");
+    });
+});
+
+describe("teamDisplayName", () => {
+    it("appends the acronym when there is one", () => {
+        expect(teamDisplayName(team("a", "Dog Squad", { acronym: "DOG" }))).toBe(
+            "Dog Squad (DOG)"
+        );
+    });
+
+    it("is the name alone without an acronym or with a blank one", () => {
+        expect(teamDisplayName(team("a", "Dog Squad"))).toBe("Dog Squad");
+        expect(teamDisplayName(team("a", "Dog Squad", { acronym: null }))).toBe(
+            "Dog Squad"
+        );
+        expect(teamDisplayName(team("a", "Dog Squad", { acronym: " " }))).toBe(
+            "Dog Squad"
+        );
+    });
+});
+
+describe("isRowSelected and allSelected", () => {
+    const sel = toggleGroupSelected(emptySelection(), ["p1", "p2"], "active");
+
+    it("is true only in the selection's own scope", () => {
+        expect(isRowSelected(sel, "p1", "active")).toBe(true);
+        expect(isRowSelected(sel, "p1", "archived")).toBe(false);
+        expect(isRowSelected(sel, "zz", "active")).toBe(false);
+    });
+
+    it("allSelected needs a non-empty list, every id and the same scope", () => {
+        expect(allSelected(sel, ["p1", "p2"], "active")).toBe(true);
+        expect(allSelected(sel, ["p1", "p2", "p3"], "active")).toBe(false);
+        expect(allSelected(sel, [], "active")).toBe(false);
+        expect(allSelected(sel, ["p1", "p2"], "archived")).toBe(false);
     });
 });

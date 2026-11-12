@@ -29,7 +29,7 @@ const GlobalNavBar: Component = () => {
         if (path.startsWith("/canvas")) {
             // Go through CanvasEntryRedirect to ensure fresh local canvas is created
             navigate("/canvas", { replace: true });
-        } else if (path.startsWith("/settings")) {
+        } else if (path.startsWith("/settings") || path.startsWith("/teams")) {
             navigate("/", { replace: true });
         }
         // Versus and other pages: stay on current URL
@@ -123,6 +123,12 @@ const GlobalNavBar: Component = () => {
                         <span class="font-medium text-darius-text-primary">
                             {getDisplayName(user())}
                         </span>
+                        <button
+                            onClick={() => navigate("/teams")}
+                            class="rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-sm text-darius-text-secondary transition-colors hover:bg-darius-border"
+                        >
+                            Teams
+                        </button>
                         <button
                             onClick={() => navigate("/settings")}
                             class="rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-sm text-darius-text-secondary transition-colors hover:bg-darius-border"
