@@ -32,6 +32,7 @@ import {
     ShareCanvasVerifySchema,
     CardLayoutSchema,
     TeamSchema,
+    TeamListRowSchema,
     CanvasAnnotationSchema,
     CanvasPoolPlacementSchema
 } from "./schemas";
@@ -911,7 +912,7 @@ export const fetchRecentActivity = async (
 // Teams (user-owned Canvas Team entity)
 // =============================================================================
 
-export const fetchTeams = async () => apiGet(`/teams`, z.array(TeamSchema));
+export const fetchTeams = async () => apiGet(`/teams`, z.array(TeamListRowSchema));
 
 export const createTeam = async (name: string) => apiPost(`/teams`, { name }, TeamSchema);
 

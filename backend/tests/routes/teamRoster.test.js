@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const auth = require("../../middleware/auth");
 const Team = require("../../models/Team");
 const TeamPlayer = require("../../models/TeamPlayer");
+const { CanvasGroup } = require("../../models/Canvas.js");
 const sequelize = require("../../config/database");
 
 function loadRouter() {
@@ -111,15 +112,66 @@ describe("PUT /:id/roster", () => {
     vi.spyOn(Team, "findByPk").mockResolvedValue({
       id: "t1",
       owner_id: "someone-else",
+      source: "manual",
     });
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue({ id: "g-1" });
     const res = await request(buildApp())
       .put("/api/teams/t1/roster")
       .send({ players: [] });
     expect(res.status).toBe(403);
   });
 
+  it("returns 404 for another user's pickup team with no canvas link", async () => {
+    vi.spyOn(Team, "findByPk").mockResolvedValue({
+      id: "t1",
+      owner_id: "someone-else",
+      source: "manual",
+    });
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(null);
+    const destroy = vi.spyOn(TeamPlayer, "destroy");
+    const res = await request(buildApp())
+      .put("/api/teams/t1/roster")
+      .send({ players: [] });
+    expect(res.status).toBe(404);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for an imported team", async () => {
+    vi.spyOn(Team, "findByPk").mockResolvedValue({
+      id: "e1",
+      owner_id: null,
+      source: "esclub",
+      tournament_id: "tour-1",
+    });
+    const destroy = vi.spyOn(TeamPlayer, "destroy");
+    const res = await request(buildApp())
+      .put("/api/teams/e1/roster")
+      .send({ players: [] });
+    expect(res.status).toBe(403);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("returns a list row (Tournament, canEditRoster) after saving", async () => {
+    vi.spyOn(Team, "findByPk")
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", source: "manual" })
+      .mockResolvedValueOnce({
+        id: "t1",
+        owner_id: "u1",
+        source: "manual",
+        TeamPlayers: [],
+      });
+    vi.spyOn(TeamPlayer, "destroy").mockResolvedValue(1);
+    vi.spyOn(sequelize, "transaction").mockImplementation(async (fn) => fn({}));
+    const res = await request(buildApp())
+      .put("/api/teams/t1/roster")
+      .send({ players: [] });
+    expect(res.status).toBe(200);
+    expect(res.body.canEditRoster).toBe(true);
+    expect(res.body.Tournament).toBe(null);
+  });
+
   it("returns 400 on a duplicate role without touching the DB", async () => {
-    vi.spyOn(Team, "findByPk").mockResolvedValue({ id: "t1", owner_id: "u1" });
+    vi.spyOn(Team, "findByPk").mockResolvedValue({ id: "t1", owner_id: "u1", source: "manual" });
     const destroy = vi.spyOn(TeamPlayer, "destroy");
     const res = await request(buildApp())
       .put("/api/teams/t1/roster")
@@ -135,8 +187,8 @@ describe("PUT /:id/roster", () => {
 
   it("replaces the roster inside a transaction for an owned team", async () => {
     vi.spyOn(Team, "findByPk")
-      .mockResolvedValueOnce({ id: "t1", owner_id: "u1" })
-      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", TeamPlayers: [] });
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", source: "manual" })
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", source: "manual", TeamPlayers: [] });
     const destroy = vi.spyOn(TeamPlayer, "destroy").mockResolvedValue(1);
     const bulkCreate = vi.spyOn(TeamPlayer, "bulkCreate").mockResolvedValue([]);
     vi.spyOn(sequelize, "transaction").mockImplementation(async (fn) =>
@@ -156,8 +208,8 @@ describe("PUT /:id/roster", () => {
 
   it("ignores a client-supplied ordinal and reassigns by array index", async () => {
     vi.spyOn(Team, "findByPk")
-      .mockResolvedValueOnce({ id: "t1", owner_id: "u1" })
-      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", TeamPlayers: [] });
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", source: "manual" })
+      .mockResolvedValueOnce({ id: "t1", owner_id: "u1", source: "manual", TeamPlayers: [] });
     vi.spyOn(TeamPlayer, "destroy").mockResolvedValue(1);
     const bulkCreate = vi.spyOn(TeamPlayer, "bulkCreate").mockResolvedValue([]);
     vi.spyOn(sequelize, "transaction").mockImplementation(async (fn) => fn({}));
@@ -177,7 +229,7 @@ describe("PUT /:id/roster", () => {
 
   it("saves region atomically with the roster when provided", async () => {
     const save = vi.fn();
-    const team = { id: "t1", owner_id: "u1", region: "na1", save };
+    const team = { id: "t1", owner_id: "u1", source: "manual", region: "na1", save };
     vi.spyOn(Team, "findByPk")
       .mockResolvedValueOnce(team)
       .mockResolvedValueOnce({ ...team, region: "kr", TeamPlayers: [] });
@@ -195,7 +247,7 @@ describe("PUT /:id/roster", () => {
   });
 
   it("rejects an invalid region in the roster body with 400", async () => {
-    vi.spyOn(Team, "findByPk").mockResolvedValue({ id: "t1", owner_id: "u1" });
+    vi.spyOn(Team, "findByPk").mockResolvedValue({ id: "t1", owner_id: "u1", source: "manual" });
     const destroy = vi.spyOn(TeamPlayer, "destroy");
     const res = await request(buildApp())
       .put("/api/teams/t1/roster")
@@ -209,7 +261,7 @@ describe("PATCH /:id region", () => {
   it("rejects an invalid region with 400", async () => {
     vi.spyOn(Team, "findByPk").mockResolvedValue({
       id: "t1",
-      owner_id: "u1",
+      owner_id: "u1", source: "manual",
       save: vi.fn(),
     });
     const res = await request(buildApp())
@@ -222,7 +274,7 @@ describe("PATCH /:id region", () => {
     const save = vi.fn();
     vi.spyOn(Team, "findByPk").mockResolvedValue({
       id: "t1",
-      owner_id: "u1",
+      owner_id: "u1", source: "manual",
       name: "T1",
       region: "na1",
       save,

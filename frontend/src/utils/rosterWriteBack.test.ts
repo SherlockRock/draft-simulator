@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Team, TeamPlayer } from "@draft-sim/shared-types";
+import type { TeamListRow, TeamPlayer } from "@draft-sim/shared-types";
 import {
     MAX_ROSTER,
     mergeScoutedRoster,
@@ -23,12 +23,13 @@ const player = (
 
 const pid = (gameName: string): PlayerId => ({ gameName, tagLine: "NA1" });
 
-const aTeam = (overrides: Partial<Team> = {}): Team => ({
+const aTeam = (overrides: Partial<TeamListRow> = {}): TeamListRow => ({
     id: "team-1",
     owner_id: "user-1",
     name: "MEOW",
     region: "na1",
     TeamPlayers: [],
+    canEditRoster: true,
     ...overrides
 });
 
@@ -242,6 +243,11 @@ describe("resolveWriteBackTeam", () => {
     it("returns null for an unknown or empty id", () => {
         expect(resolveWriteBackTeam("team-9", [aTeam()])).toBeNull();
         expect(resolveWriteBackTeam("", [aTeam()])).toBeNull();
+    });
+
+    it("returns null for a listed team the user cannot edit (imported)", () => {
+        const imported = aTeam({ canEditRoster: false, owner_id: null });
+        expect(resolveWriteBackTeam("team-1", [imported])).toBeNull();
     });
 });
 

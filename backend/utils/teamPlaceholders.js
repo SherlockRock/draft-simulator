@@ -31,4 +31,8 @@ function withoutPlaceholderTeamNames(metadata) {
   return copy;
 }
 
-module.exports = { isPlaceholderTeamName, withoutPlaceholderTeamNames };
+module.exports = {
+  PLACEHOLDER_NAMES,
+  isPlaceholderTeamName,
+  withoutPlaceholderTeamNames,
+};

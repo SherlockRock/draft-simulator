@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Plus } from "lucide-solid";
-import type { Team } from "@draft-sim/shared-types";
+import type { Team, TeamListRow } from "@draft-sim/shared-types";
+import { teamOptionLabel } from "../utils/teamLabel";
 import { createTeam } from "../utils/actions";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
@@ -11,7 +12,7 @@ type TeamNameSelectProps = {
     /** Linked team id, or null when the name is free text. */
     teamId: string | null;
     /** The user's owned teams to autocomplete against. */
-    teams: Team[];
+    teams: TeamListRow[];
     /** Disable entity linking (local/anonymous canvases): plain text input. */
     disabled?: boolean;
     placeholder?: string;
@@ -20,7 +21,7 @@ type TeamNameSelectProps = {
     onCreated?: (team: Team) => void;
 };
 
-type Row = { kind: "team"; team: Team } | { kind: "create"; name: string };
+type Row = { kind: "team"; team: TeamListRow } | { kind: "create"; name: string };
 
 const inputClass =
     "w-full select-text rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none";
@@ -55,7 +56,11 @@ export const TeamNameSelect = (props: TeamNameSelectProps) => {
         );
         const result: Row[] = matches.map((team) => ({ kind: "team", team }));
         const trimmed = props.value.trim();
-        const exactExists = props.teams.some((team) => team.name.toLowerCase() === query);
+        // Only your own teams block "Create": an imported team of the same name is
+        // a different entity, and typing its name never links it.
+        const exactExists = props.teams.some(
+            (team) => team.canEditRoster && team.name.toLowerCase() === query
+        );
         if (trimmed.length > 0 && !exactExists) {
             result.push({ kind: "create", name: trimmed });
         }
@@ -167,7 +172,7 @@ export const TeamNameSelect = (props: TeamNameSelectProps) => {
                                                 fallback={
                                                     <span class="truncate">
                                                         {row.kind === "team"
-                                                            ? row.team.name
+                                                            ? teamOptionLabel(row.team)
                                                             : ""}
                                                     </span>
                                                 }

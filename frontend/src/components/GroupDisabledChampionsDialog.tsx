@@ -7,7 +7,7 @@ import {
     untrack
 } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
-import type { DraftMode, GameType, Team } from "@draft-sim/shared-types";
+import type { DraftMode, GameType, Team, TeamListRow } from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
@@ -63,8 +63,8 @@ interface GroupSettingsDialogProps {
      * no content and omits it.
      */
     contentRowCount?: (cols: number) => number;
-    /** The user's owned teams for autocomplete linking. */
-    teams?: Team[];
+    /** Teams the user can see, for autocomplete linking (own pickup teams and imported ones). */
+    teams?: TeamListRow[];
     /** Enable entity linking; false on local/anonymous canvases. */
     teamsEnabled?: boolean;
     onTeamCreated?: (team: Team) => void;

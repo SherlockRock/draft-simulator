@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
-import type { Team } from "@draft-sim/shared-types";
+import type { TeamListRow } from "@draft-sim/shared-types";
 import {
     MAX_ROSTER,
     mergeScoutedRoster,
@@ -15,12 +15,12 @@ export type ScoutSide = "you" | "enemy";
 
 export type RosterWriteBackDeps = {
     /**
-     * Signed-in check. `fetchTeams` returns ONLY owned teams, so this plus
-     * `ownedTeams` IS the ownership gate — a shared scout link naming someone
-     * else's team resolves to null and arms nothing.
+     * Signed-in check. `fetchTeams` also lists imported teams, so this plus
+     * `ownedTeams` (resolved on `canEditRoster`) is the gate — a shared scout link naming a team
+     * the user cannot edit resolves to null and arms nothing.
      */
     isSignedIn: () => boolean;
-    ownedTeams: () => Team[];
+    ownedTeams: () => TeamListRow[];
     /** The `["teams"]` lookup has succeeded — the stored roster is truly known. */
     teamsResolved: () => boolean;
     /** The `["teams"]` lookup failed — nothing will ever resolve. */
@@ -71,7 +71,7 @@ export type WriteBackOutcome =
 
 export type RosterWriteBack = {
     /** The team a side would write to, or null when that side is not armed. */
-    armedTeam: (side: ScoutSide) => Team | null;
+    armedTeam: (side: ScoutSide) => TeamListRow | null;
     /** Team ids currently showing the transient "saved" marker. */
     savedTeams: () => ReadonlySet<string>;
     /**
@@ -110,7 +110,7 @@ const OVER_CAP_TOAST = (teamId: string): string => `roster-over-cap:${teamId}`;
  * tests) — it registers an effect and an `onCleanup`.
  */
 export function createRosterWriteBack(deps: RosterWriteBackDeps): RosterWriteBack {
-    const armedTeam = (side: ScoutSide): Team | null =>
+    const armedTeam = (side: ScoutSide): TeamListRow | null =>
         resolveWriteBackTeam(deps.teamIdFor(side), deps.ownedTeams());
 
     const [savedTeams, setSavedTeams] = createSignal<ReadonlySet<string>>(new Set());

@@ -13,6 +13,8 @@ const SavedPool = require("./SavedPool");
 const Pool = require("./Pool");
 const Team = require("./Team");
 const TeamPlayer = require("./TeamPlayer");
+const Tournament = require("./Tournament");
+const UserTournament = require("./UserTournament");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -77,6 +79,26 @@ const setupAssociations = () => {
 
   CanvasGroup.belongsTo(Team, { as: "Team1", foreignKey: "team1_id" });
   CanvasGroup.belongsTo(Team, { as: "Team2", foreignKey: "team2_id" });
+
+  // Tournaments. A tournament with teams cannot be deleted (RESTRICT).
+  Tournament.hasMany(Team, { foreignKey: "tournament_id", onDelete: "RESTRICT" });
+  Team.belongsTo(Tournament, {
+    foreignKey: "tournament_id",
+    onDelete: "RESTRICT",
+  });
+  Tournament.belongsTo(User, { as: "creator", foreignKey: "created_by" });
+  User.belongsToMany(Tournament, {
+    through: UserTournament,
+    foreignKey: "user_id",
+    otherKey: "tournament_id",
+  });
+  Tournament.belongsToMany(User, {
+    through: UserTournament,
+    foreignKey: "tournament_id",
+    otherKey: "user_id",
+  });
+  UserTournament.belongsTo(Tournament, { foreignKey: "tournament_id" });
+  UserTournament.belongsTo(User, { foreignKey: "user_id" });
 
   CanvasGroup.hasMany(CanvasDraft, { foreignKey: "group_id", onDelete: "SET NULL" });
   CanvasDraft.belongsTo(CanvasGroup, { foreignKey: "group_id", onDelete: "SET NULL" });

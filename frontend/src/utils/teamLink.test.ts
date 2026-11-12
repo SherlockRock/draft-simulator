@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { findTeamByName, isPlaceholderTeamName, resolveTeamLink } from "./teamLink";
-import type { Team } from "@draft-sim/shared-types";
+import type { TeamListRow } from "@draft-sim/shared-types";
 
-const team = (id: string, name: string): Team => ({
+const team = (id: string, name: string, canEditRoster = true): TeamListRow => ({
     id,
     owner_id: "u",
     name,
     region: "na1",
-    TeamPlayers: []
+    TeamPlayers: [],
+    canEditRoster
 });
 
 const teams = [team("t-meow", "MEOW"), team("t-tsr", "TSR")];
@@ -107,5 +108,39 @@ describe("isPlaceholderTeamName", () => {
         expect(isPlaceholderTeamName(null)).toBe(false);
         expect(isPlaceholderTeamName(undefined)).toBe(false);
         expect(isPlaceholderTeamName("DOG")).toBe(false);
+    });
+});
+
+describe("name inference over canEditRoster teams only (Q8)", () => {
+    const imported = (id: string, name: string): TeamListRow => ({
+        ...team(id, name, false),
+        owner_id: null,
+        source: "esclub",
+        Tournament: { id: "tour-1", name: "Season 9", source: "esclub" }
+    });
+
+    it("ignores an imported team when inferring from a typed name", () => {
+        const list = [team("t-meow", "MEOW"), imported("t-dog", "DOG")];
+        expect(findTeamByName("DOG", list)).toBeNull();
+        expect(resolveTeamLink("DOG", null, list, "Team 1")).toEqual({
+            name: "DOG",
+            teamId: null
+        });
+    });
+
+    it("still links an owned unique DOG next to an imported DOG", () => {
+        const list = [team("t-dog", "DOG"), imported("t-dog-i", "DOG")];
+        expect(resolveTeamLink("DOG", null, list, "Team 1")).toEqual({
+            name: "DOG",
+            teamId: "t-dog"
+        });
+    });
+
+    it("still links an explicitly picked imported team id", () => {
+        const list = [imported("t-dog-i", "DOG")];
+        expect(resolveTeamLink("DOG", "t-dog-i", list, "Team 1")).toEqual({
+            name: "DOG",
+            teamId: "t-dog-i"
+        });
     });
 });
