@@ -31,7 +31,7 @@ const { championAliasForKey } = require("../../utils/championKeys");
  * @property {string} externalMatchId
  * @property {number} number
  * @property {string|null} playedAt                ISO string
- * @property {string[]} picks                      20 slots, Draft.picks layout
+ * @property {string[]} picks                      20 slots, Draft.picks layout; "" for a skipped ban
  * @property {"blue"|"red"} firstPick
  * @property {1|2} blueSideTeam                    which of the series' teams is on blue
  * @property {"blue"|"red"|null} winner
@@ -130,6 +130,11 @@ function seriesStartsAt(serie) {
   const t = serie.time_start_forced ?? serie.time_start_agreed ?? serie.time_start_default ?? null;
   return typeof t === "number" && Number.isFinite(t) ? new Date(t * 1000).toISOString() : null;
 }
+
+/** esclub's stand-in for "no champion": a Character resource with id_external "-1". */
+const PLACEHOLDER_KEY = "-1";
+const isPlaceholder = (resource) =>
+  Boolean(resource) && resource.type_resource === "Character" && String(resource.id_external) === PLACEHOLDER_KEY;
 
 const LANES = { Top: "top", Jungle: "jungle", Mid: "mid", Bot: "bot", Support: "support" };
 const SIDE_BY_NUMBER = { 1: "blue", 2: "red" };
@@ -252,7 +257,8 @@ function buildParticipants(finals, sideOf, participants, byResource, matchId) {
 /**
  * Normalise one match. Returns {note} for skipped/pending, {game} for a game.
  * Throws EsclubProtocolChanged for contradictions and EsclubUnknownChampion
- * for a pick/ban whose resource is not a catalog champion.
+ * for a pick/ban whose resource is not a catalog champion. The one exception
+ * is a skipped ban (a final Placeholder ban), which is an empty slot.
  */
 function normalizeGame(match, draft, choices, teams, byResource) {
   const id = match.id_match;
@@ -299,6 +305,9 @@ function normalizeGame(match, draft, choices, teams, byResource) {
       throw fail(`choice ${n} (${type} by ${sideOf.get(c.id_team_roster_source)}) breaks the turn order`);
     }
     const resource = byResource.get(c.id_game_resource);
+    // A ban nobody made: esclub records it as a final ban of its Placeholder
+    // champion. The slot stays empty and the game is kept (Rourke, 2026-11-12).
+    if (type === "ban" && isPlaceholder(resource)) continue;
     const alias = resource && resource.type_resource === "Character" ? championAliasForKey(resource.id_external) : null;
     if (!alias) {
       throw new EsclubUnknownChampion(

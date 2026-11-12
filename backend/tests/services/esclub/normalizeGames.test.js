@@ -141,14 +141,24 @@ describe("bracket Bo3", () => {
     }
     expect(Object.keys(g1.participants)).toHaveLength(10);
   });
-  it("game 0 has an automatic Placeholder ban (choice 0): it is failed, not blanked", () => {
-    const first = bracket.choices[gm(bracket, 0).id_match].find((c) => c.is_final && c.number === 0);
+  it("game 0 has a skipped ban (a final Placeholder ban, choice 0): that slot is empty and the game is kept", () => {
+    const fin = bracket.choices[gm(bracket, 0).id_match].filter((c) => c.is_final);
+    const first = fin.find((c) => c.number === 0);
+    expect(first.type_choice).toBe("BanCharacter");
     expect(byRes.get(first.id_game_resource).id_external).toBe("-1");
-    expect(r.series.games.map((g) => g.number)).toEqual([1]);
-    expect(r.failed).toHaveLength(1);
-    expect(r.failed[0]).toMatchObject({ number: 0, externalMatchId: gm(bracket, 0).id_match });
-    expect(r.failed[0].error).toBeInstanceOf(EsclubUnknownChampion);
-    expect(r.failed[0].error.message).toContain('"-1"');
+    expect(r.failed).toEqual([]);
+    expect(r.series.games.map((g) => g.number)).toEqual([0, 1]);
+    const g0 = r.series.games[0];
+    const empty = getPicksArrayIndex(0, g0.firstPick);
+    expect(g0.picks[empty]).toBe("");
+    expect(g0.picks.filter((p) => p === "")).toHaveLength(1);
+    // every other slot is the champion esclub recorded for it
+    for (const c of fin.filter((x) => x.number !== 0)) {
+      expect(g0.picks[getPicksArrayIndex(c.number, g0.firstPick)]).toBe(championAliasForKey(byRes.get(c.id_game_resource).id_external));
+    }
+    expect(new Set(g0.picks).size).toBe(20);
+    expect(g0.blueSideTeam).toBe(2);
+    expect(Object.keys(g0.participants)).toHaveLength(10);
   });
   it("with that ban replaced by a real champion, game 0 normalises and sides flip between games", () => {
     const d = clone(bracket);
@@ -305,6 +315,27 @@ describe("synthetic variants", () => {
   it("a roster outside the series' teams -> EsclubProtocolChanged", () => {
     const d = clone(group);
     expect(() => N.normalizeSeries(input(d, { teams: [rosters[Object.keys(rosters)[2]], group.teams[0]] }))).toThrow(EsclubProtocolChanged);
+  });
+  it("a skipped ban anywhere in the draft is an empty slot; the rest of the game is unchanged", () => {
+    const ref = N.normalizeSeries(input(group)).series.games[1];
+    const placeholder = resources.find((x) => x.id_external === "-1").id_game_resource;
+    for (const n of [3, 13, 15]) {
+      const r = run((d) => { d.choices[id1].find((x) => x.is_final && x.number === n).id_game_resource = placeholder; });
+      expect(r.failed).toEqual([]);
+      const g = r.series.games[1];
+      const slot = getPicksArrayIndex(n, g.firstPick);
+      expect(g.picks[slot]).toBe("");
+      expect(g.picks.map((p, i) => (i === slot ? ref.picks[i] : p))).toEqual(ref.picks);
+      expect({ ...g, picks: ref.picks }).toEqual(ref);
+    }
+  });
+  it("two skipped bans leave two empty slots", () => {
+    const placeholder = resources.find((x) => x.id_external === "-1").id_game_resource;
+    const r = run((d) => {
+      for (const n of [0, 1]) d.choices[id1].find((x) => x.is_final && x.number === n).id_game_resource = placeholder;
+    });
+    expect(r.failed).toEqual([]);
+    expect(r.series.games[1].picks.filter((p) => p === "")).toHaveLength(2);
   });
   it("a Placeholder pick fails that game only (EsclubUnknownChampion in failed), nothing blanked", () => {
     const r = run((d) => {
