@@ -1198,3 +1198,52 @@ describe("computeMatchupScopeHint", () => {
         ).toEqual([{ scope: "scrim", games: 1 }]);
     });
 });
+
+describe("placeholder team names never count", () => {
+    it("getTeamNameOptions omits Team 1 / Team 2 placeholders in any casing or padding", () => {
+        const groups = [
+            makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "Team 2" }),
+            makeGroup("g2", { blueTeamName: " team 1 ", redTeamName: "DOG" }),
+            makeGroup("g3", { blueTeamName: "MEOW", redTeamName: "TEAM 2" })
+        ];
+        expect(getTeamNameOptions(groups)).toEqual(["DOG", "MEOW"]);
+    });
+
+    it("teamSideInDraft is null for a placeholder metadata name", () => {
+        const group = makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "Team 2" });
+        const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(game, group, "Team 1")).toBeNull();
+        expect(teamSideInDraft(game, group, "Team 2")).toBeNull();
+    });
+
+    it("a team search for Team 1 counts no games", () => {
+        const groups = [makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "DOG" })];
+        const drafts = [
+            makeDraft("d1", fullPicks(), { group_id: "g1", completed: true, winner: "blue" })
+        ];
+        const results = computeSearchResults(
+            drafts,
+            groups,
+            {
+                championId: null,
+                teamName: "Team 1",
+                opponentTeamName: null,
+                bucket: null,
+                scope: "all"
+            },
+            identity
+        );
+        expect(results.matches).toEqual([]);
+    });
+
+    it("a linked Team entity literally named Team 1 still counts", () => {
+        const group = makeGroup(
+            "g1",
+            { blueTeamName: "Team 1" },
+            { Team1: makeTeam("t1", "Team 1") }
+        );
+        expect(resolveGroupTeamNames(group).team1).toBe("Team 1");
+        const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
+        expect(teamSideInDraft(game, group, "Team 1")).toBe("blue");
+    });
+});
