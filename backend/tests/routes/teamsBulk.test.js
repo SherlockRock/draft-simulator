@@ -177,6 +177,32 @@ describe("POST /bulk authorization", () => {
   });
 });
 
+describe("POST /bulk checks every position in a batch", () => {
+  const ids = [A, B, C];
+  const withBadAt = (position, bad) =>
+    ids.map((id, i) => (i === position ? bad(id) : team(id)));
+  const cases = [];
+  for (const action of ["archive", "restore", "delete"]) {
+    for (const position of [0, 1, 2]) cases.push([action, position]);
+  }
+
+  it.each(cases)("404 for %s with a stranger's team at position %i", async (action, position) => {
+    loaded(withBadAt(position, strangers));
+    const res = await post({ action, ids });
+    expect(res.status).toBe(404);
+    expectNothingWritten();
+  });
+
+  it.each(cases)("403 for %s with a refused team at position %i", async (action, position) => {
+    loaded(
+      withBadAt(position, (id) => team(id, { tournament_id: "tour-1" })),
+    );
+    const res = await post({ action, ids });
+    expect(res.status).toBe(403);
+    expectNothingWritten();
+  });
+});
+
 describe("POST /bulk writes", () => {
   it("looks teams up in one query on the de-duplicated ids", async () => {
     loaded([team(A), team(B)]);
