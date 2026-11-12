@@ -237,3 +237,159 @@ describe("assertTeamInvariants", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 6: the visibility matrix (design decisions 6-10, fix 4/5, D4/Q4).
+// Expected values are written out literally below; nothing is computed from the
+// functions under test. Each cell is its own `it`.
+//
+// Notes on scope:
+// - "list" is eligibility for the user's lists (visibleTeamsWhere). GET
+//   /api/teams narrows it further (Q2: owned non-archived pickup teams + teams
+//   of the user's non-archived tournaments); Task 7's route tests cover that.
+// - "link" is a NEW link onto a group. Passing an unchanged id through on the
+//   same canvas is T0's rule in resolveTeamLinkUpdate, tested in Task 7.
+// - "link-elsewhere" is the canvas member linking the team on a different
+//   canvas. It pins fix 4: canvas-derived read never grants link.
+// - Anonymous is false everywhere. Public-share canvas payloads are unchanged
+//   and not widened by this module.
+// ---------------------------------------------------------------------------
+describe("visibility matrix", () => {
+  const OWNER = "owner";
+  const OTHER = "other";
+  const MEMBER = "member";
+  const ACTORS = {
+    owner: OWNER,
+    "other signed-in user": OTHER,
+    "canvas member": MEMBER,
+    anonymous: null,
+  };
+  const CELLS = ["list", "read", "link", "link-elsewhere", "roster read", "roster edit"];
+
+  const TEAMS = {
+    "pickup (owned)": {
+      id: "m-1",
+      source: "manual",
+      owner_id: OWNER,
+      tournament_id: null,
+    },
+    "pickup (someone else's)": {
+      id: "m-2",
+      source: "manual",
+      owner_id: "stranger",
+      tournament_id: null,
+    },
+    imported: {
+      id: "m-3",
+      source: "esclub",
+      owner_id: null,
+      tournament_id: "esclub-t",
+    },
+    "manual-tournament team": {
+      id: "m-4",
+      source: "manual",
+      owner_id: OWNER,
+      tournament_id: "manual-t",
+    },
+  };
+
+  // [list, read, link, link-elsewhere, roster read, roster edit]
+  const T = true;
+  const F = false;
+  const EXPECTED = {
+    "pickup (owned)": {
+      owner: [T, T, T, T, T, T],
+      "other signed-in user": [F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F],
+      anonymous: [F, F, F, F, F, F],
+    },
+    // The actor "owner" does not own this team, so owner = no rights.
+    "pickup (someone else's)": {
+      owner: [F, F, F, F, F, F],
+      "other signed-in user": [F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F],
+      anonymous: [F, F, F, F, F, F],
+    },
+    // Any signed-in user sees and links it; nobody edits it (fix 5).
+    imported: {
+      owner: [T, T, T, T, T, F],
+      "other signed-in user": [T, T, T, T, T, F],
+      "canvas member": [T, T, T, T, T, F],
+      anonymous: [F, F, F, F, F, F],
+    },
+    // D4/Q4: owner-only, like a pickup team.
+    "manual-tournament team": {
+      owner: [T, T, T, T, T, T],
+      "other signed-in user": [F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F],
+      anonymous: [F, F, F, F, F, F],
+    },
+  };
+
+  // Exactly the shapes visibleTeamsWhere can produce: Op.or of equality
+  // objects, or { id: null }.
+  const matches = (where, team) =>
+    Reflect.ownKeys(where).every((key) =>
+      key === Op.or
+        ? where[Op.or].some((clause) => matches(clause, team))
+        : team[key] === where[key],
+    );
+
+  // Mocked canvas lookup: a link is found exactly when the actor is the member
+  // of the canvas the team is linked on.
+  const mockCanvasLookup = () =>
+    vi.spyOn(CanvasGroup, "findOne").mockImplementation(async (options) => {
+      const userId = options.include[0].include[0].where.user_id;
+      return userId === MEMBER ? { id: "group-1" } : null;
+    });
+
+  const cases = [];
+  for (const [kind, team] of Object.entries(TEAMS)) {
+    for (const [actor, userId] of Object.entries(ACTORS)) {
+      CELLS.forEach((cell, i) => {
+        cases.push({
+          name: `${kind} × ${actor} × ${cell} → ${EXPECTED[kind][actor][i] ? "✔" : "✘"}`,
+          kind,
+          actor,
+          cell,
+          team,
+          userId,
+          expected: EXPECTED[kind][actor][i],
+        });
+      });
+    }
+  }
+
+  it("covers every cell: 4 kinds × 4 actors × 6 cells = 96", () => {
+    expect(Object.keys(TEAMS)).toHaveLength(4);
+    expect(Object.keys(ACTORS)).toHaveLength(4);
+    expect(CELLS).toHaveLength(6);
+    for (const kind of Object.keys(TEAMS)) {
+      expect(Object.keys(EXPECTED[kind]).sort()).toEqual(Object.keys(ACTORS).sort());
+      for (const actor of Object.keys(ACTORS)) {
+        expect(EXPECTED[kind][actor]).toHaveLength(CELLS.length);
+      }
+    }
+    expect(cases).toHaveLength(96);
+    expect(new Set(cases.map((c) => c.name)).size).toBe(96);
+  });
+
+  it.each(cases)("$name", async ({ cell, team, userId, expected }) => {
+    if (cell === "list") {
+      expect(matches(visibleTeamsWhere(userId), team)).toBe(expected);
+    } else if (cell === "read" || cell === "roster read") {
+      const spy = mockCanvasLookup();
+      expect(await canSeeTeam(team, userId)).toBe(expected);
+      // The canvas query is made only when own right does not already decide:
+      // never for anonymous, owners or esclub teams.
+      const ownRight = userId !== null && (team.source === "esclub" || team.owner_id === userId);
+      expect(spy).toHaveBeenCalledTimes(userId === null || ownRight ? 0 : 1);
+    } else if (cell === "link" || cell === "link-elsewhere") {
+      const spy = mockCanvasLookup();
+      expect(canLinkTeam(team, userId)).toBe(expected);
+      expect(spy).not.toHaveBeenCalled();
+    } else {
+      expect(canEditRoster(team, userId)).toBe(expected);
+    }
+  });
+});
