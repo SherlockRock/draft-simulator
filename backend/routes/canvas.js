@@ -28,6 +28,11 @@ const socketService = require("../middleware/socketService");
 const { assertCanvasAccess } = require("../services/canvasMutations");
 const viewportPersistence = require("../services/viewportPersistence");
 const {
+  SERIES_GAME_STEP,
+  nextSeriesCardOrigin,
+  seriesCardOrigin,
+} = require("../utils/seriesCardLayout");
+const {
   MAX_GROUP_DEPTH,
   depthOf,
   descendantGroupsOf,
@@ -54,46 +59,6 @@ const {
 const MIN_SERIES_LENGTH = 1;
 const MAX_SERIES_LENGTH = 7;
 const VALID_DRAFT_MODES = new Set(["standard", "fearless", "ironman"]);
-
-// Series chrome, mirroring SERIES_PADDING_X / SERIES_PADDING_Y /
-// SERIES_HEADER_HEIGHT in frontend/src/utils/helpers.ts. A Card's positionX/Y
-// are relative to its immediate container, so the first game of a brand-new
-// series seeds at the series' own padding — NOT at the group's world position,
-// which is what the three series-creation paths below used to add on top of it.
-//
-// X is 0 so a Bo-N series measures exactly N grid columns (design §6). These
-// three runtimes — here, the frontend, and useLocalCanvasMutations — must move
-// together or a Card jumps the moment it leaves a series.
-const SERIES_PADDING_X = 0;
-const SERIES_PADDING_Y = 20;
-const SERIES_HEADER_HEIGHT = 56;
-// GROUP_BORDER_WIDTH and SERIES_GAME_CONTROLS_HEIGHT mirror helpers.ts too.
-// The controls block is the per-game team panels that sit ABOVE each game's
-// Card; it arrived in e442845 and was missing from the seed until §6.0a Task 0,
-// which put the seed ~96.5px above where the Card actually paints.
-const GROUP_BORDER_WIDTH = 2;
-const SERIES_GAME_CONTROLS_HEIGHT = 94.5;
-const SERIES_GAME_STEP = 380;
-
-// The container-relative y of a series' first game Card. Mirrors the composite
-// in getSeriesDraftWorldPosition — change one, change all four mirrors (here,
-// helpers.ts, useLocalCanvasMutations, and the two test files' private copies).
-const SERIES_FIRST_CARD_Y =
-  GROUP_BORDER_WIDTH +
-  SERIES_HEADER_HEIGHT +
-  SERIES_PADDING_Y +
-  SERIES_GAME_CONTROLS_HEIGHT;
-
-// Where the next game Card goes, given the last one already placed (if any).
-// Both coordinates stay container-relative in either branch.
-function nextSeriesCardOrigin(lastCanvasDraft) {
-  return {
-    x: lastCanvasDraft
-      ? lastCanvasDraft.positionX + SERIES_GAME_STEP
-      : SERIES_PADDING_X,
-    y: lastCanvasDraft ? lastCanvasDraft.positionY : SERIES_FIRST_CARD_Y,
-  };
-}
 
 // A canvas series is a real VersusDraft row (origin "manual"), and the only FK
 // between them runs CanvasGroups.versus_draft_id -> VersusDrafts with SET NULL.
@@ -1562,14 +1527,15 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
     const createdCanvasDrafts = [];
     for (let i = 0; i < sortedDrafts.length; i++) {
       const draft = sortedDrafts[i];
+      const origin = seriesCardOrigin(i);
       const canvasDraft = await CanvasDraft.create(
         {
           canvas_id: canvasId,
           draft_id: draft.id,
           // Container-relative, like every other Card: the group already
           // carries the world position these used to add a second time.
-          positionX: SERIES_PADDING_X + i * SERIES_GAME_STEP,
-          positionY: SERIES_FIRST_CARD_Y,
+          positionX: origin.x,
+          positionY: origin.y,
           is_locked: true,
           group_id: group.id,
           source_type: "versus",
