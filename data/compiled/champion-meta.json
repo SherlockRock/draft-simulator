@@ -1,7 +1,7 @@
 {
   "version": "16.13.1",
   "patch": "16.13.1",
-  "compiledAt": "2026-10-13T01:12:12.122Z",
+  "compiledAt": "2026-11-12T16:49:44.870Z",
   "sources": {
     "cdragonScrapedAt": "2026-08-24T18:28:15.544Z",
     "merakiScrapedAt": "2026-04-15T02:03:38.042Z",
@@ -20,15 +20,17 @@
       "playableRule": {
         "minPickRate": 0.001,
         "minPicks": 50,
+        "minOwnShare": 0.02,
         "decidingPatch": "16.19",
         "decidingGames": 277103
       },
       "threshold": 0.1,
-      "generatedAt": "2026-10-10T04:36:25.172Z",
+      "generatedAt": "2026-11-12T16:49:44.795Z",
       "feasibility": {
         "sets": 102100,
-        "bothSides": 0.976,
-        "field": "playable"
+        "bothSides": 0.955,
+        "field": "playable",
+        "fallbackRows": 0
       }
     }
   },
@@ -104,8 +106,7 @@
       },
       "playable": [
         "TOP",
-        "MIDDLE",
-        "SUPPORT"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -1097,7 +1098,6 @@
       },
       "playable": [
         "TOP",
-        "MIDDLE",
         "SUPPORT"
       ],
       "damageProfile": {
@@ -1509,8 +1509,7 @@
       "playable": [
         "TOP",
         "JUNGLE",
-        "MIDDLE",
-        "BOTTOM"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0,
@@ -1652,8 +1651,7 @@
       },
       "playable": [
         "MIDDLE",
-        "BOTTOM",
-        "SUPPORT"
+        "BOTTOM"
       ],
       "damageProfile": {
         "physical": 0.68,
@@ -2399,8 +2397,7 @@
       },
       "playable": [
         "TOP",
-        "MIDDLE",
-        "BOTTOM"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.72,
@@ -2598,7 +2595,6 @@
       "playable": [
         "TOP",
         "JUNGLE",
-        "MIDDLE",
         "SUPPORT"
       ],
       "damageProfile": {
@@ -2699,8 +2695,6 @@
         "SUPPORT": 0.004
       },
       "playable": [
-        "TOP",
-        "MIDDLE",
         "BOTTOM"
       ],
       "damageProfile": {
@@ -2855,9 +2849,6 @@
         "SUPPORT": 0.001
       },
       "playable": [
-        "TOP",
-        "JUNGLE",
-        "MIDDLE",
         "BOTTOM"
       ],
       "damageProfile": {
@@ -3514,10 +3505,7 @@
         "SUPPORT": 0.009
       },
       "playable": [
-        "TOP",
-        "JUNGLE",
-        "MIDDLE",
-        "SUPPORT"
+        "JUNGLE"
       ],
       "damageProfile": {
         "physical": 0.8,
@@ -3916,8 +3904,7 @@
       "playable": [
         "TOP",
         "JUNGLE",
-        "MIDDLE",
-        "SUPPORT"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.08,
@@ -4460,7 +4447,6 @@
       },
       "playable": [
         "TOP",
-        "JUNGLE",
         "MIDDLE"
       ],
       "damageProfile": {
@@ -5107,8 +5093,7 @@
       "playable": [
         "TOP",
         "JUNGLE",
-        "MIDDLE",
-        "SUPPORT"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.84,
@@ -6528,10 +6513,8 @@
         "SUPPORT": 0.018
       },
       "playable": [
-        "TOP",
         "MIDDLE",
-        "BOTTOM",
-        "SUPPORT"
+        "BOTTOM"
       ],
       "damageProfile": {
         "physical": 0,
@@ -7509,7 +7492,6 @@
         "SUPPORT": 0.002
       },
       "playable": [
-        "TOP",
         "JUNGLE",
         "MIDDLE"
       ],
@@ -7997,7 +7979,6 @@
       },
       "playable": [
         "TOP",
-        "JUNGLE",
         "MIDDLE",
         "BOTTOM"
       ],
@@ -8287,8 +8268,7 @@
       "playable": [
         "TOP",
         "JUNGLE",
-        "MIDDLE",
-        "BOTTOM"
+        "MIDDLE"
       ],
       "damageProfile": {
         "physical": 0.83,

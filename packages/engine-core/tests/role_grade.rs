@@ -320,7 +320,12 @@ fn the_regenerated_tables_five_key_shares_and_playable_reach_the_live_universe()
             k.positions, k.playable, k.position_shares
         );
         assert_eq!(k.positions, vec![Role::Adc]);
-        assert!(k.playable.contains(&Role::Top));
+        // Kai'Sa's top is playable on the frozen pre-floor copy only: the 2 % own-games floor (slice B)
+        // removed it from the live table (1.9 % of her games), so the live file keeps the shape.
+        if path == &new {
+            assert!(k.playable.contains(&Role::Top));
+        }
+        assert!(k.playable.contains(&Role::Adc));
         let live = live_from(path);
         let u = &live.universe;
         let c = u.index("Kaisa").expect("Kaisa");
@@ -329,7 +334,10 @@ fn the_regenerated_tables_five_key_shares_and_playable_reach_the_live_universe()
             u.grade(c, Role::Top),
             u.is_playable(c, Role::Top)
         );
-        assert!(u.is_playable(c, Role::Top));
+        if path == &new {
+            assert!(u.is_playable(c, Role::Top));
+        }
+        assert!(u.is_playable(c, Role::Adc));
         assert_eq!(u.grade(c, Role::Top), 98);
         assert_eq!(u.grade(c, Role::Adc), 0);
         assert_eq!(u.grade(c, Role::Support), 100);
