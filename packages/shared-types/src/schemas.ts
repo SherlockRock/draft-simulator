@@ -238,6 +238,42 @@ export const TeamListRowSchema = TeamSchema.extend({
 });
 export type TeamListRow = z.infer<typeof TeamListRowSchema>;
 
+// GET /api/teams/manage (the Teams page). Series groups linking a team on
+// canvases the caller is a member of, split by game type (an untagged series
+// is a scrim); `total` also counts untyped groups.
+export const TeamUseCountsSchema = z.object({
+  official: z.number().int(),
+  scrim: z.number().int(),
+  scratch: z.number().int(),
+  total: z.number().int(),
+});
+export type TeamUseCounts = z.infer<typeof TeamUseCountsSchema>;
+
+// A tournament the caller has a UserTournaments row for; archived_at is the
+// caller's own. source and region are plain strings: a read schema must
+// tolerate values the client doesn't know yet.
+export const ManagedTournamentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  source: z.string(),
+  region: z.string(),
+  archived_at: z.string().nullable(),
+});
+export type ManagedTournament = z.infer<typeof ManagedTournamentSchema>;
+
+export const ManagedTeamRowSchema = TeamListRowSchema.extend({
+  useCounts: TeamUseCountsSchema,
+  canArchive: z.boolean(),
+  canDelete: z.boolean(),
+});
+export type ManagedTeamRow = z.infer<typeof ManagedTeamRowSchema>;
+
+export const TeamsManageResponseSchema = z.object({
+  tournaments: z.array(ManagedTournamentSchema),
+  teams: z.array(ManagedTeamRowSchema),
+});
+export type TeamsManageResponse = z.infer<typeof TeamsManageResponseSchema>;
+
 export const CreateTeamPayloadSchema = z.object({
   name: z.string().min(1).max(120),
 });

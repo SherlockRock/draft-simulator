@@ -12,8 +12,11 @@ const {
   visibleTeamsWhere,
   canSeeTeam,
   canEditRoster,
+  canArchiveTeam,
+  canDeleteTeam,
   assertTeamInvariants,
 } = require("../services/teamAccess");
+const teamUsage = require("../services/teamUsage");
 
 const { isValidRegion } = require("../utils/teamRegions");
 
@@ -149,6 +152,64 @@ router.get("/", protect, async (req, res) => {
       order: [["name", "ASC"], PLAYERS_ORDER],
     });
     res.json(teams.map((team) => serializeTeam(team, userId)));
+  } catch (error) {
+    sendError(res, error, "Error fetching teams:", "Failed to fetch teams");
+  }
+});
+
+// The Teams page (D1, D2). Scope: visibleTeamsWhere AND (my own teams of any
+// tournament, archived or not; OR the teams of every tournament I have a
+// UserTournaments row for, archived or not). Nothing here is wider than what
+// the user sees in their own right today. Declared before any /:id route.
+router.get("/manage", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const memberships = await UserTournament.findAll({
+      where: { user_id: userId },
+      include: [
+        {
+          model: Tournament,
+          attributes: ["id", "name", "source", "region"],
+          required: true,
+        },
+      ],
+      order: [[Tournament, "name", "ASC"]],
+    });
+    const tournamentIds = memberships.map((row) => row.tournament_id);
+    const scope = [{ owner_id: userId }];
+    if (tournamentIds.length > 0) {
+      scope.push({ tournament_id: { [Op.in]: tournamentIds } });
+    }
+    const teams = await Team.findAll({
+      where: { [Op.and]: [visibleTeamsWhere(userId), { [Op.or]: scope }] },
+      include: [PLAYERS_INCLUDE, TOURNAMENT_INCLUDE],
+      order: [["name", "ASC"], PLAYERS_ORDER],
+    });
+    // Ids come only from the rows above, which are already visible to the user.
+    const useCounts = await teamUsage.teamUseCounts(
+      teams.map((team) => team.id),
+      userId,
+    );
+    res.json({
+      tournaments: memberships.map((row) => ({
+        id: row.Tournament.id,
+        name: row.Tournament.name,
+        source: row.Tournament.source,
+        region: row.Tournament.region,
+        archived_at: row.archived_at ?? null,
+      })),
+      teams: teams.map((team) => ({
+        ...serializeTeam(team, userId),
+        useCounts: useCounts[team.id] ?? {
+          official: 0,
+          scrim: 0,
+          scratch: 0,
+          total: 0,
+        },
+        canArchive: canArchiveTeam(team, userId),
+        canDelete: canDeleteTeam(team, userId),
+      })),
+    });
   } catch (error) {
     sendError(res, error, "Error fetching teams:", "Failed to fetch teams");
   }
