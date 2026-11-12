@@ -11,6 +11,8 @@ const {
   canSeeTeam,
   canLinkTeam,
   canEditRoster,
+  canArchiveTeam,
+  canDeleteTeam,
   assertTeamInvariants,
   TeamInvariantError,
 } = require("../../services/teamAccess");
@@ -161,6 +163,21 @@ describe("canEditRoster", () => {
   });
 });
 
+describe("canArchiveTeam / canDeleteTeam edge cases", () => {
+  it.each([canArchiveTeam, canDeleteTeam])("%o allows an owned pickup team with tournament_id undefined", (can) => {
+    const { tournament_id, ...noTournament } = pickup();
+    expect(tournament_id).toBeNull();
+    expect(can(noTournament, "user-1")).toBe(true);
+  });
+  it.each([canArchiveTeam, canDeleteTeam])("%o refuses a missing user even when owner_id is null", (can) => {
+    expect(can(pickup({ owner_id: null }), null)).toBe(false);
+    expect(can(pickup({ owner_id: null }), undefined)).toBe(false);
+  });
+  it.each([canArchiveTeam, canDeleteTeam])("%o refuses an esclub team even if it wrongly has an owner and no tournament", (can) => {
+    expect(can(imported({ owner_id: "user-1", tournament_id: null }), "user-1")).toBe(false);
+  });
+});
+
 describe("assertTeamInvariants", () => {
   const tournament = (source, id = "t-1") => ({ id, source });
 
@@ -264,7 +281,7 @@ describe("visibility matrix", () => {
     "canvas member": MEMBER,
     anonymous: null,
   };
-  const CELLS = ["list", "read", "link", "link-elsewhere", "roster read", "roster edit"];
+  const CELLS = ["list", "read", "link", "link-elsewhere", "roster read", "roster edit", "archive", "delete"];
 
   const TEAMS = {
     "pickup (owned)": {
@@ -293,36 +310,38 @@ describe("visibility matrix", () => {
     },
   };
 
-  // [list, read, link, link-elsewhere, roster read, roster edit]
+  // [list, read, link, link-elsewhere, roster read, roster edit, archive, delete]
   const T = true;
   const F = false;
   const EXPECTED = {
+    // T2 D4: only the owner of a pickup team may archive or delete it.
     "pickup (owned)": {
-      owner: [T, T, T, T, T, T],
-      "other signed-in user": [F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F],
-      anonymous: [F, F, F, F, F, F],
+      owner: [T, T, T, T, T, T, T, T],
+      "other signed-in user": [F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F],
     },
     // The actor "owner" does not own this team, so owner = no rights.
     "pickup (someone else's)": {
-      owner: [F, F, F, F, F, F],
-      "other signed-in user": [F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F],
-      anonymous: [F, F, F, F, F, F],
+      owner: [F, F, F, F, F, F, F, F],
+      "other signed-in user": [F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F],
     },
-    // Any signed-in user sees and links it; nobody edits it (fix 5).
+    // Any signed-in user sees and links it; nobody edits, archives or deletes it.
     imported: {
-      owner: [T, T, T, T, T, F],
-      "other signed-in user": [T, T, T, T, T, F],
-      "canvas member": [T, T, T, T, T, F],
-      anonymous: [F, F, F, F, F, F],
+      owner: [T, T, T, T, T, F, F, F],
+      "other signed-in user": [T, T, T, T, T, F, F, F],
+      "canvas member": [T, T, T, T, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F],
     },
-    // D4/Q4: owner-only, like a pickup team.
+    // D4/Q4: owner-only, like a pickup team, but its tournament governs
+    // archive and delete, so not even the owner may.
     "manual-tournament team": {
-      owner: [T, T, T, T, T, T],
-      "other signed-in user": [F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F],
-      anonymous: [F, F, F, F, F, F],
+      owner: [T, T, T, T, T, T, F, F],
+      "other signed-in user": [F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F],
     },
   };
 
@@ -360,18 +379,18 @@ describe("visibility matrix", () => {
     }
   }
 
-  it("covers every cell: 4 kinds × 4 actors × 6 cells = 96", () => {
+  it("covers every cell: 4 kinds × 4 actors × 8 cells = 128", () => {
     expect(Object.keys(TEAMS)).toHaveLength(4);
     expect(Object.keys(ACTORS)).toHaveLength(4);
-    expect(CELLS).toHaveLength(6);
+    expect(CELLS).toHaveLength(8);
     for (const kind of Object.keys(TEAMS)) {
       expect(Object.keys(EXPECTED[kind]).sort()).toEqual(Object.keys(ACTORS).sort());
       for (const actor of Object.keys(ACTORS)) {
         expect(EXPECTED[kind][actor]).toHaveLength(CELLS.length);
       }
     }
-    expect(cases).toHaveLength(96);
-    expect(new Set(cases.map((c) => c.name)).size).toBe(96);
+    expect(cases).toHaveLength(128);
+    expect(new Set(cases.map((c) => c.name)).size).toBe(128);
   });
 
   it.each(cases)("$name", async ({ cell, team, userId, expected }) => {
@@ -388,6 +407,10 @@ describe("visibility matrix", () => {
       const spy = mockCanvasLookup();
       expect(canLinkTeam(team, userId)).toBe(expected);
       expect(spy).not.toHaveBeenCalled();
+    } else if (cell === "archive") {
+      expect(canArchiveTeam(team, userId)).toBe(expected);
+    } else if (cell === "delete") {
+      expect(canDeleteTeam(team, userId)).toBe(expected);
     } else {
       expect(canEditRoster(team, userId)).toBe(expected);
     }
