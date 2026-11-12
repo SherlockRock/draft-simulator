@@ -344,7 +344,7 @@ function stageOne(draft, card) {
   const ps = state.positions[card.id];
   const wrap = el("div", "stage");
   wrap.appendChild(el("p", "lbl", "1. My " + (card.kind === "ban" ? "ban" : "pick")));
-  const revealed = draftRevealState(draft, state) === "revealed";
+  const revealed = draftShown(draft, state);
   if (pickAnswered(ps)) {
     const l = el("div", "locked");
     l.appendChild(el("b", "", pickText(ps.pick.current, NAMES)));
@@ -623,7 +623,7 @@ function buildCard(draft, card, hideDone) {
   c.appendChild(bw);
   c.appendChild(poolBlock(card));
   c.appendChild(stageOne(draft, card));
-  if (draftRevealState(draft, state) === "revealed") {
+  if (draftShown(draft, state)) {
     c.appendChild(revealStage(draft, card));
     c.appendChild(noteBlock(draft, card));
   } else {
@@ -642,7 +642,7 @@ function buildCard(draft, card, hideDone) {
 function draftHead(draft) {
   const done = draft.cards.filter((c) => cardDone(c, state)).length;
   const h = el("div", "dhead");
-  h.appendChild(el("h2", "", draft.title));
+  h.appendChild(el("h2", "", draft.title + (draftSealed(draft) ? " (sealed)" : "")));
   h.appendChild(el("span", "dprog", done + " of " + draft.cards.length + " cards done"));
   return h;
 }
@@ -650,6 +650,10 @@ function draftFoot(draft) {
   const f = el("div", "dfoot");
   const rs = draftRevealState(draft, state);
   const left = draft.cards.reduce((n, c) => n + blindRows(c).filter((o) => state.positions[c.id].labels[o.id] === undefined).length, 0);
+  if (draftSealed(draft)) {
+    f.appendChild(el("span", "", "No reveal in this run: the holdout is sealed. " + left + " blind row" + (left === 1 ? "" : "s") + " left. It opens only with --open-holdout, which is recorded."));
+    return f;
+  }
   const msg = rs === "revealed" ? "Revealed. Labels and picks changed now are recorded as scored." : rs === "ready" ? "Every blind row of this draft is labelled. The reveal is one way." : left + " blind row" + (left === 1 ? "" : "s") + " left in this draft.";
   f.appendChild(el("span", "", msg));
   const b = el("button", "btn", "Reveal the " + draft.title.replace(/ draft$/, "") + " draft");
@@ -666,7 +670,7 @@ function draftFoot(draft) {
 }
 function updateHeader() {
   const p = progress(DATA, state);
-  const anyRevealed = DATA.drafts.some((d) => draftRevealState(d, state) === "revealed");
+  const anyRevealed = DATA.drafts.some((d) => draftShown(d, state));
   const later = laterProgress(DATA, state);
   document.getElementById("count-rows").textContent = p.blindDone + " / " + p.blindTotal + " blind" + (anyRevealed ? " - " + later.done + " / " + later.total + " later" : "");
   document.getElementById("count-cards").textContent = p.cardsDone + " / " + p.cardsTotal + " cards";

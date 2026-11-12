@@ -26,11 +26,14 @@ function plainCompare(a, b) {
 // (ranks 6-10 only) come after the reveal. `reach` is a number or null; `margin` is read, never re-derived.
 function rowKind(option) {
   if (!option.row) return null;
+  // A sealed holdout option carries no reach (design section 5): the runner's own split is the answer.
+  if (option.reach === undefined && (option.band === "blind" || option.band === "later")) return option.band;
   const blind = (option.reach !== null && option.reach <= BLIND_REACH) || option.margin === true;
   return blind ? "blind" : "later";
 }
 
 function titleOf(draft) {
+  if (draft.startsWith("ho-")) return "Holdout: " + titleOf(draft.slice(3));
   return DRAFT_TITLES[draft] || draft;
 }
 
@@ -111,6 +114,7 @@ function assembleCard(p, run, classes, armIds, used) {
     mover: p.mover,
     slot: p.slot,
     kind: p.kind,
+    split: p.split,
     open_roles: p.open_roles,
     board: p.board,
     pool,
@@ -131,6 +135,15 @@ function assembleCard(p, run, classes, armIds, used) {
   };
 }
 
+// The run's metrics as the page holds them. The sealed holdout's unlabelled option ids are never read by the page
+// (it lists no holdout rows), so they are not carried into the HTML unless the run was opened.
+function pageMetrics(run) {
+  if (!run.metrics) return null;
+  if (run.run.holdout_open === true || !run.metrics.worklist || !("holdout_unlabelled_rows" in run.metrics.worklist)) return run.metrics;
+  const { holdout_unlabelled_rows: dropped, ...worklist } = run.metrics.worklist;
+  return { ...run.metrics, worklist };
+}
+
 // run -> the page's data. `names` maps champion id to display name. `icons` is an object id -> base64 webp, or a
 // function id -> base64 | undefined, asked only for champions the page shows; a missing one is listed in
 // `missingIcons` and the page draws initials.
@@ -148,6 +161,8 @@ function assemblePageData(run, { names, icons }) {
     }
     draft.cards.push(card);
   }
+  // Sealed unless the run says it was opened: a missing flag fails closed.
+  for (const d of drafts) d.sealed = run.run.holdout_open !== true && d.cards.some((c) => c.split === "holdout");
   for (const d of drafts) d.cards.sort((a, b) => a.slot - b.slot || plainCompare(a.id, b.id));
   const getIcon = typeof icons === "function" ? icons : (id) => icons[id];
   const iconMap = {};
@@ -167,6 +182,7 @@ function assemblePageData(run, { names, icons }) {
       data: run.run.data,
       k: run.run.k,
       margin: run.run.margin,
+      ...(run.run.holdout_open === true ? { holdout_open: true } : {}),
       reference_arm: run.run.reference_arm,
       arms: run.run.arms,
       search: run.run.search,
@@ -179,7 +195,7 @@ function assemblePageData(run, { names, icons }) {
     load_errors: run.load_errors || [],
     // The results tab reads this; absent from a run with no labels. Corpus-wide aggregates: the page names an
     // unrevealed draft's positions on none of it (`positionVisible`).
-    metrics: run.metrics || null,
+    metrics: pageMetrics(run),
     drafts,
   };
 }
@@ -250,4 +266,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   main(process.argv.slice(2));
 }
 
-export { assemblePageData, buildPageHtml, stripExport, jsonForScript, loadNames, iconReader };
+export { rowKind, titleOf, assemblePageData, buildPageHtml, stripExport, jsonForScript, loadNames, iconReader };

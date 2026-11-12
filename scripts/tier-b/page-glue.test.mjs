@@ -710,3 +710,105 @@ test("results: the page prints the receipt's second line, no-line counts, readab
   assert.match(t, /#1 lines at roster:0\.1:0\.05 with no line verdict: 1 \(1 not judgeable on the page/);
   assert.equal(t.includes("SECRET-LINE"), false);
 });
+
+// ---- slice B, task 5: sealed holdout drafts in the page (design T24) ----
+
+const SEALED = JSON.parse(fs.readFileSync(path.join(REPO, "packages/engine-core/tests/data/tier-b-review/runs/sealed-run.json"), "utf8"));
+const HO_BLIND = "2026-11-09-ho-blind-pinch-slot-9"; // its fixture holds a blind entry only
+const HO_SCORED = "2026-11-09-ho-scored-pinch-slot-9"; // its fixture holds a blind entry and a scored one
+const revealButtons = (doc) => walk(doc.root, (n) => n.tag === "button" && /^Reveal\b/.test(n.textContent));
+const rankish = /3\. Revealed|rank|value|gain|Reveal the|#\d/i;
+const storedState = (mem, data) => JSON.parse(mem.m.get("tier-b-review/" + data.run.id));
+
+function labelFirstRow(doc, id, keyIndex = 0) {
+  const r = rowsOf(doc, id)[0];
+  walk(r, (x) => x.tag === "button")[keyIndex].onclick();
+}
+
+test("T24: the ho-scored card, seeded revealed, renders blind: rows, no rank, no reveal stage, no reveal button", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ run: SEALED, localStorage: () => mem.api });
+  assert.equal(draftState(data.drafts.find((d) => d.id === "ho-scored"), newState(data)), "revealed", "the seed does say revealed: the guard is that the page does not take that path");
+  const text = cardEl(doc, HO_SCORED).textContent;
+  assert.equal(text.includes("3. Revealed"), false);
+  assert.equal(text.includes("Options"), true, "the blind stage 2 renders: labels were seeded, so the rows show");
+  const rows = rowsOf(doc, HO_SCORED);
+  assert.equal(rows.length, 5, "the five options whose band is blind");
+  for (const r of rows) {
+    assert.deepEqual(walk(r, (n) => n.tag === "button").map((b) => b.textContent), ["1play", "2maybe", "3never"]);
+    assert.equal(/\d/.test(r.children[0].textContent), false, "no digit in the row's words: no rank, no value");
+  }
+  assert.equal(revealButtons(doc).length, 0, "no reveal button on either holdout draft");
+  assert.equal(rankish.test(text.replace(/Options|1play|2maybe|3never/g, "")) && /3\. Revealed|Reveal the/.test(text), false);
+});
+
+test("T24: the ho-scored card records scored labels, because its fixture holds a scored entry", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ run: SEALED, localStorage: () => mem.api });
+  labelFirstRow(doc, HO_SCORED, 2);
+  const st = storedState(mem, data);
+  const recs = Object.values(st.positions[HO_SCORED].labels).filter((l) => l.t !== null);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].mode, "scored", "a blind entry after a scored one is refused by apply and the loader");
+  assert.equal(recs[0].current, "never");
+  assert.equal(rowsOf(doc, HO_SCORED).length, 5, "still rendered blind after the change");
+  assert.equal(cardEl(doc, HO_SCORED).textContent.includes("3. Revealed"), false);
+});
+
+test("T24: the ho-blind card records blind labels and shows its rows only after the pick", () => {
+  const mem = memoryStorage();
+  const { doc, data } = loadPage({ run: SEALED, localStorage: () => mem.api });
+  labelFirstRow(doc, HO_BLIND, 1);
+  const recs = Object.values(storedState(mem, data).positions[HO_BLIND].labels).filter((l) => l.t !== null);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].mode, "blind");
+  assert.equal(recs[0].blind, "maybe");
+  assert.equal(revealButtons(doc).length, 0, "no reveal button");
+});
+
+test("T24 guard: a state restored as revealed still renders blind", () => {
+  const data = assemblePageData(structuredClone(SEALED), { names: NAMES, icons: () => "AAAA" });
+  const state = newState(data);
+  const ps = state.positions[HO_BLIND];
+  ps.revealedAt = "2026-11-12T09:00:00Z";
+  ps.span.scored = { first: "2026-11-12T09:00:00Z", last: "2026-11-12T09:00:00Z" };
+  state.rev = 3;
+  const mem = memoryStorage();
+  mem.m.set("tier-b-review/" + data.run.id, JSON.stringify(state));
+  const { doc } = loadPage({ run: SEALED, localStorage: () => mem.api });
+  assert.equal(draftState(data.drafts.find((d) => d.id === "ho-blind"), restoreState(data, JSON.stringify(state))), "revealed", "the restored state says revealed");
+  assert.equal(cardEl(doc, HO_BLIND).textContent.includes("3. Revealed"), false);
+  assert.equal(rowsOf(doc, HO_BLIND).length, 5);
+  assert.equal(revealButtons(doc).length, 0, "no reveal button");
+  assert.equal(doc.fixed.armwrap.hidden, true, "no draft counts as revealed, so no arm control");
+});
+
+test("T24: the header names a sealed draft, and the foot says why there is no reveal", () => {
+  const mem = memoryStorage();
+  const { doc } = loadPage({ run: SEALED, localStorage: () => mem.api });
+  const heads = walk(doc.root, (n) => n.classList.contains("dhead")).map((n) => n.textContent);
+  assert.equal(heads.length, 2);
+  for (const h of heads) assert.match(h, /Holdout: .*sealed/);
+  const foots = walk(doc.root, (n) => n.classList.contains("dfoot")).map((n) => n.textContent);
+  for (const f of foots) assert.match(f, /sealed/);
+});
+
+test("T24: a sealed holdout draft is out of the results tab: no position of it is named", () => {
+  const run = structuredClone(SEALED);
+  run.metrics.reveal_changes = { blind_labels: 4, blind_picks: 2, labels: [], picks: [], drafts_revealed: ["ho-scored"], reveals_without_change: [] };
+  const mem = memoryStorage();
+  const { doc } = loadPage({ run, localStorage: () => mem.api });
+  doc.fixed["tab-results"].handlers.click[0]();
+  const text = doc.fixed.results.textContent;
+  assert.equal(text.includes(HO_SCORED), false);
+  assert.equal(text.includes(HO_BLIND), false);
+});
+
+test("T24: an opened run reveals a holdout draft as any other", () => {
+  const run = structuredClone(SEALED);
+  run.run.holdout_open = true;
+  const mem = memoryStorage();
+  const { doc } = loadPage({ run, localStorage: () => mem.api });
+  assert.ok(revealButtons(doc).length === 2, "each holdout draft has its reveal button");
+  assert.equal(cardEl(doc, HO_SCORED).textContent.includes("3. Revealed"), true, "seeded revealed, and shown");
+});

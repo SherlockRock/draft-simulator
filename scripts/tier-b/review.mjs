@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One command for the loop's run step: the Rust runner, then the page beside its JSON.
 //
-//   node scripts/tier-b/review.mjs [--fixtures <dir>] [--record]
+//   node scripts/tier-b/review.mjs [--fixtures <dir>] [--record] [--open-holdout]
 //
 // Runs `cargo run --release -p engine-core --bin tier_b_review` with TIER_B_JSON under
 // docs/plans/<date>-tier-b-review/<run id, colons as dashes>/run.json, TIER_B_RUN_ID set here (so the directory
@@ -60,16 +60,31 @@ function historyLine(run) {
   if (!m) throw new Error("the run has no labels, so there is nothing to record");
   const reference = m.arms.find((a) => a.id === m.reference);
   if (!reference) throw new Error(`the reference arm ${m.reference} is not in the run's metrics`);
-  const roster = run.run.arms.filter((a) => a.p !== undefined && a.q !== undefined);
+  const roster = run.run.arms.filter((a) => a.p !== undefined && a.q !== undefined && a.w === undefined);
   const sorted = (xs) => [...new Set(xs)].sort((a, b) => a - b);
+  const w0 = m.weight && typeof m.weight.w0 === "number" ? m.weight.w0 : 1;
+  const holdoutN = run.positions.filter((p) => p.split === "holdout").length;
+  const opened = run.run.holdout_open === true;
+  // The holdout's own read goes in only when it was opened; a sealed run writes nothing of it.
+  const holdout = { opened };
+  // Label counts carry no rank or value, so they are written sealed or opened (design section 5).
+  if (m.holdout && m.holdout.labels) holdout.labels = m.holdout.labels;
+  if (opened && m.holdout) {
+    holdout.positions = m.holdout.positions;
+    holdout.reference = m.holdout.reference;
+    holdout.pick = m.holdout.pick;
+  }
+  if (opened && m.weight && Array.isArray(m.weight.arms)) {
+    holdout.weights = m.weight.arms.filter((a) => a.holdout !== undefined).map((a) => ({ w: a.w, holdout: a.holdout }));
+  }
   return {
     date: run.run.id.slice(0, 10),
     run: run.run.id,
     commit: run.run.engine.commit,
     dirty: run.run.engine.dirty,
     data: run.run.data,
-    grid: { p: sorted(roster.map((a) => a.p)), q: sorted(roster.map((a) => a.q)), arms: run.run.arms.length },
-    corpus: { positions: run.positions.length, load_errors: run.load_errors.length },
+    grid: { p: sorted(roster.map((a) => a.p)), q: sorted(roster.map((a) => a.q)), w: sorted([w0, ...run.run.arms.filter((a) => a.w !== undefined).map((a) => a.w)]), arms: run.run.arms.length },
+    corpus: { positions: run.positions.length, development: run.positions.length - holdoutN, holdout: holdoutN, load_errors: run.load_errors.length },
     margin: m.margin,
     labels: m.labels,
     reference: { arm: reference.id, metrics: reference.metrics },
@@ -80,7 +95,24 @@ function historyLine(run) {
       edge: m.rule.edge.map((e) => e.text),
       second_line_differs: m.second_line.differs,
     },
+    holdout,
   };
+}
+
+// The runs of the history's lines that opened the holdout (a line from before slice B has no `holdout`).
+function earlierOpenings(file) {
+  if (!fs.existsSync(file)) return [];
+  const runs = [];
+  for (const text of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!text.trim()) continue;
+    try {
+      const line = JSON.parse(text);
+      if (line && line.holdout && line.holdout.opened === true) runs.push(String(line.run));
+    } catch (e) {
+      // a line that does not parse is not an opening this can name
+    }
+  }
+  return runs;
 }
 
 // Appends one line, on a line of its own even where the file lacks a final newline.
@@ -128,11 +160,23 @@ function runStep(command, args, options) {
 
 // Runs the runner and builds the page. `fixtures` is a directory or null (the real corpus). `exec` is the
 // process runner (injected by tests, which must not build the Rust binary).
-function runReview({ fixtures = null, repo = REPO, now = new Date(), record = false, exec = runStep } = {}) {
+// `openHoldout` sets TIER_B_HOLDOUT=open for the binary and implies `record`. A TIER_B_HOLDOUT already in `env`
+// without it is refused, before anything runs: the environment is forwarded to the binary, which would otherwise
+// open the holdout with no history line. `warn` is injected by tests.
+function runReview({ fixtures = null, repo = REPO, now = new Date(), record = false, exec = runStep, openHoldout = false, env: inherited = process.env, warn = console.warn } = {}) {
+  if (!openHoldout && inherited.TIER_B_HOLDOUT !== undefined) {
+    throw new Error("TIER_B_HOLDOUT is set in the environment: use --open-holdout, which records the opening, instead of setting it");
+  }
+  if (openHoldout) {
+    record = true;
+    const earlier = earlierOpenings(historyPath(fixtures, repo));
+    if (earlier.length > 0) warn(`warning: the holdout was already opened by run ${earlier.join(", ")}; this is another look, and it is recorded`);
+  }
   const runId = runIdFor(now);
   const paths = reviewPaths(runId, repo);
   fs.mkdirSync(paths.dir, { recursive: true });
-  const env = { ...process.env, TIER_B_JSON: paths.runJson, TIER_B_RUN_ID: runId };
+  const env = { ...inherited, TIER_B_JSON: paths.runJson, TIER_B_RUN_ID: runId };
+  if (openHoldout) env.TIER_B_HOLDOUT = "open";
   if (fixtures) env.TIER_B_FIXTURES = path.resolve(fixtures);
   try {
     exec("cargo", ["run", "--release", "-p", "engine-core", "--bin", "tier_b_review"], { cwd: repo, env });
@@ -162,17 +206,20 @@ function runReview({ fixtures = null, repo = REPO, now = new Date(), record = fa
 function main(argv) {
   let fixtures = null;
   let record = false;
+  let openHoldout = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--fixtures") {
       fixtures = argv[++i];
       if (!fixtures) throw new Error("--fixtures needs a directory");
     } else if (argv[i] === "--record") {
       record = true;
+    } else if (argv[i] === "--open-holdout") {
+      openHoldout = true;
     } else {
-      throw new Error(`unknown argument ${argv[i]}\nusage: review.mjs [--fixtures <dir>] [--record]`);
+      throw new Error(`unknown argument ${argv[i]}\nusage: review.mjs [--fixtures <dir>] [--record] [--open-holdout]`);
     }
   }
-  runReview({ fixtures: fixtures ? callerPath(fixtures) : null, record });
+  runReview({ fixtures: fixtures ? callerPath(fixtures) : null, record, openHoldout });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
