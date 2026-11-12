@@ -1,0 +1,142 @@
+{
+  "request": "fetch-team-rosters-by-event-stage-next",
+  "context": {
+    "id_event_stage": "11f1c28a-9fde-7d0a-b076-87e14ee768b0",
+    "id_team_roster": null,
+    "before": false
+  },
+  "reply": {
+    "teams": [
+      {
+        "extra": {
+          "acronym": "CES",
+          "palette": {
+            "primary": "#ee6d3d",
+            "secondary": "#000000"
+          }
+        },
+        "id_team_organisation": "11f16864-17af-b26b-b879-38dc126365d2",
+        "id_team_roster": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "is_free_agent": false,
+        "name": "Contingent Esports"
+      },
+      {
+        "extra": {
+          "acronym": "VIP",
+          "palette": {
+            "primary": "#e820fb",
+            "secondary": "#6078fa"
+          }
+        },
+        "id_team_organisation": "11f16c2e-c44e-d134-b397-11cfcad89ac0",
+        "id_team_roster": "11f16c2e-c478-f50c-bf60-8369c88ac727",
+        "is_free_agent": false,
+        "name": "Vancouver Impact"
+      },
+      {
+        "extra": {
+          "acronym": "TSR",
+          "palette": {
+            "primary": "95FF50",
+            "secondary": "151D23"
+          }
+        },
+        "id_team_organisation": "11f16d9c-eadc-99c6-b763-e8a5a2d44c80",
+        "id_team_roster": "11f16d9c-eb06-c4cf-b68a-c1b14d337c11",
+        "is_free_agent": false,
+        "name": "Team Samsara"
+      },
+      {
+        "extra": {
+          "acronym": "DME",
+          "palette": {
+            "primary": "#ED4C3B",
+            "secondary": "ED4F3B"
+          }
+        },
+        "id_team_organisation": "11f1bc71-46c4-bbef-9abc-e80ee260d189",
+        "id_team_roster": "11f1bc71-46e5-d014-9d76-23ed213cb26f",
+        "is_free_agent": false,
+        "name": "DME"
+      },
+      {
+        "extra": {
+          "acronym": "BLUE",
+          "palette": {
+            "primary": "0064a0",
+            "secondary": "000000"
+          }
+        },
+        "id_team_organisation": "11f1bcf0-6273-4d42-a8fd-606caae125dd",
+        "id_team_roster": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "is_free_agent": false,
+        "name": "Blue Otter"
+      },
+      {
+        "extra": {
+          "acronym": "DOG",
+          "palette": {
+            "primary": "F3CC47",
+            "secondary": "F3CC47"
+          }
+        },
+        "id_team_organisation": "11f1bcfe-ffcc-bea2-b7f1-44543286476d",
+        "id_team_roster": "11f1bcfe-ffec-37f8-b533-62c4cb53ea9a",
+        "is_free_agent": false,
+        "name": "Dorado Gaming"
+      },
+      {
+        "extra": {
+          "acronym": "CNV",
+          "palette": {
+            "primary": "8D00F9",
+            "secondary": "000000"
+          }
+        },
+        "id_team_organisation": "11f1be9c-3746-9672-873b-2e8672bb1e86",
+        "id_team_roster": "11f1be9c-376e-3fe8-864a-769e4a307696",
+        "is_free_agent": false,
+        "name": "Conviction"
+      },
+      {
+        "extra": {
+          "acronym": "CLMB",
+          "palette": {
+            "primary": "#ED4C3B",
+            "secondary": "#ED4C3B"
+          }
+        },
+        "id_team_organisation": "11f1bf84-c253-dfe5-a648-48d7a6997f6e",
+        "id_team_roster": "11f1bf84-c273-5316-8b4f-259a1497c6c8",
+        "is_free_agent": false,
+        "name": "Calamity Black"
+      },
+      {
+        "extra": {
+          "acronym": "OME",
+          "palette": {
+            "primary": "#ed4f3b",
+            "secondary": "#ED4C3B"
+          }
+        },
+        "id_team_organisation": "11f1c054-d792-4e44-babd-c73d5366dac4",
+        "id_team_roster": "11f1c054-d7b2-16a7-ae13-b71f88b9aa9a",
+        "is_free_agent": false,
+        "name": "Ole Miss"
+      },
+      {
+        "extra": {
+          "acronym": "NLE",
+          "palette": {
+            "primary": "6E00FA",
+            "secondary": "000000"
+          }
+        },
+        "id_team_organisation": "11f1c05f-cec4-c4fb-9d07-d0220e290427",
+        "id_team_roster": "11f1c05f-ceea-30dd-b5f9-3544e0a48cbe",
+        "is_free_agent": false,
+        "name": "Nine Lives Esports"
+      }
+    ]
+  }
+}

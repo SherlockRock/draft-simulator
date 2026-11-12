@@ -1,0 +1,21 @@
+{
+  "request": "fetch-rounds-by-number-next",
+  "context": {
+    "id_event_stage": "11f1c28a-9fde-7d0a-b076-87e14ee768b0",
+    "number": null,
+    "before": false
+  },
+  "reply": {
+    "rounds": [
+      {
+        "awaiting_status": "TerminateDefault",
+        "awaiting_time_start": 1791403632,
+        "best_of": 3,
+        "id_event_stage": "11f1c28a-9fde-7d0a-b076-87e14ee768b0",
+        "id_round": "11f1c28a-aee0-1159-9fcf-e5e99c8f2f12",
+        "number": 0,
+        "time_start": 1791403631
+      }
+    ]
+  }
+}

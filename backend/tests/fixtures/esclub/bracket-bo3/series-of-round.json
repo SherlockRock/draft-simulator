@@ -1,0 +1,54 @@
+{
+  "request": "fetch-series-by-number-next",
+  "context": {
+    "id_parent": "11f18dd3-3fb1-e59f-847f-276da07c05f4",
+    "number": null,
+    "before": false
+  },
+  "reply": {
+    "series": [
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 1787270422,
+        "best_of": 3,
+        "id_parent": "11f18dd3-3fb1-e59f-847f-276da07c05f4",
+        "id_serie": "11f18dd3-3fd7-6e6c-9281-a4e63dbef157",
+        "id_serie_loser": null,
+        "id_serie_winner": "11f18dd3-3fd8-b837-ba74-dd57135eab46",
+        "is_scrim": false,
+        "number": 0,
+        "number_event_stage": 0,
+        "number_group": null,
+        "number_round": 2,
+        "time_start": 1785623587,
+        "time_start_agreed": null,
+        "time_start_computed": 1787270422,
+        "time_start_default": null,
+        "time_start_forced": 1787270422,
+        "type_parent": "Round",
+        "type_serie": "SerieDefault"
+      },
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 1787270436,
+        "best_of": 3,
+        "id_parent": "11f18dd3-3fb1-e59f-847f-276da07c05f4",
+        "id_serie": "11f18dd3-3fd7-890c-95f0-a58426cffcee",
+        "id_serie_loser": null,
+        "id_serie_winner": "11f18dd3-3fd8-b837-ba74-dd57135eab46",
+        "is_scrim": false,
+        "number": 1,
+        "number_event_stage": 0,
+        "number_group": null,
+        "number_round": 2,
+        "time_start": 1785623587,
+        "time_start_agreed": null,
+        "time_start_computed": 1787270436,
+        "time_start_default": null,
+        "time_start_forced": 1787270436,
+        "type_parent": "Round",
+        "type_serie": "SerieDefault"
+      }
+    ]
+  }
+}

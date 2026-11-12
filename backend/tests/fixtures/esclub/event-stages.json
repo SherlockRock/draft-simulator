@@ -1,0 +1,58 @@
+{
+  "request": "fetch-event-stages-by-number-next",
+  "context": {
+    "id_event_active": "11f1bc5f-4b33-e263-9b1e-aa8ed4a49d2d",
+    "id_event_stage": null,
+    "before": false
+  },
+  "reply": {
+    "events": [
+      {
+        "awaiting_status": "TerminateDefault",
+        "awaiting_time_start": 1791403607,
+        "config": {
+          "default_best_of": 3,
+          "default_draft": {
+            "is_blind": false,
+            "is_tournament": true,
+            "size_random_pool": 0,
+            "type_fearless": "HardPick",
+            "type_side_selection": "CoinToss",
+            "type_versus": "VS5x5"
+          },
+          "default_is_scrim": false,
+          "format": {
+            "RoundRobin": {
+              "default_count_series_per_team": 9,
+              "group_size": 10,
+              "repeat": 1,
+              "schedulable": {}
+            }
+          },
+          "free_agent": null,
+          "integrations": [
+            {
+              "LeagueOfLegends": {
+                "id_tournament": 7336495,
+                "type_map": "summoners-rift"
+              }
+            }
+          ],
+          "output": 8,
+          "seed": "auto",
+          "start": "auto"
+        },
+        "extra": {
+          "trophy_active_acronym": "S1",
+          "trophy_stage_acronym": "ADMIN_PANEL.STAGE.TROPHY_ACTIVE_ACRONYM_CHOICE_SEASON"
+        },
+        "id_event_active": "11f1bc5f-4b33-e263-9b1e-aa8ed4a49d2d",
+        "id_event_stage": "11f1c28a-9fde-7d0a-b076-87e14ee768b0",
+        "id_game": "11ef4074-4f9a-9045-9bae-cf64589d421f",
+        "name": "Regular Season",
+        "number": 0,
+        "time_start": 1791403607
+      }
+    ]
+  }
+}

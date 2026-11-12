@@ -1,0 +1,19 @@
+{
+  "request": "fetch-round",
+  "context": {
+    "id_round": "11f18dd3-3fb1-e59f-847f-276da07c05f4"
+  },
+  "reply": {
+    "rounds": [
+      {
+        "awaiting_status": "InitiatePending",
+        "awaiting_time_start": 1785607387,
+        "best_of": 3,
+        "id_event_stage": "11f18dd0-11ec-ae38-8d96-fb417d38512d",
+        "id_round": "11f18dd3-3fb1-e59f-847f-276da07c05f4",
+        "number": 2,
+        "time_start": 1785623587
+      }
+    ]
+  }
+}

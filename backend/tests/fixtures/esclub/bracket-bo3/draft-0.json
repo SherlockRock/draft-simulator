@@ -1,0 +1,22 @@
+{
+  "request": "fetch-draft-by-match",
+  "context": {
+    "id_match": "11f18dd3-400a-43a3-ab46-045e1301f3d8"
+  },
+  "reply": {
+    "drafts": [
+      {
+        "awaiting_status": "Finished",
+        "awaiting_time_start": 0,
+        "id_draft": "11f18dd3-404f-6994-97cf-f15900404231",
+        "id_match": "11f18dd3-400a-43a3-ab46-045e1301f3d8",
+        "is_blind": false,
+        "is_tournament": true,
+        "size_random_pool": 0,
+        "type_fearless": "HardPick",
+        "type_side_selection": "HighestSeed",
+        "type_versus": "VS5x5"
+      }
+    ]
+  }
+}

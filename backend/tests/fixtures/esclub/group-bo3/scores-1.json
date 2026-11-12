@@ -1,0 +1,30 @@
+{
+  "request": "fetch-scores-by-match",
+  "context": {
+    "id_match": "11f1dd83-0b52-57fe-9394-bcff72caa08b",
+    "omit_teams": true
+  },
+  "reply": {
+    "scores": [
+      {
+        "count_matches": 34,
+        "esr": 3490,
+        "esr_team_roster": 3501,
+        "esr_update": 11,
+        "id_match": "11f1dd83-0b52-57fe-9394-bcff72caa08b",
+        "id_team_roster": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "score": 1
+      },
+      {
+        "count_matches": 10,
+        "esr": 3381,
+        "esr_team_roster": 3370,
+        "esr_update": -11,
+        "id_match": "11f1dd83-0b52-57fe-9394-bcff72caa08b",
+        "id_team_roster": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "score": 0
+      }
+    ],
+    "teams": []
+  }
+}
