@@ -6,6 +6,7 @@ import {
     type SearchScope
 } from "./gameClassification";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
+import { isPlaceholderTeamName } from "./teamLink";
 
 export type SlotPhase = "ban" | "pick";
 export type SlotSide = "blue" | "red";
@@ -123,9 +124,14 @@ export const resolveGroupTeamNames = (
     group: CanvasGroup
 ): { team1: string | null; team2: string | null } => {
     if (!resolvesTeamNames(group)) return { team1: null, team2: null };
-    const team1 =
-        group.Team1?.name?.trim() || group.metadata.blueTeamName?.trim() || null;
-    const team2 = group.Team2?.name?.trim() || group.metadata.redTeamName?.trim() || null;
+    // A linked entity is a deliberate choice and always counts; the free-text
+    // fallback ignores the "Team 1"/"Team 2" placeholders.
+    const freeText = (name: string | undefined): string | null => {
+        const trimmed = name?.trim();
+        return trimmed && !isPlaceholderTeamName(trimmed) ? trimmed : null;
+    };
+    const team1 = group.Team1?.name?.trim() || freeText(group.metadata.blueTeamName);
+    const team2 = group.Team2?.name?.trim() || freeText(group.metadata.redTeamName);
     return { team1, team2 };
 };
 

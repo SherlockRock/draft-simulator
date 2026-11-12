@@ -19,6 +19,7 @@ const {
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const { withoutPlaceholderTeamNames } = require("../utils/teamPlaceholders");
 const Pool = require("../models/Pool.js");
 const {
   destroyPoolsForCanvas,
@@ -106,15 +107,25 @@ async function destroyUnreferencedDrafts(draftIds, transaction) {
 
 // Validates optional team1_id/team2_id from a group-update body against the
 // set of team ids the requesting user owns. Absent field => no change; null =>
-// unlink; a string must be in ownedTeamIds. Returns {updates} or {error}.
-function resolveTeamLinkUpdate(body, ownedTeamIds) {
+// unlink; a string must be in ownedTeamIds, or equal the group's current id in
+// the same slot (currentLinks). Returns {updates} or {error}.
+//
+// The current-id pass-through is the collaborator fix (Teams decision 10): the
+// Group Settings dialog always sends team1_id/team2_id back, so an editor who
+// does not own the linked team could not save any setting on the group. An
+// unchanged id is not a new link. Linking a *new* team stays owner-only until
+// T1; so does moving an id into the other slot.
+function resolveTeamLinkUpdate(body, ownedTeamIds, currentLinks = {}) {
   const updates = {};
   for (const key of ["team1_id", "team2_id"]) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
     const value = body[key];
     if (value === null) {
       updates[key] = null;
-    } else if (typeof value === "string" && ownedTeamIds.has(value)) {
+    } else if (
+      typeof value === "string" &&
+      (ownedTeamIds.has(value) || value === currentLinks[key])
+    ) {
       updates[key] = value;
     } else if (typeof value === "string") {
       return { error: `${key} must reference a team you own` };
@@ -1499,7 +1510,9 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
         positionX: positionX ?? 50,
         positionY: positionY ?? 50,
         versus_draft_id: versusDraftId,
-        metadata: {
+        // No "Team 1"/"Team 2" placeholder is stored (T0): the VersusDraft
+        // columns keep their defaults, the group metadata leaves the key absent.
+        metadata: withoutPlaceholderTeamNames({
           blueTeamName: versusDraft.blueTeamName,
           redTeamName: versusDraft.redTeamName,
           length: versusDraft.length,
@@ -1513,7 +1526,7 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
           // save, so a derived value there would reset a user's correction in
           // the very request that saved it (R1 path 1).
           gameType: deriveGameType(versusDraft.competitive),
-        },
+        }),
       },
       { transaction: t },
     );
@@ -1652,7 +1665,10 @@ router.post(
           transaction: t,
         });
         const ownedIds = new Set(owned.map((row) => row.id));
-        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+          team1_id: group.team1_id,
+          team2_id: group.team2_id,
+        });
         if (linkResult.error) {
           await t.rollback();
           return res.status(400).json({ error: linkResult.error });
@@ -1761,11 +1777,13 @@ router.post(
           name: data.name,
           type: "series",
           versus_draft_id: versusDraft.id,
-          metadata: {
+          // Stripped last: getSeriesMetadata copies the VersusDraft's names,
+          // which default to "Team 1"/"Team 2" (T0).
+          metadata: withoutPlaceholderTeamNames({
             ...group.metadata,
             ...getSeriesMetadata(versusDraft),
             gameType: convertedGameType,
-          },
+          }),
           ...teamLinkUpdates,
         },
         { transaction: t },
@@ -2184,7 +2202,10 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
         transaction: t,
       });
       const ownedIds = new Set(owned.map((row) => row.id));
-      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+        team1_id: group.team1_id,
+        team2_id: group.team2_id,
+      });
       if (linkResult.error) {
         await t.rollback();
         return res.status(400).json({ error: linkResult.error });
@@ -2265,6 +2286,13 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
           };
         }
       }
+    }
+
+    // The one place the final metadata is known: it may come from
+    // mergeGroupMetadata alone or from the getSeriesMetadata spread above.
+    // Strip here so no branch can store a "Team 1"/"Team 2" placeholder (T0).
+    if (updates.metadata) {
+      updates.metadata = withoutPlaceholderTeamNames(updates.metadata);
     }
 
     await group.update(updates, { transaction: t });

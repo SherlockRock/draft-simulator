@@ -460,3 +460,262 @@ describe("clear protocol: null deletes the key (D3)", () => {
     expect(metadata).toMatchObject({ layout: "grid" });
   });
 });
+
+describe("new group writes store no placeholder team name (T0 task 3)", () => {
+  const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+  const importLiveSeries = async (names) => {
+    vi.spyOn(VersusDraft, "findByPk").mockResolvedValue({
+      id: "vd-1",
+      name: "Series",
+      ...names,
+      length: 3,
+      competitive: false,
+      type: "standard",
+      origin: "live",
+      disabledChampions: [],
+      Drafts: [],
+    });
+    const created = vi.spyOn(CanvasGroup, "create").mockResolvedValue({
+      id: "g-1",
+      toJSON: () => ({ id: "g-1" }),
+    });
+    await request(buildCanvasApp())
+      .post("/api/canvas/c-1/import/series")
+      .send({ versusDraftId: "vd-1" })
+      .expect(201);
+    return created.mock.calls.at(-1)[0].metadata;
+  };
+
+  it("/import/series: default names are not stored", async () => {
+    const metadata = await importLiveSeries({
+      blueTeamName: "Team 1",
+      redTeamName: "Team 2",
+    });
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(has(metadata, "redTeamName")).toBe(false);
+    expect(metadata).toMatchObject({ length: 3, gameType: "scrim" });
+  });
+
+  it("/import/series: a real name is kept", async () => {
+    const metadata = await importLiveSeries({
+      blueTeamName: "MEOW",
+      redTeamName: "Team 2",
+    });
+    expect(metadata.blueTeamName).toBe("MEOW");
+    expect(has(metadata, "redTeamName")).toBe(false);
+  });
+
+  const convert = async (body) => {
+    const group = {
+      id: "g-1",
+      canvas_id: "c-1",
+      type: "custom",
+      positionX: 0,
+      positionY: 0,
+      metadata: {},
+      update: vi.fn().mockResolvedValue(),
+      toJSON: () => ({ id: "g-1", type: "series" }),
+    };
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(group);
+    // normalizeSeriesData fills the defaults the VersusDraft columns carry.
+    vi.spyOn(VersusDraft, "create").mockImplementation(async (values) => ({
+      id: "vd-1",
+      ...values,
+      competitive: false,
+      origin: "manual",
+    }));
+    const res = await request(buildCanvasApp())
+      .post("/api/canvas/c-1/group/g-1/convert-to-series")
+      .send({ name: "Custom Series", length: 1, ...body });
+    expect(res.status).toBe(201);
+    return {
+      metadata: group.update.mock.calls.at(-1)[0].metadata,
+      versusCreate: VersusDraft.create.mock.calls.at(-1)[0],
+    };
+  };
+
+  it("convert-to-series: no names in the body stores none, VersusDraft keeps defaults", async () => {
+    const { metadata, versusCreate } = await convert({});
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(has(metadata, "redTeamName")).toBe(false);
+    expect(versusCreate).toMatchObject({
+      blueTeamName: "Team 1",
+      redTeamName: "Team 2",
+    });
+  });
+
+  it("convert-to-series: a real name is kept", async () => {
+    const { metadata } = await convert({ blueTeamName: "MEOW" });
+    expect(metadata.blueTeamName).toBe("MEOW");
+    expect(has(metadata, "redTeamName")).toBe(false);
+  });
+
+  const putManual = async (storedMetadata, body, { origin = "manual", blue = "DOG" } = {}) => {
+    const group = {
+      id: "g-1",
+      canvas_id: "c-1",
+      type: "series",
+      versus_draft_id: "vd-1",
+      metadata: storedMetadata,
+      update: vi.fn().mockResolvedValue(),
+      toJSON: () => ({ id: "g-1" }),
+    };
+    const hydrated = { toJSON: () => ({ id: "g-1" }) };
+    vi.spyOn(CanvasGroup, "findOne").mockImplementation(async (options) =>
+      options?.include ? hydrated : group,
+    );
+    const versusDraft = {
+      id: "vd-1",
+      name: "Series",
+      blueTeamName: blue,
+      redTeamName: "TSR",
+      length: 1,
+      competitive: false,
+      type: "standard",
+      origin,
+      disabledChampions: [],
+      toJSON() {
+        return { ...this };
+      },
+      update: vi.fn().mockResolvedValue(),
+    };
+    vi.spyOn(VersusDraft, "findByPk").mockResolvedValue(versusDraft);
+    const res = await request(buildCanvasApp())
+      .put("/api/canvas/c-1/group/g-1")
+      .send(body);
+    expect(res.status).toBe(200);
+    return {
+      metadata: group.update.mock.calls.at(-1)[0].metadata,
+      versusUpdate: versusDraft.update.mock.calls.at(-1)?.[0],
+    };
+  };
+
+  it("group PUT, manual series: a placeholder over a stored name removes it; the VersusDraft still gets it", async () => {
+    const { metadata, versusUpdate } = await putManual(
+      { blueTeamName: "DOG", redTeamName: "TSR", gameType: "scrim" },
+      { metadata: { blueTeamName: "Team 1", redTeamName: "TSR" } },
+    );
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(metadata.redTeamName).toBe("TSR");
+    expect(metadata.gameType).toBe("scrim");
+    expect(versusUpdate).toMatchObject({ blueTeamName: "Team 1" });
+  });
+
+  it("group PUT, manual series: a real name is kept", async () => {
+    const { metadata } = await putManual(
+      { gameType: "scrim" },
+      { metadata: { blueTeamName: "MEOW", redTeamName: "TSR" } },
+    );
+    expect(metadata).toMatchObject({ blueTeamName: "MEOW", redTeamName: "TSR" });
+  });
+
+  it("group PUT, manual series: a rename alone does not respread a placeholder VersusDraft name", async () => {
+    // The getSeriesMetadata spread copies the VersusDraft's names; strip last.
+    const { metadata } = await putManual(
+      { gameType: "scrim", blueTeamName: "DOG" },
+      { name: "Renamed" },
+      { blue: "Team 1" },
+    );
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(metadata.redTeamName).toBe("TSR");
+    expect(metadata.gameType).toBe("scrim");
+  });
+
+  it("group PUT, custom group: a placeholder in the merged metadata is dropped", async () => {
+    const group = {
+      id: "g-1",
+      canvas_id: "c-1",
+      type: "custom",
+      versus_draft_id: null,
+      metadata: { layout: "grid", redTeamName: "DOG" },
+      update: vi.fn().mockResolvedValue(),
+      toJSON: () => ({ id: "g-1" }),
+    };
+    const hydrated = { toJSON: () => ({ id: "g-1" }) };
+    vi.spyOn(CanvasGroup, "findOne").mockImplementation(async (options) =>
+      options?.include ? hydrated : group,
+    );
+    await request(buildCanvasApp())
+      .put("/api/canvas/c-1/group/g-1")
+      .send({ metadata: { blueTeamName: "Team 1", redTeamName: "team 2" } })
+      .expect(200);
+    const metadata = group.update.mock.calls.at(-1)[0].metadata;
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(has(metadata, "redTeamName")).toBe(false);
+    expect(metadata.layout).toBe("grid");
+  });
+
+  const sequelize = require("../../config/database");
+  const importJson = async (names, existingGroup = null) => {
+    vi.spyOn(sequelize, "transaction").mockResolvedValue(transaction);
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
+    vi.spyOn(CanvasDraft, "destroy").mockResolvedValue(0);
+    vi.spyOn(VersusDraft, "findOne").mockResolvedValue(null);
+    vi.spyOn(VersusDraft, "create").mockResolvedValue({
+      id: "vd-1",
+      name: "Imported Series",
+      ...names,
+      length: 1,
+      competitive: false,
+      type: "standard",
+      disabledChampions: [],
+    });
+    vi.spyOn(Draft, "findAll").mockResolvedValue([]);
+    vi.spyOn(Draft, "findOne").mockResolvedValue(null);
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(existingGroup);
+    const created = vi.spyOn(CanvasGroup, "create").mockResolvedValue({
+      id: "g-1",
+      positionX: 0,
+      positionY: 0,
+      toJSON: () => ({ id: "g-1" }),
+    });
+    const res = await request(buildUsersApp())
+      .post("/api/users/me/import/canvas/c-1")
+      .send({
+        data: {
+          drafts: [],
+          versusSeries: [
+            {
+              name: "Imported Series",
+              seriesLength: 1,
+              draftType: "standard",
+              drafts: [{ name: "Game 1", picks: Array(20).fill("") }],
+            },
+          ],
+        },
+        options: { dedupeStrategy: "overwrite" },
+      });
+    expect(res.status).toBe(200);
+    return existingGroup
+      ? existingGroup.update.mock.calls.at(-1)[0].metadata
+      : created.mock.calls.at(-1)[0].metadata;
+  };
+
+  it("JSON import, create: default names are not stored; a real name is", async () => {
+    const metadata = await importJson({
+      blueTeamName: "Team 1",
+      redTeamName: "MEOW",
+    });
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(metadata.redTeamName).toBe("MEOW");
+  });
+
+  it("JSON import, existing group: a placeholder replaces nothing and drops the stored name", async () => {
+    const existingGroup = {
+      id: "g-1",
+      positionX: 0,
+      positionY: 0,
+      metadata: { layout: "grid", blueTeamName: "DOG" },
+      update: vi.fn().mockResolvedValue(),
+      toJSON: () => ({ id: "g-1" }),
+    };
+    const metadata = await importJson(
+      { blueTeamName: "Team 1", redTeamName: "Team 2" },
+      existingGroup,
+    );
+    expect(has(metadata, "blueTeamName")).toBe(false);
+    expect(has(metadata, "redTeamName")).toBe(false);
+    expect(metadata.layout).toBe("grid");
+  });
+});

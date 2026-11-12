@@ -109,6 +109,38 @@ describe("resolveTeamNames", () => {
         const card = makeCard({ team1Name: "Us", team2Name: "Them" });
         expect(resolveTeamNames(card)).toEqual({ left: "Us", right: "Them" });
     });
+
+    describe("series with no stored name", () => {
+        it("keeps team identity placeholders when team 2 is on blue", () => {
+            expect(resolveTeamNames(makeCard({}, 2), makeGroup())).toEqual({
+                left: "Team 2",
+                right: "Team 1"
+            });
+        });
+
+        it("uses team 1 / team 2 in order when team 1 is on blue", () => {
+            expect(resolveTeamNames(makeCard({}, 1), makeGroup())).toEqual({
+                left: "Team 1",
+                right: "Team 2"
+            });
+        });
+
+        it("fills only the missing side", () => {
+            const group = makeGroup({ redTeamName: "DOG" });
+            expect(resolveTeamNames(makeCard({}, 2), group)).toEqual({
+                left: "DOG",
+                right: "Team 1"
+            });
+        });
+
+        it("leaves a custom group with no names undefined", () => {
+            const group: CanvasGroup = { ...makeGroup(), type: "custom" };
+            expect(resolveTeamNames(makeCard({}, 2), group)).toEqual({
+                left: undefined,
+                right: undefined
+            });
+        });
+    });
 });
 
 describe("fieldForColumn", () => {

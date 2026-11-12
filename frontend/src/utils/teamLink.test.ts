@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findTeamByName, resolveTeamLink } from "./teamLink";
+import { findTeamByName, isPlaceholderTeamName, resolveTeamLink } from "./teamLink";
 import type { Team } from "@draft-sim/shared-types";
 
 const team = (id: string, name: string): Team => ({
@@ -90,5 +90,22 @@ describe("resolveTeamLink", () => {
             name: "MEOW",
             teamId: null
         });
+    });
+});
+
+describe("isPlaceholderTeamName", () => {
+    it("is true for Team 1 / Team 2 in any casing or padding", () => {
+        expect(isPlaceholderTeamName("Team 1")).toBe(true);
+        expect(isPlaceholderTeamName(" team 2 ")).toBe(true);
+        expect(isPlaceholderTeamName("TEAM 1")).toBe(true);
+    });
+
+    it("is false for anything else", () => {
+        expect(isPlaceholderTeamName("Team 3")).toBe(false);
+        expect(isPlaceholderTeamName("Team 10")).toBe(false);
+        expect(isPlaceholderTeamName("")).toBe(false);
+        expect(isPlaceholderTeamName(null)).toBe(false);
+        expect(isPlaceholderTeamName(undefined)).toBe(false);
+        expect(isPlaceholderTeamName("DOG")).toBe(false);
     });
 });

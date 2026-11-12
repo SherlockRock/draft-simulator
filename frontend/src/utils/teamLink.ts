@@ -10,13 +10,18 @@ const SENTINEL_NAMES = new Set(["team 1", "team 2"]);
 
 const normalize = (value: string) => value.trim().toLowerCase();
 
+// True for the dialog's "Team 1" / "Team 2" seeds (trimmed, case-insensitive).
+export function isPlaceholderTeamName(name: string | null | undefined): boolean {
+    return typeof name === "string" && SENTINEL_NAMES.has(normalize(name));
+}
+
 // Exactly one owned team by that name, or nothing. Ambiguity fails safe: team
 // names carry no unique constraint (no index on (owner_id, name), and rename is
 // unchecked), so on a duplicate we cannot tell which one was meant — and
 // guessing would scout the wrong five players.
 export function findTeamByName(name: string, teams: Team[]): Team | null {
     const needle = normalize(name);
-    if (!needle || SENTINEL_NAMES.has(needle)) return null;
+    if (!needle || isPlaceholderTeamName(needle)) return null;
     const matches = teams.filter((team) => normalize(team.name) === needle);
     return matches.length === 1 ? matches[0] : null;
 }
