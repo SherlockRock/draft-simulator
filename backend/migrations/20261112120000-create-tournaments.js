@@ -21,7 +21,7 @@ module.exports = {
           },
           // esclub season id (id_event_active); null for manual tournaments.
           external_id: { type: Sequelize.STRING(64), allowNull: true },
-          // The allowed set is enforced in code (VALID_REGIONS in routes/teams.js).
+          // The allowed set is enforced in code (TEAM_REGIONS in utils/teamRegions.js).
           region: {
             type: Sequelize.STRING(8),
             allowNull: false,

@@ -1,10 +1,8 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+const { TEAM_REGIONS } = require("../utils/teamRegions");
 
 const TOURNAMENT_SOURCES = ["manual", "esclub"];
-// Copy of VALID_REGIONS in routes/teams.js (importing the route here would
-// pull express into the model layer); a test keeps the two in step.
-const TOURNAMENT_REGIONS = ["na1", "euw1", "eun1", "kr", "br1", "oc1"];
 
 const Tournament = sequelize.define("Tournament", {
   id: {
@@ -31,7 +29,7 @@ const Tournament = sequelize.define("Tournament", {
     type: DataTypes.STRING(8),
     allowNull: false,
     defaultValue: "na1",
-    validate: { isIn: [TOURNAMENT_REGIONS] },
+    validate: { isIn: [TEAM_REGIONS] },
   },
   starts_at: { type: DataTypes.DATE, allowNull: true },
   ends_at: { type: DataTypes.DATE, allowNull: true },

@@ -6,6 +6,7 @@ const Tournament = require("../../models/Tournament");
 const UserTournament = require("../../models/UserTournament");
 const User = require("../../models/User");
 const Team = require("../../models/Team");
+const { TEAM_REGIONS } = require("../../utils/teamRegions");
 const setupAssociations = require("../../models/associations");
 
 setupAssociations();
@@ -51,13 +52,8 @@ describe("Tournament model", () => {
     ]);
   });
 
-  it("keeps the region set in step with routes/teams.js", () => {
-    const { isValidRegion } = require("../../routes/teams");
-    for (const region of attrs.region.validate.isIn[0]) {
-      expect(isValidRegion(region), region).toBe(true);
-    }
-    expect(isValidRegion("xx9")).toBe(false);
-    expect(attrs.region.validate.isIn[0]).not.toContain("xx9");
+  it("uses the shared region set itself, not a copy", () => {
+    expect(attrs.region.validate.isIn[0]).toBe(TEAM_REGIONS);
   });
 
   it("makes external_id and the date columns nullable", () => {
@@ -137,8 +133,10 @@ describe("Tournament associations", () => {
     expect(UserTournament.associations.User.target).toBe(User);
   });
 
-  it("does not link Tournament to Team yet (Task 2)", () => {
-    expect(Tournament.associations.Teams).toBeUndefined();
-    expect(Team.getAttributes().tournament_id).toBeUndefined();
+  it("has many Teams through tournament_id", () => {
+    const assoc = Tournament.associations.Teams;
+    expect(assoc.associationType).toBe("HasMany");
+    expect(assoc.target).toBe(Team);
+    expect(assoc.foreignKey).toBe("tournament_id");
   });
 });

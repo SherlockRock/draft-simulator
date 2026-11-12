@@ -5,7 +5,8 @@ const Team = require("../models/Team");
 const TeamPlayer = require("../models/TeamPlayer");
 const sequelize = require("../config/database");
 
-const VALID_REGIONS = new Set(["na1", "euw1", "eun1", "kr", "br1", "oc1"]);
+const { isValidRegion } = require("../utils/teamRegions");
+
 const VALID_ROLES = new Set(["top", "jungle", "mid", "adc", "support"]);
 const MAX_ROSTER = 10;
 
@@ -15,10 +16,6 @@ function isValidTeamName(value) {
     value.trim().length >= 1 &&
     value.trim().length <= 120
   );
-}
-
-function isValidRegion(value) {
-  return typeof value === "string" && VALID_REGIONS.has(value);
 }
 
 // Returns { ok: true } or { ok: false, error }. Pure — no DB.

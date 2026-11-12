@@ -80,7 +80,12 @@ const setupAssociations = () => {
   CanvasGroup.belongsTo(Team, { as: "Team1", foreignKey: "team1_id" });
   CanvasGroup.belongsTo(Team, { as: "Team2", foreignKey: "team2_id" });
 
-  // Tournaments. Tournament.hasMany(Team) arrives with Teams.tournament_id.
+  // Tournaments. A tournament with teams cannot be deleted (RESTRICT).
+  Tournament.hasMany(Team, { foreignKey: "tournament_id", onDelete: "RESTRICT" });
+  Team.belongsTo(Tournament, {
+    foreignKey: "tournament_id",
+    onDelete: "RESTRICT",
+  });
   Tournament.belongsTo(User, { as: "creator", foreignKey: "created_by" });
   User.belongsToMany(Tournament, {
     through: UserTournament,
