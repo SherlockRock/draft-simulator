@@ -17,17 +17,21 @@ export const resolveTeamNames = (
     canvasDraft: CanvasDraft,
     group?: CanvasGroup
 ): { left?: string; right?: string } => {
+    // A series keeps team identity even with no stored name (the backend strips
+    // the "Team 1"/"Team 2" defaults), so a swapped-side game still labels the
+    // right team. Custom groups and loose cards stay undefined.
+    const isSeries = group?.type === "series";
     const identity = {
         team1:
             canvasDraft.team1Name?.trim() ||
             group?.Team1?.name?.trim() ||
             group?.metadata.blueTeamName?.trim() ||
-            undefined,
+            (isSeries ? "Team 1" : undefined),
         team2:
             canvasDraft.team2Name?.trim() ||
             group?.Team2?.name?.trim() ||
             group?.metadata.redTeamName?.trim() ||
-            undefined
+            (isSeries ? "Team 2" : undefined)
     };
     const bst = canvasDraft.Draft.blueSideTeam ?? 1;
     return bst === 1
