@@ -71,6 +71,7 @@ export const NewTeamForm: Component = () => {
                     disabled={createMutation.isPending}
                     class="rounded p-1.5 text-darius-purple-bright transition-colors hover:bg-darius-card-hover disabled:opacity-50"
                     title="Create"
+                    aria-label="Create"
                 >
                     <Check size={16} />
                 </button>
@@ -79,6 +80,7 @@ export const NewTeamForm: Component = () => {
                     onClick={close}
                     class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
                     title="Cancel"
+                    aria-label="Cancel"
                 >
                     <X size={16} />
                 </button>

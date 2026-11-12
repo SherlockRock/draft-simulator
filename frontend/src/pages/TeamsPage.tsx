@@ -1,4 +1,12 @@
-import { Component, createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import {
+    Component,
+    createEffect,
+    createMemo,
+    createSignal,
+    For,
+    JSX,
+    Show
+} from "solid-js";
 import { Title } from "@solidjs/meta";
 import { ChevronDown, ChevronRight } from "lucide-solid";
 import toast from "solid-toast";
@@ -65,6 +73,12 @@ const TeamsPage: Component = () => {
         queryFn: fetchTeamsManage
     }));
 
+    // Everything below renders by stable string keys (team ids, league ids) and
+    // looks the current object up in a Map. buildTeamsPageGroups returns fresh
+    // objects on every run, and <For> keys objects by reference, so iterating
+    // the objects would remount rows (and drop an open rename field, an
+    // expanded roster editor or the New team form) on every refetch. <For>
+    // compares strings by value, so the keyed components below stay mounted.
     const groups = createMemo(() => {
         const data = teamsQuery.data;
         return data ? buildTeamsPageGroups(data) : [];
@@ -72,13 +86,45 @@ const TeamsPage: Component = () => {
     const tournamentGroups = createMemo(() =>
         groups().flatMap((g): TournamentGroup[] => (g.kind === "tournament" ? [g] : []))
     );
-    // Zero or one item: <For> instead of a <Show> callback keeps the group typed.
-    const pickupGroups = createMemo(() =>
-        groups().flatMap((g): PickupGroup[] => (g.kind === "pickup" ? [g] : []))
+    const pickupGroup = createMemo((): PickupGroup | undefined => {
+        for (const g of groups()) if (g.kind === "pickup") return g;
+        return undefined;
+    });
+    const archivedGroup = createMemo((): ArchivedGroup | undefined => {
+        for (const g of groups()) if (g.kind === "archived") return g;
+        return undefined;
+    });
+    const hasArchived = createMemo(() => archivedGroup() !== undefined);
+    const archivedTitle = createMemo(() => {
+        const g = archivedGroup();
+        return g ? archivedHeaderLabel(g) : "Archived";
+    });
+
+    const teamsById = createMemo(
+        () => new Map((teamsQuery.data?.teams ?? []).map((t) => [t.id, t]))
     );
-    const archivedGroups = createMemo(() =>
-        groups().flatMap((g): ArchivedGroup[] => (g.kind === "archived" ? [g] : []))
+    const leaguesById = createMemo(() => {
+        const map = new Map<string, TournamentGroup>();
+        for (const g of tournamentGroups()) map.set(g.id, g);
+        for (const g of archivedGroup()?.tournaments ?? []) map.set(g.id, g);
+        return map;
+    });
+    const activeLeagueIds = createMemo(() => tournamentGroups().map((g) => g.id));
+    const archivedLeagueIds = createMemo(() =>
+        (archivedGroup()?.tournaments ?? []).map((g) => g.id)
     );
+    const pickupIds = createMemo(() => (pickupGroup()?.teams ?? []).map((t) => t.id));
+    const archivedPickupIds = createMemo(() =>
+        (archivedGroup()?.pickupTeams ?? []).map((t) => t.id)
+    );
+    const pickupSelectable = createMemo(() => {
+        const g = pickupGroup();
+        return g ? selectableIds(g) : [];
+    });
+    const archivedSelectable = createMemo(() => {
+        const g = archivedGroup();
+        return g ? selectableIds(g) : [];
+    });
 
     const [selection, setSelection] = createSignal(emptySelection());
     const [deleteRows, setDeleteRows] = createSignal<ManagedTeamRow[]>([]);
@@ -108,8 +154,13 @@ const TeamsPage: Component = () => {
                 `${BULK_DONE[result.action]} ${teamCountLabel(result.ids.length)}`
             );
         },
-        onError: (error: Error, vars) =>
-            toast.error(`${BULK_FAILED[vars.action]}: ${error.message}`)
+        onError: (error: Error, vars) => {
+            // Close the delete dialog: its rows are a snapshot that the failure
+            // (e.g. a row gone elsewhere) may have made stale. Refresh the page data.
+            setDeleteRows([]);
+            void invalidateTeams(queryClient);
+            toast.error(`${BULK_FAILED[vars.action]}: ${error.message}`);
+        }
     }));
 
     const leagueMutation = useMutation(() => ({
@@ -131,13 +182,15 @@ const TeamsPage: Component = () => {
         bulkMutation.mutate({ action, ids: [team.id], clear: false });
 
     const runSelected = (action: BulkTeamAction) => {
+        const s = summary();
+        const allowed = action === "archive" ? s.canArchive : s.canRestore;
         const ids = [...selection().ids];
-        if (ids.length > 0) bulkMutation.mutate({ action, ids, clear: true });
+        if (allowed && ids.length > 0) bulkMutation.mutate({ action, ids, clear: true });
     };
 
     const requestDeleteSelected = () => {
         const data = teamsQuery.data;
-        if (!data) return;
+        if (!data || !summary().canDelete) return;
         const rows = selectedRows(selection(), data);
         if (rows.length > 0) setDeleteRows(rows);
     };
@@ -153,18 +206,36 @@ const TeamsPage: Component = () => {
     const scopeOf = (team: ManagedTeamRow): SelectionScope =>
         team.archived_at ? "archived" : "active";
 
-    const renderRow = (team: ManagedTeamRow) => (
-        <TeamsRow
-            team={team}
-            selected={isRowSelected(selection(), team.id, scopeOf(team))}
-            busy={busy()}
-            onToggleSelected={() =>
-                setSelection((prev) => toggleSelected(prev, team.id, scopeOf(team)))
-            }
-            onArchive={() => runRow("archive", team)}
-            onRestore={() => runRow("restore", team)}
-            onDelete={() => setDeleteRows([team])}
-        />
+    // One row, by id. Stays mounted while the id exists; a removed id renders nothing.
+    const RowById: Component<{ id: string }> = (props) => {
+        const row = () => teamsById().get(props.id);
+        return (
+            <Show when={row()}>
+                {(team) => (
+                    <TeamsRow
+                        team={team()}
+                        selected={isRowSelected(selection(), team().id, scopeOf(team()))}
+                        busy={busy()}
+                        onToggleSelected={() =>
+                            setSelection((prev) =>
+                                toggleSelected(prev, team().id, scopeOf(team()))
+                            )
+                        }
+                        onArchive={() => runRow("archive", team())}
+                        onRestore={() => runRow("restore", team())}
+                        onDelete={() => setDeleteRows([team()])}
+                    />
+                )}
+            </Show>
+        );
+    };
+
+    const RowList: Component<{ ids: string[]; empty?: JSX.Element }> = (props) => (
+        <div class={rowsDivider}>
+            <For each={props.ids} fallback={props.empty}>
+                {(id) => <RowById id={id} />}
+            </For>
+        </div>
     );
 
     const selectAll = (ids: string[], scope: SelectionScope, label: string) => (
@@ -184,35 +255,53 @@ const TeamsPage: Component = () => {
         </Show>
     );
 
-    const leagueBody = (group: TournamentGroup) => (
-        <div class={rowsDivider}>
-            <For
-                each={group.teams}
-                fallback={
-                    <p class="px-4 py-3 text-sm text-darius-text-secondary">
-                        No teams in this league yet.
-                    </p>
-                }
-            >
-                {renderRow}
-            </For>
-        </div>
-    );
-
-    // A league you added can be archived; a manual-tournament group (teams you
-    // own, no UserTournaments row) cannot.
-    const leagueButton = (group: TournamentGroup, archived: boolean) => (
-        <Show when={group.source !== "manual"}>
-            <button
-                type="button"
-                onClick={() => leagueMutation.mutate({ id: group.id, archived })}
-                disabled={busy()}
-                class={SMALL_BUTTON}
-            >
-                {archived ? "Archive league" : "Restore league"}
-            </button>
-        </Show>
-    );
+    // One league card, by id. `archiveTarget` is what its button sets: true on an
+    // active league (Archive league), false inside Archived (Restore league).
+    // A manual-tournament group (teams you own, no UserTournaments row) has no
+    // button: the endpoint would 404.
+    const LeagueCard: Component<{ id: string; archiveTarget: boolean }> = (props) => {
+        const league = () => leaguesById().get(props.id);
+        const teamIds = createMemo(() => (league()?.teams ?? []).map((t) => t.id));
+        return (
+            <Show when={league()}>
+                {(l) => (
+                    <TeamsGroup
+                        title={l().name}
+                        region={regionLabel(l().region)}
+                        countLabel={teamCountLabel(l().teams.length)}
+                        actions={
+                            <Show when={l().source !== "manual"}>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        leagueMutation.mutate({
+                                            id: l().id,
+                                            archived: props.archiveTarget
+                                        })
+                                    }
+                                    disabled={busy()}
+                                    class={SMALL_BUTTON}
+                                >
+                                    {props.archiveTarget
+                                        ? "Archive league"
+                                        : "Restore league"}
+                                </button>
+                            </Show>
+                        }
+                    >
+                        <RowList
+                            ids={teamIds()}
+                            empty={
+                                <p class="px-4 py-3 text-sm text-darius-text-secondary">
+                                    No teams in this league yet.
+                                </p>
+                            }
+                        />
+                    </TeamsGroup>
+                )}
+            </Show>
+        );
+    };
 
     return (
         <AuthGuard requireAuth>
@@ -253,124 +342,95 @@ const TeamsPage: Component = () => {
                         </Show>
 
                         <Show when={teamsQuery.data}>
-                            <For each={tournamentGroups()}>
-                                {(group) => (
-                                    <TeamsGroup
-                                        title={group.name}
-                                        region={regionLabel(group.region)}
-                                        countLabel={teamCountLabel(group.teams.length)}
-                                        actions={leagueButton(group, true)}
-                                    >
-                                        {leagueBody(group)}
-                                    </TeamsGroup>
-                                )}
+                            <For each={activeLeagueIds()}>
+                                {(id) => <LeagueCard id={id} archiveTarget={true} />}
                             </For>
 
-                            <For each={pickupGroups()}>
-                                {(group) => (
-                                    <TeamsGroup
-                                        title="Pickup teams"
-                                        countLabel={teamCountLabel(group.teams.length)}
-                                        actions={
-                                            <>
-                                                {selectAll(
-                                                    selectableIds(group),
-                                                    "active",
-                                                    "Select all pickup teams"
+                            {/* Rendered once, not per data object: the New team form stays mounted. */}
+                            <TeamsGroup
+                                title="Pickup teams"
+                                countLabel={teamCountLabel(pickupIds().length)}
+                                actions={
+                                    <>
+                                        {selectAll(
+                                            pickupSelectable(),
+                                            "active",
+                                            "Select all pickup teams"
+                                        )}
+                                        <NewTeamForm />
+                                    </>
+                                }
+                            >
+                                <RowList
+                                    ids={pickupIds()}
+                                    empty={
+                                        <p class="px-4 py-3 text-sm text-darius-text-secondary">
+                                            No pickup teams yet. Use New team to add one.
+                                        </p>
+                                    }
+                                />
+                            </TeamsGroup>
+
+                            <Show when={hasArchived()}>
+                                <TeamsGroup
+                                    title={archivedTitle()}
+                                    leading={
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setArchivedOpen((open) => !open)
+                                            }
+                                            class="rounded p-1 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
+                                            title={
+                                                archivedOpen()
+                                                    ? "Hide archived"
+                                                    : "Show archived"
+                                            }
+                                            aria-label={
+                                                archivedOpen()
+                                                    ? "Hide archived"
+                                                    : "Show archived"
+                                            }
+                                            aria-expanded={archivedOpen()}
+                                        >
+                                            <Show
+                                                when={archivedOpen()}
+                                                fallback={<ChevronRight size={18} />}
+                                            >
+                                                <ChevronDown size={18} />
+                                            </Show>
+                                        </button>
+                                    }
+                                >
+                                    <Show when={archivedOpen()}>
+                                        <div class="px-4 pb-4">
+                                            <For each={archivedLeagueIds()}>
+                                                {(id) => (
+                                                    <LeagueCard
+                                                        id={id}
+                                                        archiveTarget={false}
+                                                    />
                                                 )}
-                                                <NewTeamForm />
-                                            </>
-                                        }
-                                    >
-                                        <div class={rowsDivider}>
-                                            <For
-                                                each={group.teams}
-                                                fallback={
-                                                    <p class="px-4 py-3 text-sm text-darius-text-secondary">
-                                                        No pickup teams yet. Use New team
-                                                        to add one.
-                                                    </p>
-                                                }
-                                            >
-                                                {renderRow}
                                             </For>
-                                        </div>
-                                    </TeamsGroup>
-                                )}
-                            </For>
-
-                            <For each={archivedGroups()}>
-                                {(group) => (
-                                    <TeamsGroup
-                                        title={archivedHeaderLabel(group)}
-                                        leading={
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setArchivedOpen((open) => !open)
-                                                }
-                                                class="rounded p-1 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
-                                                title={
-                                                    archivedOpen()
-                                                        ? "Hide archived"
-                                                        : "Show archived"
-                                                }
-                                                aria-expanded={archivedOpen()}
-                                            >
-                                                <Show
-                                                    when={archivedOpen()}
-                                                    fallback={<ChevronRight size={18} />}
-                                                >
-                                                    <ChevronDown size={18} />
-                                                </Show>
-                                            </button>
-                                        }
-                                    >
-                                        <Show when={archivedOpen()}>
-                                            <div class="px-4 pb-4">
-                                                <For each={group.tournaments}>
-                                                    {(league) => (
-                                                        <TeamsGroup
-                                                            title={league.name}
-                                                            region={regionLabel(
-                                                                league.region
-                                                            )}
-                                                            countLabel={teamCountLabel(
-                                                                league.teams.length
-                                                            )}
-                                                            actions={leagueButton(
-                                                                league,
-                                                                false
-                                                            )}
-                                                        >
-                                                            {leagueBody(league)}
-                                                        </TeamsGroup>
+                                            <Show when={archivedPickupIds().length > 0}>
+                                                <TeamsGroup
+                                                    title="Pickup teams"
+                                                    countLabel={teamCountLabel(
+                                                        archivedPickupIds().length
                                                     )}
-                                                </For>
-                                                <Show when={group.pickupTeams.length > 0}>
-                                                    <TeamsGroup
-                                                        title="Pickup teams"
-                                                        countLabel={teamCountLabel(
-                                                            group.pickupTeams.length
-                                                        )}
-                                                        actions={selectAll(
-                                                            selectableIds(group),
-                                                            "archived",
-                                                            "Select all archived pickup teams"
-                                                        )}
-                                                    >
-                                                        <div class={rowsDivider}>
-                                                            <For each={group.pickupTeams}>
-                                                                {renderRow}
-                                                            </For>
-                                                        </div>
-                                                    </TeamsGroup>
-                                                </Show>
-                                            </div>
-                                        </Show>
-                                    </TeamsGroup>
-                                )}
-                            </For>
+                                                    actions={selectAll(
+                                                        archivedSelectable(),
+                                                        "archived",
+                                                        "Select all archived pickup teams"
+                                                    )}
+                                                >
+                                                    <RowList ids={archivedPickupIds()} />
+                                                </TeamsGroup>
+                                            </Show>
+                                        </div>
+                                    </Show>
+                                </TeamsGroup>
+                            </Show>
                         </Show>
                     </div>
                 </Show>
@@ -379,7 +439,7 @@ const TeamsPage: Component = () => {
             <Show when={selection().ids.size > 0}>
                 <TeamsBulkBar
                     summary={summary()}
-                    pending={bulkMutation.isPending}
+                    pending={busy()}
                     onArchive={() => runSelected("archive")}
                     onRestore={() => runSelected("restore")}
                     onDelete={requestDeleteSelected}

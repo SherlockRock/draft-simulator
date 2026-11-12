@@ -112,6 +112,7 @@ export const TeamsRow: Component<{
                                     onClick={scout}
                                     class={ACTION_CLASS}
                                     title="Scout this team"
+                                    aria-label="Scout this team"
                                 >
                                     <Crosshair size={16} />
                                 </button>
@@ -124,6 +125,12 @@ export const TeamsRow: Component<{
                                             ? "Edit roster"
                                             : "Roster"
                                     }
+                                    aria-label={
+                                        props.team.canEditRoster
+                                            ? "Edit roster"
+                                            : "Roster"
+                                    }
+                                    aria-expanded={expanded()}
                                 >
                                     <Show
                                         when={expanded()}
@@ -138,6 +145,7 @@ export const TeamsRow: Component<{
                                         onClick={startEdit}
                                         class={ACTION_CLASS}
                                         title="Rename"
+                                        aria-label="Rename"
                                     >
                                         <Pencil size={16} />
                                     </button>
@@ -149,6 +157,7 @@ export const TeamsRow: Component<{
                                         disabled={props.busy}
                                         class={ACTION_CLASS}
                                         title="Archive"
+                                        aria-label="Archive"
                                     >
                                         <Archive size={16} />
                                     </button>
@@ -160,6 +169,7 @@ export const TeamsRow: Component<{
                                         disabled={props.busy}
                                         class={ACTION_CLASS}
                                         title="Restore"
+                                        aria-label="Restore"
                                     >
                                         <ArchiveRestore size={16} />
                                     </button>
@@ -171,6 +181,7 @@ export const TeamsRow: Component<{
                                         disabled={props.busy}
                                         class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-red-400 disabled:opacity-50"
                                         title="Delete"
+                                        aria-label="Delete"
                                     >
                                         <Trash2 size={16} />
                                     </button>
@@ -198,6 +209,7 @@ export const TeamsRow: Component<{
                             disabled={renameMutation.isPending}
                             class="rounded p-1.5 text-darius-purple-bright transition-colors hover:bg-darius-card-hover disabled:opacity-50"
                             title="Save"
+                            aria-label="Save"
                         >
                             <Check size={16} />
                         </button>
@@ -206,6 +218,7 @@ export const TeamsRow: Component<{
                             onClick={() => setEditing(false)}
                             class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover"
                             title="Cancel"
+                            aria-label="Cancel"
                         >
                             <X size={16} />
                         </button>
