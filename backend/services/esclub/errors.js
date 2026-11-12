@@ -24,6 +24,8 @@ class EsclubNotFound extends EsclubError {}
 class EsclubUnsupported extends EsclubError {}
 /** A champion resource we cannot map to a key. */
 class EsclubUnknownChampion extends EsclubError {}
+/** The game played differs from its draft in a way we will not guess at. */
+class EsclubDraftMismatch extends EsclubError {}
 
 module.exports = {
   EsclubError,
@@ -33,4 +35,5 @@ module.exports = {
   EsclubNotFound,
   EsclubUnsupported,
   EsclubUnknownChampion,
+  EsclubDraftMismatch,
 };

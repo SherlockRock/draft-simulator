@@ -5,7 +5,7 @@
  * mapped by guess.
  */
 
-const { EsclubProtocolChanged, EsclubUnsupported, EsclubUnknownChampion } = require("./errors");
+const { EsclubProtocolChanged, EsclubUnsupported, EsclubUnknownChampion, EsclubDraftMismatch } = require("./errors");
 const { getEffectivePickOrder, getPicksArrayIndex } = require("../../utils/versusPickOrder");
 const { championAliasForKey } = require("../../utils/championKeys");
 
@@ -35,8 +35,17 @@ const { championAliasForKey } = require("../../utils/championKeys");
  * @property {"blue"|"red"} firstPick
  * @property {1|2} blueSideTeam                    which of the series' teams is on blue
  * @property {"blue"|"red"|null} winner
- * @property {Record<string, Participant>} participants  keyed by picked champion
+ * @property {Record<string, Participant>} participants  keyed by the champion played
  * @property {number} unmatchedParticipants
+ * @property {Substitution[]} substitutions        slots where the champion played replaced the one drafted
+ */
+
+/**
+ * @typedef {Object} Substitution
+ * @property {"blue"|"red"} side
+ * @property {number} slot      index into picks
+ * @property {string} drafted   the champion esclub's draft has for the slot
+ * @property {string} played    the champion the player played; this is what picks holds
  */
 
 /**
@@ -222,15 +231,48 @@ function rosterSides(rosterIds, finals, allChoices, participants, byResource, ma
 }
 
 /**
- * Participants keyed by picked champion, from the picking roster's side only.
+ * Where the game played differs from its draft, the game wins (Rourke,
+ * 2026-11-12; seen: Xin Zhao drafted, Vi played). Per side: exactly one pick
+ * nobody played and exactly one participant on a champion nobody picked means
+ * that pick's slot takes the played champion. A side with nothing played
+ * outside its picks, or no pick left unplayed, is left as drafted. Anything
+ * else would mean guessing which slot, so it fails the game.
+ * @returns {{number: number, side: "blue"|"red", playedKey: number}[]} blue first
+ * @throws {EsclubDraftMismatch}
+ */
+function playedSubstitutions(finals, sideOf, participants, byResource, matchId) {
+  const out = [];
+  const keyOf = (c) => Number(byResource.get(c.id_game_resource).id_external);
+  for (const side of ["blue", "red"]) {
+    const picks = finals.filter((c) => c.type_choice === "PickCharacter" && sideOf.get(c.id_team_roster_source) === side);
+    const played = participants.filter((p) => SIDE_BY_NUMBER[p.side] === side);
+    const pickedKeys = new Set(picks.map(keyOf));
+    const playedKeys = new Set(played.map((p) => p.id_champion));
+    const unplayedPicks = picks.filter((c) => !playedKeys.has(keyOf(c)));
+    const unpickedPlayed = played.filter((p) => !pickedKeys.has(p.id_champion));
+    if (unplayedPicks.length === 0 || unpickedPlayed.length === 0) continue;
+    if (unplayedPicks.length !== 1 || unpickedPlayed.length !== 1) {
+      throw new EsclubDraftMismatch(
+        `esclub: match ${matchId}: on ${side}, ${unplayedPicks.length} picks were not played and ` +
+          `${unpickedPlayed.length} champions played were not picked; the slots are not guessed`
+      );
+    }
+    out.push({ number: unplayedPicks[0].number, side, playedKey: unpickedPlayed[0].id_champion });
+  }
+  return out;
+}
+
+/**
+ * Participants keyed by the champion played, from the picking roster's side only.
+ * @param {Map<number, number>} playedKeyByNumber choice number -> played champion key, for substituted picks
  * @returns {{participants: Record<string, Participant>, unmatched: number}}
  */
-function buildParticipants(finals, sideOf, participants, byResource, matchId) {
+function buildParticipants(finals, sideOf, participants, byResource, matchId, playedKeyByNumber) {
   const out = {};
   const used = new Set();
   for (const c of finals) {
     if (c.type_choice !== "PickCharacter") continue;
-    const key = byResource.get(c.id_game_resource).id_external;
+    const key = playedKeyByNumber.get(c.number) ?? byResource.get(c.id_game_resource).id_external;
     const alias = championAliasForKey(key);
     const side = sideOf.get(c.id_team_roster_source);
     const p = participants.find((q, i) => !used.has(i) && q.id_champion === Number(key) && SIDE_BY_NUMBER[q.side] === side);
@@ -326,7 +368,26 @@ function normalizeGame(match, draft, choices, teams, byResource) {
     winner = SIDE_BY_NUMBER[lol.winner_side];
   }
 
-  const built = buildParticipants(finals, sideOf, participants, byResource, id);
+  // The champion played replaces the one drafted where the two differ.
+  const substitutions = [];
+  const playedKeyByNumber = new Map();
+  for (const s of playedSubstitutions(finals, sideOf, participants, byResource, id)) {
+    const played = championAliasForKey(s.playedKey);
+    if (!played) {
+      throw new EsclubUnknownChampion(
+        `esclub: match ${id}: champion key ${JSON.stringify(s.playedKey)} was played on ${s.side} and is not in the catalog`
+      );
+    }
+    if (picks.includes(played)) {
+      throw new EsclubDraftMismatch(`esclub: match ${id}: ${played} was played on ${s.side} and is already in the draft`);
+    }
+    const slot = getPicksArrayIndex(s.number, firstPick);
+    substitutions.push({ side: s.side, slot, drafted: picks[slot], played });
+    picks[slot] = played;
+    playedKeyByNumber.set(s.number, s.playedKey);
+  }
+
+  const built = buildParticipants(finals, sideOf, participants, byResource, id, playedKeyByNumber);
   return {
     kind: "game",
     game: {
@@ -339,6 +400,7 @@ function normalizeGame(match, draft, choices, teams, byResource) {
       winner,
       participants: built.participants,
       unmatchedParticipants: built.unmatched,
+      substitutions,
     },
   };
 }
@@ -346,8 +408,10 @@ function normalizeGame(match, draft, choices, teams, byResource) {
 /**
  * The games part of normalizeSeries: matches in `number` order, each one
  * normalised, skipped (blind), pending (not yet normalisable) or failed
- * (unknown champion; EsclubUnknownChampion, for that game only). Any other
- * contradiction throws EsclubProtocolChanged for the whole series.
+ * (for that game only: an unknown champion, EsclubUnknownChampion; or a game
+ * that differs from its draft in more than one slot a side,
+ * EsclubDraftMismatch). Any other contradiction throws EsclubProtocolChanged
+ * for the whole series.
  * @param {{ teams: [ExternalTeamRef, ExternalTeamRef], matches: object[],
  *           drafts: Record<string, object>, choices: Record<string, object[]>, resources: object[] }} input
  * @returns {{ games: NormalizedGame[], pending: GameNote[], skipped: GameNote[], failed: (GameNote & {error: Error})[] }}
@@ -362,7 +426,7 @@ function normalizeGames(input) {
       if (r.kind === "game") out.games.push(r.game);
       else out[r.kind].push(r.note);
     } catch (e) {
-      if (!(e instanceof EsclubUnknownChampion)) throw e;
+      if (!(e instanceof EsclubUnknownChampion) && !(e instanceof EsclubDraftMismatch)) throw e;
       out.failed.push({ externalMatchId: m.id_match, number: m.number, reason: e.message, error: e });
     }
   }

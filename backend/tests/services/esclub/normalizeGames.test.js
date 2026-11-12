@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const N = require("../../../services/esclub/normalize");
-const { EsclubProtocolChanged, EsclubUnknownChampion } = require("../../../services/esclub/errors");
+const { EsclubProtocolChanged, EsclubUnknownChampion, EsclubDraftMismatch } = require("../../../services/esclub/errors");
 const { getEffectivePickOrder, getPicksArrayIndex } = require("../../../utils/versusPickOrder");
 const { championAliasForKey } = require("../../../utils/championKeys");
 
@@ -68,9 +68,14 @@ describe("group Bo3", () => {
       // re-derive each slot from the raw final choices
       const order = getEffectivePickOrder(g.firstPick);
       const fin = group.choices[g.externalMatchId].filter((c) => c.is_final);
+      // a slot shows the champion drafted, except where the champion played replaced it
+      const replaced = new Map(g.substitutions.map((s) => [s.slot, s]));
       for (const c of fin) {
         const alias = championAliasForKey(byRes.get(c.id_game_resource).id_external);
-        expect(g.picks[getPicksArrayIndex(c.number, g.firstPick)]).toBe(alias);
+        const slot = getPicksArrayIndex(c.number, g.firstPick);
+        const s = replaced.get(slot);
+        expect(g.picks[slot]).toBe(s ? s.played : alias);
+        if (s) expect(s.drafted).toBe(alias);
         expect(order[c.number].type).toBe(c.type_choice === "BanCharacter" ? "ban" : "pick");
       }
     }
@@ -94,15 +99,25 @@ describe("group Bo3", () => {
       expect(g.winner).toBe(winningSide);
     }
   });
-  it("game 1 has 10 participants, game 0 has 9 and one unmatched (Xin Zhao drafted, Vi played)", () => {
+  it("game 0: Xin Zhao was drafted and Vi was played, so the slot shows Vi and the player is kept", () => {
     const [g0, g1] = r.series.games;
+    const drafted = group.choices[g0.externalMatchId].find(
+      (c) => c.is_final && c.type_choice === "PickCharacter" && championAliasForKey(byRes.get(c.id_game_resource).id_external) === "XinZhao"
+    );
+    const slot = getPicksArrayIndex(drafted.number, g0.firstPick);
+    expect(g0.picks[slot]).toBe("Vi");
+    expect(g0.picks).not.toContain("XinZhao");
+    expect(new Set(g0.picks).size).toBe(20);
+    expect(g0.substitutions).toEqual([{ side: "red", slot, drafted: "XinZhao", played: "Vi" }]);
+    expect(Object.keys(g0.participants)).toHaveLength(10);
+    expect(g0.unmatchedParticipants).toBe(0);
+    expect(g0.participants.XinZhao).toBeUndefined();
+    expect(g0.participants.Vi.playerKey).toMatch(/^fake-oauth-/);
+    expect(g0.participants.Olaf).toBeDefined();
+    // game 1 was played as drafted
+    expect(g1.substitutions).toEqual([]);
     expect(Object.keys(g1.participants)).toHaveLength(10);
     expect(g1.unmatchedParticipants).toBe(0);
-    expect(Object.keys(g0.participants)).toHaveLength(9);
-    expect(g0.unmatchedParticipants).toBe(1);
-    expect(g0.participants.XinZhao).toBeUndefined();
-    expect(g0.participants.Vi).toBeUndefined();
-    expect(g0.participants.Olaf).toBeDefined();
   });
   it("participants carry lane, fake key and Riot ID", () => {
     const g1 = r.series.games[1];
@@ -246,7 +261,11 @@ describe("synthetic variants", () => {
       const ref = withP.series.games.find((x) => x.number === n);
       expect(g.blueSideTeam).toBe(ref.blueSideTeam);
       expect(g.firstPick).toBe(ref.firstPick);
-      expect(g.picks).toEqual(ref.picks);
+      // with nobody known to have played, the slots are the draft as esclub recorded it
+      const asDrafted = [...ref.picks];
+      for (const s of ref.substitutions) asDrafted[s.slot] = s.drafted;
+      expect(g.picks).toEqual(asDrafted);
+      expect(g.substitutions).toEqual([]);
       expect(g.participants).toEqual({});
       expect(g.unmatchedParticipants).toBe(0);
     }
@@ -337,6 +356,84 @@ describe("synthetic variants", () => {
     expect(r.failed).toEqual([]);
     expect(r.series.games[1].picks.filter((p) => p === "")).toHaveLength(2);
   });
+  describe("the champion played wins over the one drafted (game 1, played as drafted in the fixture)", () => {
+    const ref = N.normalizeSeries(input(group)).series.games[1];
+    const lolOf = (d) => gm(d, 1).config.integrations[0].LeagueOfLegends;
+    const drafted = new Set(group.choices[id1].filter((c) => c.is_final).map((c) => c.id_game_resource));
+    const spares = resources
+      .filter((x) => x.type_resource === "Character" && championAliasForKey(x.id_external) && !drafted.has(x.id_game_resource))
+      .slice(0, 3)
+      .map((x) => Number(x.id_external));
+    const onSide = (d, side) => lolOf(d).participants.filter((p) => p.side === side);
+    const slotOf = (alias) => ref.picks.indexOf(alias);
+
+    it("one mismatch on each side: both slots take the played champion", () => {
+      let was;
+      const r = run((d) => {
+        const [b, rd] = [onSide(d, 1)[0], onSide(d, 2)[0]];
+        was = [championAliasForKey(b.id_champion), championAliasForKey(rd.id_champion)];
+        b.id_champion = spares[0];
+        rd.id_champion = spares[1];
+      });
+      expect(r.failed).toEqual([]);
+      const g = r.series.games[1];
+      expect(g.substitutions).toEqual([
+        { side: "blue", slot: slotOf(was[0]), drafted: was[0], played: championAliasForKey(spares[0]) },
+        { side: "red", slot: slotOf(was[1]), drafted: was[1], played: championAliasForKey(spares[1]) },
+      ]);
+      expect(g.picks[slotOf(was[0])]).toBe(championAliasForKey(spares[0]));
+      expect(g.picks[slotOf(was[1])]).toBe(championAliasForKey(spares[1]));
+      expect(Object.keys(g.participants)).toHaveLength(10);
+      expect(g.participants[championAliasForKey(spares[0])]).toEqual(ref.participants[was[0]]);
+      expect(g.unmatchedParticipants).toBe(0);
+      expect(g.blueSideTeam).toBe(ref.blueSideTeam);
+      expect(g.winner).toBe(ref.winner);
+    });
+    it("two mismatches on one side: the slot is not guessed, the game fails (EsclubDraftMismatch)", () => {
+      const r = run((d) => {
+        const [a, b] = onSide(d, 2);
+        a.id_champion = spares[0];
+        b.id_champion = spares[1];
+      });
+      expect(r.series.games.map((g) => g.number)).toEqual([0]);
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].number).toBe(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+      expect(r.failed[0].reason).toContain("2 picks");
+    });
+    it("a played champion that is already in the draft (a ban): the game fails (EsclubDraftMismatch)", () => {
+      const ban = group.choices[id1].find((c) => c.is_final && c.type_choice === "BanCharacter");
+      const banKey = Number(byRes.get(ban.id_game_resource).id_external);
+      const r = run((d) => { onSide(d, 1)[0].id_champion = banKey; });
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+      expect(r.failed[0].reason).toContain("already in the draft");
+    });
+    it("a played champion the catalog does not know: the game fails (EsclubUnknownChampion)", () => {
+      const r = run((d) => { onSide(d, 1)[0].id_champion = 999999; });
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubUnknownChampion);
+    });
+    it("a participant missing from esclub's list: the drafted champion stays, nothing is substituted", () => {
+      const r = run((d) => { lolOf(d).participants.splice(0, 1); });
+      const g = r.series.games[1];
+      expect(g.picks).toEqual(ref.picks);
+      expect(g.substitutions).toEqual([]);
+      expect(Object.keys(g.participants)).toHaveLength(9);
+      expect(g.unmatchedParticipants).toBe(0);
+    });
+    it("an extra participant with no pick to replace is only counted as unmatched", () => {
+      const r = run((d) => {
+        const extra = clone(onSide(d, 1)[0]);
+        extra.id_champion = spares[2];
+        lolOf(d).participants.push(extra);
+      });
+      const g = r.series.games[1];
+      expect(g.picks).toEqual(ref.picks);
+      expect(g.substitutions).toEqual([]);
+      expect(g.unmatchedParticipants).toBe(1);
+    });
+  });
   it("a Placeholder pick fails that game only (EsclubUnknownChampion in failed), nothing blanked", () => {
     const r = run((d) => {
       const c = d.choices[id1].find((x) => x.is_final && x.number === 10);
@@ -416,8 +513,10 @@ describe("synthetic variants", () => {
     for (const g of r.series.games) {
       expect(g.firstPick).toBe("red");
       expect(g.blueSideTeam).toBe(2);
+      const replaced = new Map(g.substitutions.map((s) => [s.slot, s.played]));
       for (const c of group.choices[g.externalMatchId].filter((x) => x.is_final)) {
-        expect(g.picks[getPicksArrayIndex(c.number, "red")]).toBe(championAliasForKey(byRes.get(c.id_game_resource).id_external));
+        const slot = getPicksArrayIndex(c.number, "red");
+        expect(g.picks[slot]).toBe(replaced.get(slot) ?? championAliasForKey(byRes.get(c.id_game_resource).id_external));
       }
     }
   });
