@@ -4816,3 +4816,229 @@ fn the_converter_reads_role_maps() {
         "wider than the listed roles on this table"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Slice B, task 1: the synergy weight `w` (design § 1; T1, T3–T6)
+// ---------------------------------------------------------------------------------------------
+
+/// The grid of weights the slice runs (design § 1), the incumbent's 1.0 left out: T1 owns it.
+const W_GRID: [f64; 4] = [0.5, 1.5, 2.0, 3.0];
+
+fn weighted_universe(w: f64) -> LiveUniverse {
+    let (_, meta) = load_production_data();
+    LiveUniverse::build_weighted(&fm(), &meta_version(), &meta, w)
+        .unwrap_or_else(|e| panic!("w = {w}: {e}"))
+}
+
+fn all_idx(u: &Universe) -> Vec<ChampionIdx> {
+    (0..u.len())
+        .map(|i| ChampionIdx(u8::try_from(i).expect("capped at MAX_CHAMPIONS")))
+        .collect()
+}
+
+/// `L` as `Universe::from_tables` sums it: the linear terms in index order, then each pair `a < b`
+/// adding `|s| + |k|` (one add of that sum), then `1 + 2 · Σ`.
+fn loss_by_hand(u: &Universe) -> f64 {
+    let ids = all_idx(u);
+    let mut magnitude = 0.0;
+    for &c in &ids {
+        magnitude += u.linear(c).abs();
+    }
+    for (i, &a) in ids.iter().enumerate() {
+        for &b in &ids[i + 1..] {
+            magnitude += u.synergy(a, b).abs() + u.counter(a, b).abs();
+        }
+    }
+    1.0 + 2.0 * magnitude
+}
+
+/// splitmix64: a seeded stream with no dependency.
+struct Splitmix(u64);
+
+impl Splitmix {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+}
+
+/// Ten distinct champions, five a side, each side index-sorted.
+fn random_board(rng: &mut Splitmix, n: usize) -> (Vec<ChampionIdx>, Vec<ChampionIdx>) {
+    let mut chosen: Vec<usize> = Vec::new();
+    while chosen.len() < 10 {
+        let c = usize::try_from(rng.next() % u64::try_from(n).expect("n")).expect("index");
+        if !chosen.contains(&c) {
+            chosen.push(c);
+        }
+    }
+    let idx = |c: usize| ChampionIdx(u8::try_from(c).expect("capped"));
+    let mut blue: Vec<ChampionIdx> = chosen[..5].iter().map(|&c| idx(c)).collect();
+    let mut red: Vec<ChampionIdx> = chosen[5..].iter().map(|&c| idx(c)).collect();
+    blue.sort();
+    red.sort();
+    (blue, red)
+}
+
+#[test]
+fn build_is_build_weighted_at_one_bit_for_bit() {
+    // T1.
+    let (_, meta) = load_production_data();
+    let a = LiveUniverse::build(&fm(), &meta_version(), &meta).expect("build");
+    let b = LiveUniverse::build_weighted(&fm(), &meta_version(), &meta, 1.0).expect("weighted");
+    assert_eq!(a.synergy_weight.to_bits(), 1.0f64.to_bits());
+    assert_eq!(b.synergy_weight.to_bits(), 1.0f64.to_bits());
+    let (ua, ub) = (&a.universe, &b.universe);
+    assert_eq!(ua.len(), ub.len());
+    let ids = all_idx(ua);
+    for &x in &ids {
+        assert_eq!(ua.id(x), ub.id(x), "id order");
+        assert_eq!(ua.linear(x).to_bits(), ub.linear(x).to_bits());
+        for &y in &ids {
+            assert_eq!(ua.synergy(x, y).to_bits(), ub.synergy(x, y).to_bits());
+            assert_eq!(ua.counter(x, y).to_bits(), ub.counter(x, y).to_bits());
+        }
+    }
+    assert_eq!(ua.loss().to_bits(), ub.loss().to_bits());
+    assert_eq!(ua.live_loss().to_bits(), ub.live_loss().to_bits());
+    assert_eq!(ua.off_pool_cost().to_bits(), ub.off_pool_cost().to_bits());
+}
+
+#[test]
+fn the_weight_scales_synergy_only_and_leaves_everything_else() {
+    // T3.
+    let base = live_universe();
+    let u1 = &base.universe;
+    let ids = all_idx(u1);
+    for w in W_GRID {
+        let lw = weighted_universe(w);
+        assert_eq!(lw.synergy_weight.to_bits(), w.to_bits());
+        let uw = &lw.universe;
+        assert_eq!(uw.len(), u1.len(), "w = {w}");
+        for &a in &ids {
+            assert_eq!(uw.id(a), u1.id(a), "id order, w = {w}");
+            assert_eq!(uw.linear(a).to_bits(), u1.linear(a).to_bits(), "linear");
+            for role in engine_core::coverage::ROLES {
+                assert_eq!(uw.is_playable(a, role), u1.is_playable(a, role));
+                assert_eq!(uw.grade(a, role), u1.grade(a, role));
+                assert_eq!(
+                    uw.share(a, role).map(f64::to_bits),
+                    u1.share(a, role).map(f64::to_bits)
+                );
+            }
+            for &b in &ids {
+                assert_eq!(
+                    uw.synergy(a, b).to_bits(),
+                    (w * u1.synergy(a, b)).to_bits(),
+                    "synergy({}, {}) at w = {w}",
+                    u1.id(a),
+                    u1.id(b)
+                );
+                assert_eq!(uw.counter(a, b).to_bits(), u1.counter(a, b).to_bits());
+                if a != b {
+                    assert_eq!(uw.synergy(a, b).to_bits(), uw.synergy(b, a).to_bits());
+                    assert_eq!(uw.counter(a, b).to_bits(), (-uw.counter(b, a)).to_bits());
+                }
+            }
+            // The diagonal is +0.0 and its negation -0.0: equal, not bit-equal.
+            assert!(uw.synergy(a, a) == 0.0 && uw.counter(a, a) == 0.0);
+        }
+    }
+}
+
+#[test]
+fn l_and_the_live_band_follow_the_weighted_sum() {
+    // T4.
+    let mut printed = Vec::new();
+    let weights = [0.5, 1.0, 1.5, 2.0, 3.0];
+    for w in weights {
+        let lw = weighted_universe(w);
+        let u = &lw.universe;
+        let by_hand = loss_by_hand(u);
+        assert_eq!(u.loss().to_bits(), by_hand.to_bits(), "L at w = {w}");
+        assert_eq!(
+            u.live_loss().to_bits(),
+            (u.loss() + 10.0 * u.off_pool_cost()).to_bits(),
+            "L' at w = {w}"
+        );
+        assert_eq!(u.off_pool_cost().to_bits(), u.loss().to_bits(), "P = L");
+        printed.push(format!("w = {w}: L = {:.1}", u.loss()));
+    }
+    println!("{}", printed.join("\n"));
+}
+
+#[test]
+fn boards_stay_antisymmetric_and_the_leaf_bands_stay_ordered_at_every_weight() {
+    // T5.
+    for w in [0.5, 1.0, 1.5, 2.0, 3.0] {
+        let lw = weighted_universe(w);
+        let u = &lw.universe;
+        let mut rng = Splitmix(0x5EED_0000 + (w * 10.0) as u64);
+        for _ in 0..200 {
+            let (blue, red) = random_board(&mut rng, u.len());
+            let ab = u.board_value(&blue, &red);
+            let ba = u.board_value(&red, &blue);
+            assert!((ab - (-ba)).abs() <= 1e-12, "w = {w}: {ab} vs {}", -ba);
+
+            let value = |bf: bool, rf: bool, boff: usize, roff: usize| {
+                u.value_under(
+                    &Leaf {
+                        blue: &blue,
+                        red: &red,
+                        blue_feasible: bf,
+                        red_feasible: rf,
+                    },
+                    FeasibilityRule::Roster,
+                    0.15,
+                    0.4,
+                    boff,
+                    roff,
+                    100 * boff,
+                    100 * roff,
+                )
+            };
+            let (mut blue_broken_max, mut red_broken_min) = (f64::NEG_INFINITY, f64::INFINITY);
+            let (mut feasible_min, mut feasible_max) = (f64::INFINITY, f64::NEG_INFINITY);
+            for boff in 0..=5 {
+                for roff in 0..=5 {
+                    blue_broken_max = blue_broken_max.max(value(false, true, boff, roff));
+                    red_broken_min = red_broken_min.min(value(true, false, boff, roff));
+                    let f = value(true, true, boff, roff);
+                    feasible_min = feasible_min.min(f);
+                    feasible_max = feasible_max.max(f);
+                }
+            }
+            assert!(
+                blue_broken_max < feasible_min,
+                "w = {w}: {blue_broken_max} !< {feasible_min}"
+            );
+            assert!(
+                feasible_max < red_broken_min,
+                "w = {w}: {feasible_max} !< {red_broken_min}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_weight_must_be_finite_and_non_negative_and_zero_is_legal() {
+    // T6.
+    let (_, meta) = load_production_data();
+    for w in [-0.5, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let r = LiveUniverse::build_weighted(&fm(), &meta_version(), &meta, w);
+        assert!(
+            matches!(r, Err(LiveError::SynergyWeight(_))),
+            "w = {w}: {:?}",
+            r.map(|_| ())
+        );
+    }
+    let zero = LiveUniverse::build_weighted(&fm(), &meta_version(), &meta, 0.0).expect("w = 0");
+    let ids = all_idx(&zero.universe);
+    for &a in &ids {
+        for &b in &ids {
+            assert!(zero.universe.synergy(a, b) == 0.0);
+        }
+    }
+}

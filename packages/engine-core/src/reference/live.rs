@@ -21,6 +21,9 @@ use crate::pools::RolePoolMap;
 use crate::role_solver::ChampionMeta;
 use std::collections::HashMap;
 
+/// The synergy weight `w₀` the engine runs at (design § 1). 1.0: the FM as shipped.
+pub const DEFAULT_SYNERGY_WEIGHT: f64 = 1.0;
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum LiveError {
     /// A champion ON THE BOARD the universe does not know: the position cannot be represented.
@@ -35,6 +38,8 @@ pub enum LiveError {
     },
     #[error("{count} entries but the standard format has {slots} slots")]
     TooManyEntries { count: usize, slots: usize },
+    #[error("synergy weight {0} must be finite and >= 0")]
+    SynergyWeight(f64),
     #[error(transparent)]
     Universe(#[from] UniverseError),
     #[error(transparent)]
@@ -68,8 +73,10 @@ pub struct LiveUniverse {
     /// incumbent's UNKNOWN padding). Sorted. Empty on the shipped files.
     pub padded: Vec<String>,
     /// Champions left OUT of the universe, with the reason (U4). Sorted by id. Empty on the shipped
-    /// files. Never a build error: the build fails only on a non-finite FM parameter.
+    /// files. Never a build error: the build fails only on a non-finite FM parameter or a refused synergy weight.
     pub dropped: Vec<Dropped>,
+    /// The weight `w` every `synergy` entry was scaled by at build (design § 1). 1.0 on `build`.
+    pub synergy_weight: f64,
 }
 
 impl LiveUniverse {
@@ -80,6 +87,22 @@ impl LiveUniverse {
         meta_version: &str,
         meta: &HashMap<String, ChampionMeta>,
     ) -> Result<Self, LiveError> {
+        // A literal, never `DEFAULT_SYNERGY_WEIGHT`: `build` is FM-exact whatever the default is.
+        Self::build_weighted(fm, meta_version, meta, 1.0)
+    }
+
+    /// `build` with every synergy entry scaled by `synergy_weight` (design § 1): `syn_w(a, b) =
+    /// w · dot(s_a, s_b)`. `counter` and `linear` are untouched. `w` must be finite and `>= 0`
+    /// (checked first); `0.0` is legal and zeroes the synergy table.
+    pub fn build_weighted(
+        fm: &FmWeights,
+        meta_version: &str,
+        meta: &HashMap<String, ChampionMeta>,
+        synergy_weight: f64,
+    ) -> Result<Self, LiveError> {
+        if !synergy_weight.is_finite() || synergy_weight < 0.0 {
+            return Err(LiveError::SynergyWeight(synergy_weight));
+        }
         let mut dropped: Vec<Dropped> = fm
             .aliases()
             .filter(|id| !meta.contains_key(*id))
@@ -143,7 +166,7 @@ impl LiveUniverse {
         let mut counter = vec![vec![0.0; n]; n];
         for x in 0..n {
             for y in (x + 1)..n {
-                synergy[x][y] = dot(rows[x].0, rows[y].0);
+                synergy[x][y] = synergy_weight * dot(rows[x].0, rows[y].0);
                 counter[x][y] = dot(rows[x].1, rows[y].2) - dot(rows[x].2, rows[y].1);
             }
         }
@@ -154,6 +177,7 @@ impl LiveUniverse {
             meta_version: meta_version.to_string(),
             padded,
             dropped,
+            synergy_weight,
         })
     }
 }
