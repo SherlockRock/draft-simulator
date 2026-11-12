@@ -144,8 +144,10 @@ export function emptySelection(): Selection {
     return { scope: "active", ids: new Set() };
 }
 
+// Imported and tournament rows are never selectable, whatever the server flags
+// say; only a pickup team (no tournament) with an archive or delete right is.
 function isSelectable(team: ManagedTeamRow): boolean {
-    return team.canArchive || team.canDelete;
+    return !team.tournament_id && (team.canArchive || team.canDelete);
 }
 
 function scopeOf(team: ManagedTeamRow): SelectionScope {
@@ -198,12 +200,7 @@ export function toggleGroupSelected(
 export function pruneSelection(sel: Selection, data: TeamsManageResponse): Selection {
     const keep = new Set<string>();
     for (const team of data.teams) {
-        if (
-            sel.ids.has(team.id) &&
-            !team.tournament_id &&
-            isSelectable(team) &&
-            scopeOf(team) === sel.scope
-        ) {
+        if (sel.ids.has(team.id) && isSelectable(team) && scopeOf(team) === sel.scope) {
             keep.add(team.id);
         }
     }
@@ -256,6 +253,7 @@ function breakdown(uses: TeamUseCounts): string {
     return parts.join(", ");
 }
 
+// Callers must pass a non-empty list (the dialog opens only with a selection).
 export function deleteConfirmText(rows: readonly ManagedTeamRow[]): string {
     const total = rows.reduce((n, r) => n + r.useCounts.total, 0);
     const uses: TeamUseCounts = {
@@ -271,7 +269,8 @@ export function deleteConfirmText(rows: readonly ManagedTeamRow[]): string {
             ? `${subject} It isn't linked to any series on your canvases. This can't be undone.`
             : `${subject} They aren't linked to any series on your canvases. This can't be undone.`;
     }
-    const linked = `${total} series on your canvases (${breakdown(uses)})`;
+    const parts = breakdown(uses);
+    const linked = `${total} series on your canvases${parts ? ` (${parts})` : ""}`;
     return single
         ? `${subject} It's linked to ${linked}. Those series keep its name as plain text. This can't be undone.`
         : `${subject} They're linked to ${linked}. Those series keep their names as plain text. This can't be undone.`;

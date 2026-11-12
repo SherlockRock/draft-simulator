@@ -214,6 +214,20 @@ describe("buildTeamsPageGroups", () => {
         expect(result).toEqual([{ kind: "pickup", teams: [] }]);
     });
 
+    it("emits the archived group for an archived pickup team alone", () => {
+        const result = buildTeamsPageGroups({
+            tournaments: [],
+            teams: [team("x", "Gone", { archived_at: "2026-10-02T00:00:00Z" })]
+        });
+        expect(result.map((g) => g.kind)).toEqual(["pickup", "archived"]);
+        const a = result[1];
+        expect(a.kind).toBe("archived");
+        if (a.kind === "archived") {
+            expect(a.tournaments).toEqual([]);
+            expect(a.pickupTeams.map((t) => t.id)).toEqual(["x"]);
+        }
+    });
+
     it("keeps an archived league with no teams in the archived group", () => {
         const result = buildTeamsPageGroups({
             tournaments: [tournaments[3]],
@@ -337,6 +351,27 @@ describe("selection", () => {
         expect([...pruneSelection(sel, data).ids]).toEqual(["x1"]);
     });
 
+    it("pruneSelection drops a row that now has a tournament_id even if canArchive is true", () => {
+        const sel = toggleSelected(emptySelection(), "p1", "active");
+        const after: TeamsManageResponse = {
+            tournaments: [],
+            teams: [team("p1", "cats", { tournament_id: "tX" })]
+        };
+        expect(pruneSelection(sel, after).ids.size).toBe(0);
+    });
+
+    it("selectableIds never offers a tournament row, even with canArchive true", () => {
+        const g = {
+            kind: "tournament" as const,
+            id: "tX",
+            name: "X",
+            region: "na1",
+            source: "esclub",
+            teams: [imported("i", "I", "tX", { canArchive: true, canDelete: true })]
+        };
+        expect(selectableIds(g)).toEqual([]);
+    });
+
     it("pruneSelection drops rows that are no longer selectable", () => {
         const sel = toggleSelected(emptySelection(), "p1", "active");
         const after: TeamsManageResponse = {
@@ -378,6 +413,14 @@ describe("selectionSummary", () => {
         const s = selectionSummary(sel, pickupRows);
         expect(s.count).toBe(1);
         expect(s.uses.total).toBe(1);
+    });
+
+    it("canRestore needs every archived row to be archivable", () => {
+        const rows = [team("x1", "A", { canArchive: false, canDelete: true })];
+        const sel = toggleSelected(emptySelection(), "x1", "archived");
+        const s = selectionSummary(sel, rows);
+        expect(s.canRestore).toBe(false);
+        expect(s.canDelete).toBe(true);
     });
 
     it("an empty selection can do nothing", () => {
@@ -439,6 +482,18 @@ describe("strings", () => {
             deleteConfirmText([team("d", "DOG", { useCounts: counts(0, 0, 1) })])
         ).toBe(
             "Delete DOG? It's linked to 1 series on your canvases (1 scratch). Those series keep its name as plain text. This can't be undone."
+        );
+    });
+
+    it("omits the parentheses when the total is above 0 but every part is 0", () => {
+        expect(
+            deleteConfirmText([
+                team("d", "DOG", {
+                    useCounts: { official: 0, scrim: 0, scratch: 0, total: 2 }
+                })
+            ])
+        ).toBe(
+            "Delete DOG? It's linked to 2 series on your canvases. Those series keep its name as plain text. This can't be undone."
         );
     });
 
