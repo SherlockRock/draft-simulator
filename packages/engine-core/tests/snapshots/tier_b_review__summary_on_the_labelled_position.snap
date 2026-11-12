@@ -1,0 +1,63 @@
+---
+source: packages/engine-core/tests/tier_b_review.rs
+expression: render_summary(base_review())
+---
+Tier B review summary: run 2026-11-09T00:00:00Z (engine test, data fm fm-2026-09-01-6880daa / meta 16.13.1 / positions patch 16.19)
+1 positions, 5 arms, margin ε 0.01, reference arm roster:0.1:0.05
+labels: 3 options over 1 of 1 positions (2 blind, 1 scored only), 1 own picks (1 blind)
+read from the current fold, no blind answer: 1 labels, 0 own picks
+
+P x Q: never@1 / never@3 / pick@3 (rows P, columns Q)
+  (+n) near ties, not read by the rule; ≥n unjudged, n is the lower bound; * the rule's pick; ^ the reference arm
+          Q=0       Q=0.05
+P=0.02    ≥0/≥0/0   ≥0/≥0/0
+P=0.1     ≥0/≥0/0   ≥0/≥0/0^
+pool_or_roster (not selectable)  ≥0/≥0/0
+
+Upper bounds for the ≥ cells (never + unjudged, at k = 1 / k = 3):
+  pool_or_roster  ≤1 / ≤1
+  roster:0.02:0  ≤1 / ≤1
+  roster:0.1:0  ≤1 / ≤1
+  roster:0.02:0.05  ≤1 / ≤1
+  roster:0.1:0.05  ≤1 / ≤1
+  floor:0.1  ≤1 / ≤1
+  floor:0.25  ≤1 / ≤1
+
+Floor rows (the reference ranking with options holding an off-pool placement below r removed; root-only, no re-search; never selectable)
+  floor:0.1  r < 0.1  ≥0/≥0/0  non-speaking 0 of 1, unknown r kept 0
+  floor:0.25  r < 0.25  ≥0/≥0/0  non-speaking 0 of 1, unknown r kept 0
+
+The rule: 0 of 4 arms readable, so it names no pick. The worklist below says what is left to judge.
+Sensitivity (the pick at other margins, and with each draft left out):
+  ε 0.005: no pick (0 readable)
+  ε 0.02: no pick (0 readable)
+  without labelled-position: no pick (0 readable)
+Second line (the rule on the current fold): 0 of 4 arms readable, pick none readable (same as the blind read)
+
+bad_line@1 (bad of judged; an unjudged line is not a good one):
+  reference, roster:0.1:0.05: 0 bad of 0 judged, 1 unjudged, 0 with no line
+never_everywhere (a clear never at #1 at every readable arm): none (no readable arm)
+r_by_label (options with one off-pool placement; play / maybe / never):
+  r < 0.1    0 / 0 / 0
+  r < 0.25   0 / 0 / 0
+  r < 0.5    0 / 0 / 0
+  r < 1      0 / 0 / 0
+  r = 1      0 / 0 / 0
+  r unknown  0 / 0 / 0
+reveal_changes: 1 of 2 blind labels and 0 of 1 blind picks changed after the reveal; drafts revealed: labelled-position; reveals with no change: none
+
+Worklist
+  unlabelled rows: 10 over 1 positions
+    labelled-position: 10
+      Leona+Zeri|top=Rumble,adc=Zeri,support=Leona
+      Alistar+Zeri|top=Rumble,adc=Zeri,support=Alistar
+      Cassiopeia+Leona|top=Rumble,mid=Cassiopeia,support=Leona
+      Alistar+Galio|top=Rumble,mid=Galio,support=Alistar
+      Galio+Leona|top=Rumble,mid=Galio,support=Leona
+      Alistar+Zyra|top=Rumble,jungle=Zyra,support=Alistar
+      Thresh+Zyra|top=Rumble,jungle=Zyra,support=Thresh
+      Leona+Zyra|top=Rumble,jungle=Zyra,support=Leona
+      Shaco+Thresh|top=Rumble,jungle=Shaco,support=Thresh
+      Alistar+Kayle|top=Rumble,mid=Kayle,support=Alistar
+  #1 lines at roster:0.1:0.05 with no line verdict: 1 (0 not judgeable on the page: it offers a verdict only on the reference arm's #1 line)
+    labelled-position: Leona+Zeri|top=Rumble,adc=Zeri,support=Leona — Bard

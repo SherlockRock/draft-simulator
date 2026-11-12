@@ -12,14 +12,23 @@
 
 use super::entries::role_key;
 use super::feasibility::{
-    action_charge, arrangement, open_roles, placements, FeasibilityMemo, FeasibilityRule, Price,
-    SidePlacement,
+    action_charge, arrangement, open_roles, placements, Charge, FeasibilityMemo, FeasibilityRule,
+    Price, SidePlacement,
 };
 use super::live::LiveUniverse;
+use super::node::LeafEnd;
 use super::oracle::{Mode, OracleInput};
 use super::search::{search, RankedAction, SearchOutcome, SearchParams, Shortlist};
 use super::state::{Action, Entry, Pools, Position};
-use super::tier_b::{Category, Label, Loaded, OptionKey, TierBError, TierBFixture};
+use super::tier_b::{
+    Category, Label, Loaded, OptionKey, ResolvedVerdicts, TierBError, TierBFixture,
+};
+use super::tier_b_rule::{
+    canonical_line, line_text, read_run, ArmInput, ArmRole, ArmSpec, Fold, LabelChange, PickChange,
+    PositionInput, RBucket, Read, RevealRead, TopLine, FLOOR_RATIOS,
+};
+use super::tier_b_summary::metrics_json_of;
+pub use super::tier_b_summary::{render_summary, summary_of};
 use super::universe::{ChampionIdx, Universe, DEFAULT_OFF_POOL_COST, DEFAULT_OFF_ROLE_COST};
 use crate::cancellation::CancelHandle;
 use crate::draft_state::{ActionType, Side};
@@ -147,6 +156,13 @@ pub struct ReviewRun {
     pub positions: Vec<PositionRead>,
     /// A malformed fixture is reported here, in its place: the rest of the corpus still runs.
     pub load_errors: Vec<String>,
+    /// The rule's reading of the run (design § 4), kept in memory, not serialised: `metrics` (below) is its view in the JSON.
+    #[serde(skip)]
+    pub read: Read,
+    /// What the rule read, for the page's results tab and the summary (`tier_b_summary`). Additive to
+    /// `tier-b-run/1`: absent when no position carries a label or an own pick.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -452,6 +468,9 @@ pub struct PositionRead {
     /// search failed or was cut.
     pub reference_ranking: Vec<RankedActionWire>,
     pub menu: MenuWire,
+    /// What the rule reads (design § 4), prepared before anything is pruned. In memory only.
+    #[serde(skip)]
+    pub scoring: PositionInput,
 }
 
 // ---- the run ----------------------------------------------------------------------------------------
@@ -503,7 +522,7 @@ pub fn run_review(
             cfg,
         )
     });
-    ReviewRun {
+    let mut run = ReviewRun {
         schema: SCHEMA,
         run: RunHeader {
             id: cfg.run_id.clone(),
@@ -542,9 +561,47 @@ pub fn run_review(
                 })
                 .collect(),
         },
+        read: read_of(&positions, &arms, cfg.margin),
         positions,
         load_errors,
-    }
+        metrics: None,
+    };
+    run.metrics = metrics_json_of(&run);
+    run
+}
+
+/// The rule's reading of the whole run: the arms, then the floor rows, through `read_run`.
+fn read_of(positions: &[PositionRead], arms: &[Arm], margin: f64) -> Read {
+    let mut specs: Vec<ArmSpec> = arms
+        .iter()
+        .map(|a| match a.kind {
+            ArmKind::PoolOrRoster => ArmSpec {
+                id: a.id.clone(),
+                role: ArmRole::PoolOrRoster,
+                p: None,
+                q: None,
+            },
+            ArmKind::Roster { p, q } => ArmSpec {
+                id: a.id.clone(),
+                role: ArmRole::Roster,
+                p: Some(p),
+                q: Some(q),
+            },
+        })
+        .collect();
+    specs.extend(FLOOR_RATIOS.iter().map(|r| ArmSpec {
+        id: floor_id(*r),
+        role: ArmRole::Floor,
+        p: None,
+        q: None,
+    }));
+    let inputs: Vec<&PositionInput> = positions.iter().map(|p| &p.scoring).collect();
+    read_run(&inputs, &specs, &reference_kind().id(), margin)
+}
+
+/// A floor row's id: `floor:0.1`, `floor:0.25`.
+fn floor_id(ratio: f64) -> String {
+    format!("floor:{ratio}")
 }
 
 /// `f(0..n)` on `jobs` threads, an atomic index handing out the work, results in index order: the
@@ -641,6 +698,18 @@ fn category_name(category: Category) -> &'static str {
     }
 }
 
+/// How an action's placements read: in-pool; off-pool with a grade charged (a graded charge on the
+/// action, or an off-pool placement of the action's own carrying a grade); off-pool without.
+fn class_of(c: Charge, side: &[SidePlacement]) -> TopClassName {
+    if c.is_in_pool() {
+        TopClassName::InPool
+    } else if c.d_grade != 0 || side.iter().any(|p| !p.locked && !p.in_pool && p.grade > 0) {
+        TopClassName::Graded
+    } else {
+        TopClassName::Base
+    }
+}
+
 fn comp_of(side: &[SidePlacement]) -> Option<[Option<ChampionIdx>; 5]> {
     if side.is_empty() {
         return None;
@@ -665,6 +734,15 @@ fn comp_wire(comp: &[Option<ChampionIdx>; 5], u: &Universe) -> CompWire {
     }
 }
 
+/// A placement's share ratio `r`: the champion's share in that role over its largest; `None` where the
+/// meta lists no share.
+fn share_ratio(u: &Universe, champion: ChampionIdx, role: Role) -> Option<f64> {
+    match (u.share(champion, role), u.max_share(champion)) {
+        (Some(s), Some(max)) if max > 0.0 => Some(s / max),
+        _ => None,
+    }
+}
+
 fn side_wire(side: &[SidePlacement], u: &Universe) -> Vec<SideWire> {
     side.iter()
         .map(|p| SideWire {
@@ -673,10 +751,7 @@ fn side_wire(side: &[SidePlacement], u: &Universe) -> Vec<SideWire> {
             locked: p.locked,
             in_pool: p.in_pool,
             grade: p.grade,
-            r: match (u.share(p.champion, p.role), u.max_share(p.champion)) {
-                (Some(s), Some(max)) if max > 0.0 => Some(s / max),
-                _ => None,
-            },
+            r: share_ratio(u, p.champion, p.role),
         })
         .collect()
 }
@@ -1149,16 +1224,7 @@ fn read_position(
                 None => (TopClassName::InPool, 0, 0),
                 Some(charge) => {
                     let c = charge.of(r.action);
-                    let class = if c.is_in_pool() {
-                        TopClassName::InPool
-                    } else if c.d_grade != 0
-                        || side.iter().any(|p| !p.locked && !p.in_pool && p.grade > 0)
-                    {
-                        TopClassName::Graded
-                    } else {
-                        TopClassName::Base
-                    };
-                    (class, c.d_off, c.d_grade)
+                    (class_of(c, &side), c.d_off, c.d_grade)
                 }
             };
             if view.best_in_pool == Some(i) {
@@ -1280,9 +1346,22 @@ fn read_position(
         Some(depth_check_of(&searched[at], deep, cfg.horizon + 1, u))
     });
 
+    let scoring = scoring_of(
+        fx,
+        &position,
+        mover,
+        pick_root,
+        &views,
+        &catalog,
+        depth_check.as_ref().and_then(|d| d.stable),
+        &resolved,
+        u,
+    );
+
     PositionRead {
         id: fx.id.clone(),
         draft: draft_of(&fx.id),
+        scoring,
         depth_check,
         open_roles: open
             .iter()
@@ -1341,6 +1420,506 @@ fn read_position(
         },
         options,
         readings,
+    }
+}
+
+// ---- scoring a ranking (design § 4) ------------------------------------------------------------------
+
+/// The cut-offs every metric is read at.
+pub const SCORE_KS: [usize; 4] = [1, 3, 5, 10];
+
+/// One entry of a full, mover-ordered ranking, as `score_ranking` reads it. This is the T12 seam: no
+/// search or leaf type appears here. `option` is resolved wherever a label exists for the action and is
+/// `None` otherwise (an unlabelled action needs no trace). `value` is Blue-perspective;
+/// `opponent_charge` is the opponent's off-pool and grade charge only (never an infeasibility band,
+/// which stays in `value`).
+#[derive(Clone, Debug)]
+pub struct ScoredAction {
+    pub action: Action,
+    pub value: f64,
+    pub option: Option<OptionKey>,
+    /// Must agree with `own_pick_in_pool` for the own pick's entry (debug-asserted there; nothing else
+    /// reads it: the floor rows read the traced sides and `top_in_pool` reads `class`).
+    pub in_pool: bool,
+    pub class: TopClassName,
+    pub opponent_charge: f64,
+}
+
+/// Where the reader's own pick stands. `NoPick` (no view, or not answered) takes the position out of the
+/// pick metrics; `Absent` (the action is not in the ranking) is rank infinity, left out of regret and
+/// counted.
+#[derive(Clone, Debug, PartialEq)]
+pub enum OwnPick {
+    NoPick,
+    Absent,
+    /// `rank` is 1 + the number of strictly better values; `regret` the mover-signed logit gap from #1.
+    Ranked {
+        rank: usize,
+        regret: f64,
+    },
+}
+
+/// One k's reading of a position, so a caller does not index the `[bool; 4]`s by hand.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AtK {
+    pub never: bool,
+    pub near: bool,
+    pub unjudged: bool,
+    pub play: bool,
+    pub no_play: bool,
+    pub neither_play: bool,
+    pub pick: bool,
+    pub pick_off: bool,
+}
+
+impl PositionScore {
+    /// The metrics at `k`, one of `SCORE_KS`; `None` for any other k.
+    pub fn at(&self, k: usize) -> Option<AtK> {
+        let j = SCORE_KS.iter().position(|&x| x == k)?;
+        Some(AtK {
+            never: self.never[j],
+            near: self.near[j],
+            unjudged: self.unjudged[j],
+            play: self.play[j],
+            no_play: self.no_play[j],
+            neither_play: self.neither_play[j],
+            pick: self.pick[j],
+            pick_off: self.pick_off[j],
+        })
+    }
+}
+
+impl OwnPick {
+    /// The rank as the median reads it: infinity when absent, `None` (outside the metric) with no pick.
+    pub fn rank_for_median(&self) -> Option<f64> {
+        match self {
+            OwnPick::NoPick => None,
+            OwnPick::Absent => Some(f64::INFINITY),
+            OwnPick::Ranked { rank, .. } => Some(*rank as f64),
+        }
+    }
+}
+
+/// One position's reading of one ranking. Every `[bool; 4]` is indexed like `SCORE_KS`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionScore {
+    pub never: [bool; 4],
+    pub near: [bool; 4],
+    pub unjudged: [bool; 4],
+    pub play: [bool; 4],
+    pub no_play: [bool; 4],
+    /// In neither `play` nor `no_play`: an unlabelled option is in range and no `play` is.
+    pub neither_play: [bool; 4],
+    pub pick: [bool; 4],
+    /// `pick`, only where the own pick is off-pool (`pick_off_eligible`).
+    pub pick_off: [bool; 4],
+    pub pick_off_eligible: bool,
+    pub own: OwnPick,
+    /// The #1 changes when the opponent's leaf charges are taken out of the values.
+    pub opp_lead: bool,
+    pub class_at_1: Option<TopClassName>,
+}
+
+/// Scores a full, mover-ordered (best first for the mover; debug-asserted) ranking against the resolved labels (design § 4). Values are
+/// Blue-perspective, so every comparison reads `sign * value`; every `margin` bound is inclusive.
+pub fn score_ranking(
+    mover: Side,
+    ranking: &[ScoredAction],
+    labels: &HashMap<OptionKey, Label>,
+    own_pick: Option<Action>,
+    own_pick_in_pool: bool,
+    margin: f64,
+) -> PositionScore {
+    let sign = mover_sign(mover);
+    let signed: Vec<f64> = ranking.iter().map(|a| sign * a.value).collect();
+    debug_assert!(
+        signed.windows(2).all(|w| w[0] >= w[1]),
+        "the ranking must be best-first for the mover"
+    );
+    let rank = ranks(&signed);
+    let label = |a: &ScoredAction| a.option.as_ref().and_then(|o| labels.get(o)).copied();
+
+    // A clear `never` at k, with unlabelled options read as `never` or not.
+    let clear = |k: usize, unlabelled_never: bool| -> bool {
+        let is_never = |a: &ScoredAction| match label(a) {
+            Some(l) => l == Label::Never,
+            None => unlabelled_never,
+        };
+        let Some(best) = ranking.iter().position(is_never) else {
+            return false;
+        };
+        let floor = signed[best] - margin;
+        let count = ranking
+            .iter()
+            .enumerate()
+            .filter(|(i, a)| !is_never(a) && (*i < best || signed[*i] >= floor))
+            .count();
+        count < k
+    };
+
+    let mut score = PositionScore {
+        never: [false; 4],
+        near: [false; 4],
+        unjudged: [false; 4],
+        play: [false; 4],
+        no_play: [false; 4],
+        neither_play: [false; 4],
+        pick: [false; 4],
+        pick_off: [false; 4],
+        pick_off_eligible: own_pick.is_some() && !own_pick_in_pool,
+        own: OwnPick::NoPick,
+        opp_lead: false,
+        class_at_1: ranking.first().map(|a| a.class),
+    };
+
+    let own_index = own_pick.and_then(|p| ranking.iter().position(|a| a.action == p));
+    debug_assert!(
+        own_index.is_none_or(|i| ranking[i].in_pool == own_pick_in_pool),
+        "own_pick_in_pool must agree with the ranked entry's in_pool"
+    );
+    if own_pick.is_some() {
+        score.own = match own_index {
+            Some(i) => OwnPick::Ranked {
+                rank: rank[i],
+                regret: signed[0] - signed[i] + 0.0,
+            },
+            None => OwnPick::Absent,
+        };
+    }
+
+    for (j, &k) in SCORE_KS.iter().enumerate() {
+        let as_never = clear(k, true);
+        let as_not = clear(k, false);
+        score.never[j] = as_never && as_not;
+        score.unjudged[j] = as_never != as_not;
+
+        let top = rank_prefix(&rank, k);
+        let top_labels: Vec<Option<Label>> = ranking[..top].iter().map(label).collect();
+        score.play[j] = top_labels.contains(&Some(Label::Play));
+        score.no_play[j] = top > 0 && top_labels.iter().all(|l| l.is_some()) && !score.play[j];
+        score.neither_play[j] = !score.play[j] && !score.no_play[j];
+        score.near[j] =
+            top_labels.contains(&Some(Label::Never)) && !score.never[j] && !score.unjudged[j];
+
+        if let Some(i) = own_index {
+            // Within ε of the k-th entry's value, or in the top k by rank.
+            let kth = signed[k.min(signed.len()) - 1];
+            score.pick[j] = rank[i] <= k || signed[i] >= kth - margin;
+            score.pick_off[j] = score.pick[j] && score.pick_off_eligible;
+        }
+    }
+
+    // The #1 with the opponent's leaf charges taken out, re-ordered for the mover; a tie keeps the
+    // original #1.
+    // `sign * (value - sign * charge)` is `sign * value - charge`.
+    let adjusted = |i: usize| signed[i] - ranking[i].opponent_charge;
+    let mut lead = 0;
+    for i in 1..ranking.len() {
+        if adjusted(i) > adjusted(lead) {
+            lead = i;
+        }
+    }
+    score.opp_lead = lead != 0;
+    score
+}
+
+// ---- what the rule reads (design § 4), prepared before anything is pruned ----------------------------
+
+/// What a leaf end charges the mover's opponent: that side's off-pool count × P plus its grade units ×
+/// Q/100, at the arm's price. Never the infeasibility band: an infeasible end's `L'` lives in the value
+/// and is not charge, so taking the opponent's charge out of the value must not take the band with it.
+pub fn opponent_charge(ends: &LeafEnd, mover: Side, price: Price) -> f64 {
+    let (off, grade) = match mover {
+        Side::Blue => (ends.red_off_pool, ends.red_grade),
+        Side::Red => (ends.blue_off_pool, ends.blue_grade),
+    };
+    off as f64 * price.p + grade as f64 * price.q_unit
+}
+
+/// One arm's full ranking as `score_ranking` reads it, with the trace each entry came from.
+struct ArmData {
+    input: ArmInput,
+    keys: Vec<OptionKey>,
+    sides: Vec<Vec<SidePlacement>>,
+}
+
+fn silent(id: &str) -> ArmInput {
+    ArmInput {
+        id: id.to_string(),
+        speaks: false,
+        ranking: Vec::new(),
+        own_in_pool: Vec::new(),
+        top_line: None,
+        unknown_r_kept: 0,
+    }
+}
+
+/// The #1's line, or `None` where the continuation is empty (slot 19: no line to judge, design § 1).
+fn top_line_of(key: &OptionKey, ranked: &RankedAction, u: &Universe) -> Option<TopLine> {
+    let turns: Vec<Vec<String>> = ranked.continuation.iter().map(|a| ids(*a, u)).collect();
+    (!turns.is_empty()).then(|| TopLine {
+        option: key.clone(),
+        option_id: key.id(u),
+        line: line_text(&turns),
+    })
+}
+
+/// Traces `arrangement` for every action of the arm's whole ranking at the arm's price, so the class,
+/// the option and (at the reference arm) the floor rows read every action, a moved locked pick
+/// included. `option` is set only where the traced key carries a label in some fold: an arrangement
+/// that differs from the labelled comp reads unlabelled (the fail-safe).
+#[allow(clippy::too_many_arguments)]
+fn arm_data(
+    arm: &Arm,
+    outcome: &SearchOutcome,
+    position: &Position<'_>,
+    mover: Side,
+    pools: &Pools,
+    labels: &HashMap<OptionKey, Label>,
+    picks: &[Action],
+    u: &Universe,
+) -> ArmData {
+    let price = arm.kind.price(u);
+    let mut memo = FeasibilityMemo::new(price);
+    let charge = action_charge(&mut memo, arm.kind.rule(), mover, position, pools, u);
+    let mut trace_memo = FeasibilityMemo::new(price);
+    let mut ranking = Vec::with_capacity(outcome.ranked.len());
+    let mut keys = Vec::with_capacity(outcome.ranked.len());
+    let mut sides = Vec::with_capacity(outcome.ranked.len());
+    for r in &outcome.ranked {
+        let side = arrangement(&mut trace_memo, mover, position, pools, u, r.action);
+        let key = OptionKey {
+            action: r.action,
+            comp: comp_of(&side),
+        };
+        let c = charge.of(r.action);
+        ranking.push(ScoredAction {
+            action: r.action,
+            value: r.value,
+            option: labels.contains_key(&key).then(|| key.clone()),
+            in_pool: c.is_in_pool(),
+            class: class_of(c, &side),
+            opponent_charge: opponent_charge(&r.ends, mover, price),
+        });
+        keys.push(key);
+        sides.push(side);
+    }
+    let top_line = outcome
+        .ranked
+        .first()
+        .and_then(|r| top_line_of(&keys[0], r, u));
+    ArmData {
+        input: ArmInput {
+            id: arm.id.clone(),
+            speaks: true,
+            ranking,
+            own_in_pool: picks
+                .iter()
+                .map(|a| (*a, charge.of(*a).is_in_pool()))
+                .collect(),
+            top_line,
+            unknown_r_kept: 0,
+        },
+        keys,
+        sides,
+    }
+}
+
+/// Which options a floor keeps: the indices of those whose sides hold no off-pool placement of known
+/// share ratio below `ratio` (a moved locked pick included), and how many kept ones hold an off-pool
+/// placement of unknown ratio. `r_of` reads a placement's ratio.
+pub fn floor_keep(
+    sides: &[Vec<SidePlacement>],
+    ratio: f64,
+    r_of: impl Fn(&SidePlacement) -> Option<f64>,
+) -> (Vec<usize>, usize) {
+    let mut kept = Vec::new();
+    let mut unknown = 0;
+    for (i, side) in sides.iter().enumerate() {
+        let off: Vec<Option<f64>> = side.iter().filter(|p| !p.in_pool).map(&r_of).collect();
+        if off.iter().any(|r| r.is_some_and(|r| r < ratio)) {
+            continue;
+        }
+        unknown += usize::from(off.iter().any(Option::is_none));
+        kept.push(i);
+    }
+    (kept, unknown)
+}
+
+/// The reference ranking with every option holding an off-pool placement below share ratio `ratio`
+/// removed (root-only, no re-search): a moved locked pick counts, a placement of unknown ratio is kept
+/// and counted.
+fn floor_input(ratio: f64, reference: &ArmData, outcome: &SearchOutcome, u: &Universe) -> ArmInput {
+    let (kept, unknown) = floor_keep(&reference.sides, ratio, |p| {
+        share_ratio(u, p.champion, p.role)
+    });
+    ArmInput {
+        id: floor_id(ratio),
+        // A floor that removes every option does not speak: it must not read as a clean position.
+        speaks: !kept.is_empty(),
+        ranking: kept
+            .iter()
+            .map(|i| reference.input.ranking[*i].clone())
+            .collect(),
+        own_in_pool: reference.input.own_in_pool.clone(),
+        top_line: kept
+            .first()
+            .and_then(|i| top_line_of(&reference.keys[*i], &outcome.ranked[*i], u)),
+        unknown_r_kept: unknown,
+    }
+}
+
+/// An action's own-pick text in a change record: its ids sorted and `+`-joined; `None` is "no view".
+fn pick_text(pick: Option<Action>, u: &Universe) -> Option<String> {
+    pick.map(|action| OptionKey { action, comp: None }.id(u))
+}
+
+/// Everything the rule needs of one position, before the catalog prunes anything (design § 4: "it runs
+/// in memory inside `tier_b_review`, before the catalog prunes anything").
+#[allow(clippy::too_many_arguments)]
+fn scoring_of(
+    fx: &TierBFixture,
+    position: &Position<'_>,
+    mover: Side,
+    pick_root: bool,
+    views: &[ArmView<'_>],
+    catalog: &Catalog,
+    stable: Option<bool>,
+    resolved: &ResolvedVerdicts,
+    u: &Universe,
+) -> PositionInput {
+    let pools = &fx.root.pools;
+
+    // The rule's fold is blind; an option labelled only after the reveal reads its current label (and is
+    // counted), likewise an own pick first given after it.
+    let mut rule_labels = resolved.current.clone();
+    let mut label_fallbacks = 0;
+    for (key, label) in rule_labels.iter_mut() {
+        match resolved.blind.get(key) {
+            Some(blind) => *label = *blind,
+            None => label_fallbacks += 1,
+        }
+    }
+    let current_pick = resolved.current_pick.flatten();
+    let (rule_pick, pick_fallback) = match resolved.blind_pick {
+        Some(pick) => (pick, false),
+        // Counted also where the answer given after the reveal is "no view".
+        None => (current_pick, resolved.current_pick.is_some()),
+    };
+    let mut picks: Vec<Action> = [rule_pick, current_pick].into_iter().flatten().collect();
+    picks.dedup();
+
+    let lines: HashMap<(OptionKey, String), bool> = resolved
+        .lines
+        .iter()
+        .map(|l| ((l.option.clone(), canonical_line(&l.line)), l.ok))
+        .collect();
+
+    let reference_id = reference_kind().id();
+    let mut arm_inputs = Vec::with_capacity(views.len() + FLOOR_RATIOS.len());
+    let mut floors: Vec<ArmInput> = FLOOR_RATIOS.iter().map(|r| silent(&floor_id(*r))).collect();
+    for view in views {
+        let spoken = view
+            .searched
+            .outcome
+            .as_ref()
+            .ok()
+            .filter(|o| !o.partial && pick_root);
+        let Some(outcome) = spoken else {
+            arm_inputs.push(silent(&view.arm.id));
+            continue;
+        };
+        let data = arm_data(
+            view.arm,
+            outcome,
+            position,
+            mover,
+            pools,
+            &resolved.current,
+            &picks,
+            u,
+        );
+        if view.arm.id == reference_id {
+            floors = FLOOR_RATIOS
+                .iter()
+                .map(|r| floor_input(*r, &data, outcome, u))
+                .collect();
+        }
+        arm_inputs.push(data.input);
+    }
+    arm_inputs.extend(floors);
+
+    let unlabelled_rows = catalog
+        .entries
+        .iter()
+        .filter(|e| e.row && !rule_labels.contains_key(&e.key))
+        .map(|e| e.key.id(u))
+        .collect();
+
+    // Options with exactly one off-pool placement, by that placement's share ratio.
+    let r_labels = catalog
+        .entries
+        .iter()
+        .filter_map(|e| {
+            let label = rule_labels.get(&e.key)?;
+            let mut off = e.side.iter().filter(|p| !p.in_pool);
+            let only = off.next()?;
+            off.next().is_none().then(|| {
+                (
+                    RBucket::of(share_ratio(u, only.champion, only.role)),
+                    *label,
+                )
+            })
+        })
+        .collect();
+
+    let mut label_changes: Vec<LabelChange> = resolved
+        .blind
+        .iter()
+        .filter_map(|(key, blind)| {
+            let current = resolved.current.get(key)?;
+            (current != blind).then(|| LabelChange {
+                option: key.id(u),
+                blind: *blind,
+                current: *current,
+            })
+        })
+        .collect();
+    label_changes.sort_by(|a, b| a.option.cmp(&b.option));
+    let pick_change = resolved
+        .blind_pick
+        .filter(|blind| Some(*blind) != resolved.current_pick)
+        .map(|blind| PickChange {
+            blind: pick_text(blind, u),
+            current: pick_text(current_pick, u),
+        });
+
+    PositionInput {
+        id: fx.id.clone(),
+        draft: draft_of(&fx.id),
+        mover,
+        stable,
+        rule: Fold {
+            labels: rule_labels,
+            own_pick: rule_pick,
+        },
+        current: Fold {
+            labels: resolved.current.clone(),
+            own_pick: current_pick,
+        },
+        label_fallbacks,
+        pick_fallback,
+        lines,
+        arms: arm_inputs,
+        unlabelled_rows,
+        r_labels,
+        reveal: RevealRead {
+            revealed: resolved.revealed,
+            blind_labels: resolved.blind.len(),
+            blind_pick: resolved.blind_pick.is_some(),
+            label_changes,
+            pick_change,
+        },
     }
 }
 

@@ -177,6 +177,9 @@ function assemblePageData(run, { names, icons }) {
     missingIcons,
     missingNames,
     load_errors: run.load_errors || [],
+    // The results tab reads this; absent from a run with no labels. Corpus-wide aggregates: the page names an
+    // unrevealed draft's positions on none of it (`positionVisible`).
+    metrics: run.metrics || null,
     drafts,
   };
 }

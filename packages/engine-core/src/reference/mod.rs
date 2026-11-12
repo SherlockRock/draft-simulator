@@ -30,5 +30,7 @@ pub mod search;
 pub mod state;
 pub mod tier_b;
 pub mod tier_b_review;
+pub mod tier_b_rule;
+pub mod tier_b_summary;
 pub mod transposition;
 pub mod universe;

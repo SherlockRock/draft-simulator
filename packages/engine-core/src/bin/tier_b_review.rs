@@ -3,7 +3,8 @@
 //! `tier-b-run/1` JSON. Never built for production (`backend/Dockerfile` builds `engine-node` only).
 //!
 //! Configured by environment, defaults in brackets:
-//!   TIER_B_JSON          output path (required: a usage error before any search)
+//!   TIER_B_JSON          output path (required: a usage error before any search); `summary.txt` is
+//!                        written beside it
 //!   TIER_B_P             [0.08,0.09,0.095,0.1,0.105,0.11,0.12,0.15]
 //!   TIER_B_Q             [0,0.02,0.05,0.08,0.1,0.15]
 //!   TIER_B_WIDTHS        [30,60,100]  singles, pairs, root off-pool
@@ -22,7 +23,7 @@ use engine_core::reference::live::LiveUniverse;
 use engine_core::reference::search::Shortlist;
 use engine_core::reference::tier_b::TierBFixture;
 use engine_core::reference::tier_b_review::{
-    run_review, EngineStamp, ReviewConfig, NEAR_TIE_MARGIN,
+    render_summary, run_review, EngineStamp, ReviewConfig, NEAR_TIE_MARGIN,
 };
 use serde_json::Value;
 use std::io::Write;
@@ -189,6 +190,10 @@ fn main() {
                 .map_err(|e| e.to_string())
         })
         .unwrap_or_else(|e| die(&format!("{}: {e}", json_path.display())));
+    // The summary lands beside the run JSON, so one directory holds one run's whole record.
+    let summary_path = json_path.with_file_name("summary.txt");
+    std::fs::write(&summary_path, render_summary(&run))
+        .unwrap_or_else(|e| die(&format!("{}: {e}", summary_path.display())));
     eprintln!(
         "tier_b_review: {} positions, {} arms, {} load errors, {:.1} s on {} jobs, wrote {}",
         run.positions.len(),

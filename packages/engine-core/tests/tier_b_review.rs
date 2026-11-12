@@ -14,13 +14,21 @@ use engine_core::reference::feasibility::{
 };
 use engine_core::reference::format::{Format, Slot};
 use engine_core::reference::live::LiveUniverse;
+use engine_core::reference::node::{LeafEnd, LeafKind};
 use engine_core::reference::search::Shortlist;
 use engine_core::reference::state::{Action, Entry, Pools, Position, RoleSets};
 use engine_core::reference::tier_b::{
     Label, Loaded, OptionKey, TierBError, TierBFixture, VerdictMode,
 };
 use engine_core::reference::tier_b_review::{
-    draft_of, run_review, EngineStamp, ReviewConfig, ReviewRun,
+    draft_of, floor_keep, opponent_charge, render_summary, run_review, score_ranking, summary_of,
+    ArmWire, DataStamp, EngineStamp, OwnPick, PositionScore, ReviewConfig, ReviewRun, RunHeader,
+    ScoredAction, SearchStamp, TopClassName, WidthsWire,
+};
+use engine_core::reference::tier_b_rule::{
+    canonical_line, choose_arm, line_text, read_arms, read_run, ArmInput, ArmRole, ArmScore,
+    ArmSpec, Axis, Edge, EdgeSide, Fold, FoldKind, LabelChange, LineState, Metrics, PickChange,
+    PositionInput, RBucket, RevealRead, TopLine,
 };
 use engine_core::reference::universe::{ChampionIdx, ChampionSet, Universe, UniverseSpec};
 use serde::Deserialize;
@@ -2355,4 +2363,2441 @@ fn zero_jobs_is_one_job() {
         .expect("it is JSON");
     std::fs::remove_file(&out).expect("clean up");
     assert_eq!(v["run"]["search"]["jobs"], 1);
+}
+
+// ---- Task 9: scoring a ranking ---------------------------------------------------------------------
+//
+// Rankings are written in the mover's terms (a larger `v` is better for the mover) and built for both
+// movers: Blue values are `v`, Red values `-v`, so a dropped sign fails the Red half. Entry `i` is
+// `Pick(ChampionIdx(i))`. Expected arrays are indexed k = 1, 3, 5, 10.
+
+#[derive(Clone, Copy, PartialEq)]
+enum L {
+    P,
+    M,
+    N,
+    /// No label; the option is resolved but not in the map.
+    U,
+}
+
+#[derive(Clone, Copy)]
+struct R {
+    v: f64,
+    l: L,
+    charge: f64,
+    in_pool: bool,
+}
+
+fn r(v: f64, l: L) -> R {
+    R {
+        v,
+        l,
+        charge: 0.0,
+        in_pool: true,
+    }
+}
+
+fn champ_action(i: u8) -> Action {
+    Action::Pick(ChampionIdx(i))
+}
+
+fn score_for(mover: Side, rows: &[R], own: Option<(u8, bool)>, margin: f64) -> PositionScore {
+    let sign = if mover == Side::Blue { 1.0 } else { -1.0 };
+    let mut labels = HashMap::new();
+    let ranking: Vec<ScoredAction> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let action = champ_action(u8::try_from(i).expect("small"));
+            let key = OptionKey { action, comp: None };
+            match row.l {
+                L::P => labels.insert(key.clone(), Label::Play),
+                L::M => labels.insert(key.clone(), Label::Maybe),
+                L::N => labels.insert(key.clone(), Label::Never),
+                L::U => None,
+            };
+            ScoredAction {
+                action,
+                value: sign * row.v,
+                option: (row.l != L::U || i % 2 == 1).then_some(key),
+                in_pool: own.map_or(row.in_pool, |(o, in_pool)| {
+                    if usize::from(o) == i {
+                        in_pool
+                    } else {
+                        row.in_pool
+                    }
+                }),
+                class: if row.in_pool {
+                    TopClassName::InPool
+                } else {
+                    TopClassName::Graded
+                },
+                opponent_charge: row.charge,
+            }
+        })
+        .collect();
+    score_ranking(
+        mover,
+        &ranking,
+        &labels,
+        own.map(|(i, _)| champ_action(i)),
+        own.is_some_and(|(_, in_pool)| in_pool),
+        margin,
+    )
+}
+
+fn both(rows: &[R], own: Option<(u8, bool)>, margin: f64, check: impl Fn(Side, PositionScore)) {
+    for mover in [Side::Blue, Side::Red] {
+        check(mover, score_for(mover, rows, own, margin));
+    }
+}
+
+const T: bool = true;
+const F: bool = false;
+
+/// A large lead at #1 is a clear `never` at every k whatever sits near #3. Hand measure: the `never`
+/// at 2.0 is the best-ranked `never`; the non-`never` options at or above it or within 0.01 below:
+/// none (the next is 1.0). Count 0 is under every k. The four plays at 0.9..0.891 sit within 0.01 of #3
+/// (0.9) and number 4 >= 3: reading the cluster near #k would deny k = 3.
+/// Kills: comparing against #k instead of the best-ranked `never`.
+#[test]
+fn a_large_lead_is_clear_whatever_sits_near_the_kth() {
+    let rows = [
+        r(2.0, L::N),
+        r(1.0, L::P),
+        r(0.9, L::P),
+        r(0.895, L::P),
+        r(0.893, L::P),
+        r(0.891, L::P),
+    ];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+    });
+}
+
+/// 0.5000 never, 0.4998 play, 0.1 play. Count of non-`never` within 0.01 of the `never`: 1 (the 0.4998;
+/// the 0.1 is 0.4 away). k = 1: 1 < 1 fails, so not clear: a near tie, the `never` is in the top 1.
+/// k = 3, 5, 10: 1 under k, clear; `play` is in the top 3 but not the top 1.
+/// Kills: ε ignored (count 0 would make k = 1 clear).
+#[test]
+fn a_gap_of_two_ten_thousandths_is_a_near_tie_at_one_and_clear_at_three() {
+    let rows = [r(0.5, L::N), r(0.4998, L::P), r(0.1, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+        assert_eq!(s.play, [F, T, T, T], "{mover:?}");
+    });
+}
+
+/// The ε bound is inclusive. Margin 0.25 (exact in binary): `never` 1.0, play at 0.75 is exactly 0.25
+/// below, so it counts: k = 1 not clear. Play at 0.7499 does not... it is 0.2501 below: k = 1 clear.
+/// Kills: an exclusive bound.
+#[test]
+fn the_margin_bound_is_inclusive() {
+    both(&[r(1.0, L::N), r(0.75, L::P)], None, 0.25, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+    });
+    both(&[r(1.0, L::N), r(0.7499, L::P)], None, 0.25, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+    });
+}
+
+/// Two `never`s tied at 1.0, a `play` at 0.5. The best-ranked `never` is the first; the non-`never`s
+/// at or above it or within 0.01 below: none. Clear at every k. Ranks are [1, 1, 3]: the top 1 holds
+/// both `never`s and no `play` (`no_play@1`), the top 3 holds the `play`.
+/// Kills: counting the second `never` as a non-`never`; comparing against #k.
+#[test]
+fn two_nevers_tied_at_the_top_with_a_play_far_behind_is_clear() {
+    let rows = [r(1.0, L::N), r(1.0, L::N), r(0.5, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [T, T, T, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+        assert_eq!(s.play, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.no_play, [T, F, F, F], "{mover:?}");
+    });
+}
+
+/// `1.000 never, 0.995 unlabelled, 0.800 play`. Unlabelled as `never`: the best `never` is #1 and no
+/// non-`never` is within 0.01: count 0, clear. Unlabelled as non-`never`: count 1 (0.995): clear only
+/// where 1 < k. So k = 1 disagrees (`unjudged@1`, so `near@1` is off), k = 3, 5, 10 agree on clear.
+/// Kills: a single completion; unlabelled read as `never` only.
+#[test]
+fn an_unlabelled_option_inside_the_margin_is_unjudged_at_one_and_certain_at_three() {
+    let rows = [r(1.0, L::N), r(0.995, L::U), r(0.8, L::P)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        assert_eq!(s.unjudged, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+    });
+}
+
+/// Nine plays (2.9 .. 2.1), a `never` at rank 10 (1.000), an unlabelled option at rank 11. As `never`
+/// the unlabelled is outside the count: 9 non-`never`s above the best `never`, 9 < 10 clear. As
+/// non-`never` at 0.995 (within 0.01): 10, not clear. So `unjudged@10`, `never@10` off; k = 1, 3, 5:
+/// 9 >= k under both, agreed not clear. With the rank-11 option at 0.9 (outside) both agree: clear.
+/// Kills: truncating the ranking at k (rank 11 unread); a single completion.
+#[test]
+fn an_unlabelled_rank_eleven_decides_never_at_ten() {
+    let mut rows: Vec<R> = (0..9).map(|i| r(2.9 - 0.1 * f64::from(i), L::P)).collect();
+    rows.push(r(1.0, L::N));
+    let mut near = rows.clone();
+    near.push(r(0.995, L::U));
+    both(&near, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F; 4], "{mover:?}");
+        assert_eq!(s.unjudged, [F, F, F, T], "{mover:?}");
+        assert_eq!(s.near, [F; 4], "{mover:?}");
+    });
+    let mut far = rows;
+    far.push(r(0.9, L::U));
+    both(&far, None, 0.01, |mover, s| {
+        assert_eq!(s.never, [F, F, F, T], "{mover:?}");
+        assert_eq!(s.unjudged, [F; 4], "{mover:?}");
+    });
+}
+
+/// `near@k`: `never` at 1.0, `maybe` at 0.995, `play` at 0.5, no unlabelled. k = 1: count 1, not clear;
+/// `never` in top 1; certain: near. k = 3: clear, so not near. A `never` outside the top k is no near
+/// tie either: `never` at rank 2 under a `play` far above is not in the top 1.
+/// Kills: `near` set wherever a `never` is not clear regardless of the top k.
+#[test]
+fn near_needs_a_labelled_never_in_the_top_k() {
+    both(
+        &[r(1.0, L::N), r(0.995, L::M), r(0.5, L::P)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.near, [T, F, F, F], "{mover:?}");
+            assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        },
+    );
+    // play 2.0, never 1.0, play 0.999: the never is #2, count above or within = 2.
+    // k = 1: not in the top 1 (not near, and not clear: 2 >= 1); k = 3: 2 < 3 clear.
+    both(
+        &[r(2.0, L::P), r(1.0, L::N), r(0.999, L::P)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.near, [F; 4], "{mover:?}");
+            assert_eq!(s.never, [F, T, T, T], "{mover:?}");
+        },
+    );
+}
+
+/// `neither_play`: never 1.0, unlabelled 0.9, maybe 0.8, no `play`. Top 1 is the `never`, fully
+/// labelled, no `play`: `no_play@1`. Top 3 and beyond hold an unlabelled option: in neither.
+/// All maybes: fully labelled everywhere, `no_play` throughout.
+/// Kills: reading an unlabelled option as not-`play` (no_play at k = 3).
+#[test]
+fn an_unlabelled_option_in_range_counts_in_neither_play() {
+    let rows = [r(1.0, L::N), r(0.9, L::U), r(0.8, L::M)];
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.play, [F; 4], "{mover:?}");
+        assert_eq!(s.no_play, [T, F, F, F], "{mover:?}");
+        assert_eq!(s.neither_play, [F, T, T, T], "{mover:?}");
+    });
+    both(
+        &[r(1.0, L::N), r(0.9, L::M), r(0.8, L::M)],
+        None,
+        0.01,
+        |mover, s| {
+            assert_eq!(s.no_play, [T; 4], "{mover:?}");
+            assert_eq!(s.neither_play, [F; 4], "{mover:?}");
+        },
+    );
+}
+
+fn five(fourth: f64) -> [R; 5] {
+    [
+        r(1.0, L::P),
+        r(0.75, L::P),
+        r(0.5, L::P),
+        r(fourth, L::P),
+        r(0.1, L::P),
+    ]
+}
+
+/// The own pick is entry 3 (rank 4). Margin 0.25. #3 is 0.5; the pick at 0.25 is exactly 0.25 below, so
+/// within: `pick@3`. Rank 4 <= 5 and <= 10: counts. #1 is 1.0: 0.25 is far outside: no.
+/// The pick at 0.249 is 0.251 below #3: `pick@3` off. Regret is the mover-signed gap to #1: 0.75, 0.751.
+/// Kills: plain rank for picks; a dropped sign (a Red value would put the pick above or below wrongly).
+#[test]
+fn an_own_pick_within_the_margin_of_the_kth_counts_and_one_outside_does_not() {
+    both(&five(0.25), Some((3, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, T, T, T], "{mover:?}");
+        assert_eq!(
+            s.own,
+            OwnPick::Ranked {
+                rank: 4,
+                regret: 0.75
+            },
+            "{mover:?}"
+        );
+    });
+    both(&five(0.249), Some((3, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, F, T, T], "{mover:?}");
+        match s.own {
+            OwnPick::Ranked { rank: 4, regret } => assert!((regret - 0.751).abs() < 1e-12),
+            other => panic!("{mover:?}: {other:?}"),
+        }
+    });
+}
+
+/// A pick at rank 2 (0.9) is within 0.25 of #1 (1.0): `pick@1` although rank 2.
+/// Kills: plain rank; margin read only below the k-th.
+#[test]
+fn an_own_pick_at_two_is_within_the_margin_of_one() {
+    let rows = [r(1.0, L::P), r(0.9, L::P), r(0.1, L::P)];
+    both(&rows, Some((1, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+    });
+    both(&rows, Some((2, true)), 0.25, |mover, s| {
+        assert_eq!(s.pick, [F, T, T, T], "{mover:?}");
+    });
+}
+
+/// `pick_off` counts only an off-pool own pick; in-pool leaves `pick_off` empty and not eligible.
+/// No own pick (no view): outside the pick metrics, `NoPick`, not eligible, no median rank. An own
+/// pick not in the ranking: `Absent`, rank infinity in the median, no regret, never a pick, but
+/// eligible when off-pool (it is counted in the denominator).
+/// Kills: `pick_off` as `pick`; absent read as no view; a rank-0 absent.
+#[test]
+fn pick_off_is_for_off_pool_picks_and_absent_is_not_no_view() {
+    let rows = [r(1.0, L::P), r(0.5, L::P)];
+    both(&rows, Some((0, false)), 0.01, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [T; 4], "{mover:?}");
+        assert!(s.pick_off_eligible);
+    });
+    both(&rows, Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [F; 4], "{mover:?}");
+        assert!(!s.pick_off_eligible);
+    });
+    both(&rows, None, 0.01, |mover, s| {
+        assert_eq!(s.own, OwnPick::NoPick, "{mover:?}");
+        assert_eq!(s.pick, [F; 4], "{mover:?}");
+        assert!(!s.pick_off_eligible);
+        assert_eq!(s.own.rank_for_median(), None);
+    });
+    both(&rows, Some((200, false)), 0.01, |mover, s| {
+        assert_eq!(s.own, OwnPick::Absent, "{mover:?}");
+        assert_eq!(s.pick, [F; 4], "{mover:?}");
+        assert_eq!(s.pick_off, [F; 4], "{mover:?}");
+        assert!(s.pick_off_eligible);
+        assert_eq!(s.own.rank_for_median(), Some(f64::INFINITY));
+    });
+}
+
+/// A ranking shorter than k, and an empty one, do not panic. One `never` alone: clear at every k, its
+/// class is #1's. Empty: everything off, no class, an own pick absent.
+/// Kills: indexing the k-th entry directly.
+#[test]
+fn a_ranking_shorter_than_k_is_handled() {
+    both(&[r(1.0, L::N)], Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.never, [T; 4], "{mover:?}");
+        assert_eq!(s.pick, [T; 4], "{mover:?}");
+        assert_eq!(s.class_at_1, Some(TopClassName::InPool));
+    });
+    both(&[], Some((0, true)), 0.01, |mover, s| {
+        assert_eq!(s.never, [F; 4], "{mover:?}");
+        assert_eq!(s.no_play, [F; 4], "{mover:?}");
+        assert_eq!(s.neither_play, [T; 4], "{mover:?}");
+        assert_eq!(s.own, OwnPick::Absent, "{mover:?}");
+        assert_eq!(s.class_at_1, None);
+        assert!(!s.opp_lead);
+    });
+}
+
+fn charged(v: f64, charge: f64) -> R {
+    R {
+        charge,
+        ..r(v, L::P)
+    }
+}
+
+/// `opp_lead`: the #1 changes when `value - mover_sign * charge` replaces `value`, re-ordered for the
+/// mover. Hand measure (mover terms, adjusted = v - charge): A 0.30 c 0.05 -> 0.25 below B 0.28: lead.
+/// A 0.30 c 0.01 -> 0.29 above B: none. A 0.5 c 0.25 -> 0.25 ties B 0.25: a tie keeps the #1: none.
+/// C third (0.2 c 0.0) beating both adjusted (A 0.5 c 0.4 -> 0.1, B 0.4 c 0.3 -> 0.1): lead.
+/// Pins only what `score_ranking` does with the `opponent_charge` it is given. That the runner leaves an
+/// infeasibility band out of the charge cannot be tested here; it is tested where `opponent_charge` is
+/// computed (Task 10/11).
+/// Kills: a dropped sign (Red would add the charge); the tie going to the later entry.
+#[test]
+fn opp_lead_flips_with_the_sign_and_keeps_a_tied_leader() {
+    both(
+        &[charged(0.30, 0.05), charged(0.28, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.30, 0.01), charged(0.28, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(!s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.5, 0.25), charged(0.25, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(!s.opp_lead, "{m:?}");
+        },
+    );
+    both(
+        &[charged(0.5, 0.4), charged(0.4, 0.3), charged(0.2, 0.0)],
+        None,
+        0.01,
+        |m, s| {
+            assert!(s.opp_lead, "{m:?}");
+        },
+    );
+}
+
+/// `class_at_1` reads the #1's class: an off-pool #1 is `Graded` here, an in-pool one `InPool`.
+/// Kills: reading the last entry or the pick's class.
+#[test]
+fn class_at_one_is_the_top_entrys() {
+    let off = R {
+        in_pool: false,
+        ..r(1.0, L::P)
+    };
+    both(&[off, r(0.5, L::P)], None, 0.01, |m, s| {
+        assert_eq!(s.class_at_1, Some(TopClassName::Graded), "{m:?}");
+    });
+    both(&[r(1.0, L::P), off], None, 0.01, |m, s| {
+        assert_eq!(s.class_at_1, Some(TopClassName::InPool), "{m:?}");
+    });
+}
+
+/// An unlabelled option above the best labelled `never`. `[U 1.0, P 0.9, N 0.5]`: as `never` the
+/// unlabelled is the best `never` with nothing above it: count 0, clear at every k. As non-`never` the
+/// best `never` is 0.5 with two non-`never`s above: clear only at k = 3, 5, 10. So `unjudged@1`,
+/// `never` at 3, 5, 10. `[U 1.0, P 0.5]` (no labelled `never`): as `never` the unlabelled #1 is clear
+/// (the play at 0.5 is outside the margin); as non-`never` there is no `never`, so not clear:
+/// `unjudged` at every k.
+/// Kills: the best never chosen from labelled options only.
+#[test]
+fn an_unlabelled_option_above_the_best_labelled_never_is_unjudged() {
+    both(
+        &[r(1.0, L::U), r(0.9, L::P), r(0.5, L::N)],
+        None,
+        0.01,
+        |m, s| {
+            assert_eq!(s.never, [F, T, T, T], "{m:?}");
+            assert_eq!(s.unjudged, [T, F, F, F], "{m:?}");
+        },
+    );
+    both(&[r(1.0, L::U), r(0.5, L::P)], None, 0.01, |m, s| {
+        assert_eq!(s.never, [F; 4], "{m:?}");
+        assert_eq!(s.unjudged, [T; 4], "{m:?}");
+    });
+}
+
+/// Ties at the k boundary are read by rank. `[N 1.0, P 1.0, P 0.5]` has ranks [1, 1, 3]: the top 1
+/// holds both tied entries, so `play@1` (by list position it would be off and `no_play@1` on). The
+/// `never` is not clear at k = 1 (the tied play is within the margin: count 1), so `near@1`.
+/// Kills: the top k taken by list position.
+#[test]
+fn a_tie_at_the_k_boundary_is_in_the_top_k() {
+    both(
+        &[r(1.0, L::N), r(1.0, L::P), r(0.5, L::P)],
+        None,
+        0.01,
+        |m, s| {
+            assert_eq!(s.play, [T; 4], "{m:?}");
+            assert_eq!(s.no_play, [F; 4], "{m:?}");
+            assert_eq!(s.near, [T, F, F, F], "{m:?}");
+            assert_eq!(s.never, [F, T, T, T], "{m:?}");
+        },
+    );
+}
+
+/// `at(k)` reads the same as the arrays, and refuses a k outside `SCORE_KS`.
+/// Kills: an off-by-one in the index.
+#[test]
+fn at_reads_the_metric_for_that_k() {
+    let s = score_for(
+        Side::Red,
+        &[r(1.0, L::N), r(0.995, L::U), r(0.8, L::P)],
+        None,
+        0.01,
+    );
+    assert!(s.at(1).expect("k = 1").unjudged);
+    assert!(s.at(3).expect("k = 3").never);
+    assert!(!s.at(1).expect("k = 1").never);
+    assert!(s.at(2).is_none());
+}
+
+// ---- Task 10: the rule (design § 4), on constructed inputs -------------------------------------------
+
+const REF: &str = "roster:0.1:0.05";
+const P_AXIS: [f64; 8] = [0.08, 0.09, 0.095, 0.1, 0.105, 0.11, 0.12, 0.15];
+const Q_AXIS: [f64; 6] = [0.0, 0.02, 0.05, 0.08, 0.1, 0.15];
+
+fn roster_spec(p: f64, q: f64) -> ArmSpec {
+    ArmSpec {
+        id: format!("roster:{p}:{q}"),
+        role: ArmRole::Roster,
+        p: Some(p),
+        q: Some(q),
+    }
+}
+
+/// An arm that reads as the metrics say: every position speaks, nothing unjudged.
+fn arm_with(spec: ArmSpec, never_1: usize, never_3: usize, pick_3: usize) -> ArmScore {
+    ArmScore {
+        spec,
+        rows: Vec::new(),
+        all: Metrics {
+            positions: 3,
+            speaking: 3,
+            never: [never_1, never_3, 0, 0],
+            pick: [0, pick_3, 0, 0],
+            ..Metrics::default()
+        },
+        unknown_r_kept: 0,
+    }
+}
+
+/// A grid of `arms_with` over `ps` x `qs`, `f(p, q)` giving `(never@1, never@3, pick@3)`, plus a
+/// `pool_or_roster` arm that would win every key.
+fn grid_of(ps: &[f64], qs: &[f64], f: impl Fn(f64, f64) -> (usize, usize, usize)) -> Vec<ArmScore> {
+    let mut arms = vec![arm_with(
+        ArmSpec {
+            id: "pool_or_roster".to_string(),
+            role: ArmRole::PoolOrRoster,
+            p: None,
+            q: None,
+        },
+        0,
+        0,
+        99,
+    )];
+    for q in qs {
+        for p in ps {
+            let (a, b, c) = f(*p, *q);
+            arms.push(arm_with(roster_spec(*p, *q), a, b, c));
+        }
+    }
+    arms
+}
+
+fn default_grid(f: impl Fn(f64, f64) -> (usize, usize, usize)) -> Vec<ArmScore> {
+    grid_of(&P_AXIS, &Q_AXIS, f)
+}
+
+fn pick_of_rule(arms: &[ArmScore]) -> String {
+    choose_arm(arms, REF).pick.expect("an arm is readable")
+}
+
+/// The first key alone decides: the arm with the fewest `never@1` wins though it is worse on both other
+/// keys, and `pool_or_roster` (best on every key) is never selectable.
+/// Kills: dropping the first key; the keys read in another order; `pool_or_roster` selectable.
+#[test]
+fn the_first_key_alone_decides() {
+    let arms = default_grid(|p, q| {
+        if (p, q) == (0.12, 0.08) {
+            (0, 9, 0)
+        } else {
+            (1, 0, 9)
+        }
+    });
+    let out = choose_arm(&arms, REF);
+    assert_eq!(out.pick.as_deref(), Some("roster:0.12:0.08"));
+    assert_eq!(out.ties, ["roster:0.12:0.08"]);
+    assert_eq!((out.readable, out.roster_arms), (48, 48));
+}
+
+/// The second key alone decides, among arms tied on the first, though the other arm has more `pick@3`.
+/// Kills: dropping the second key; `never@3` read after `pick@3`.
+#[test]
+fn the_second_key_alone_decides() {
+    let arms = default_grid(|p, q| {
+        if (p, q) == (0.09, 0.02) {
+            (1, 1, 0)
+        } else {
+            (1, 2, 9)
+        }
+    });
+    assert_eq!(pick_of_rule(&arms), "roster:0.09:0.02");
+}
+
+/// The third key alone decides: most `pick@3` among arms tied on the first two (a larger count wins).
+/// Kills: dropping the third key; fewest instead of most.
+#[test]
+fn the_third_key_alone_decides() {
+    let arms = default_grid(|p, q| {
+        if (p, q) == (0.11, 0.1) {
+            (1, 1, 5)
+        } else {
+            (1, 1, 4)
+        }
+    });
+    assert_eq!(pick_of_rule(&arms), "roster:0.11:0.1");
+}
+
+/// The reference arm is kept when it is among the ties, though an arm with a smaller P ties with it
+/// (and, by the steps, is next to it).
+/// Kills: a tie-break that skips the reference (smaller P first).
+#[test]
+fn the_reference_arm_is_kept_when_tied() {
+    let arms = default_grid(|p, q| {
+        if (p, q) == (0.1, 0.05) || (p, q) == (0.08, 0.05) || (p, q) == (0.105, 0.05) {
+            (0, 0, 7)
+        } else {
+            (1, 1, 7)
+        }
+    });
+    let out = choose_arm(&arms, REF);
+    assert_eq!(out.ties.len(), 3);
+    assert_eq!(out.pick.as_deref(), Some(REF));
+}
+
+/// Not tied with the reference: the fewest grid steps from it, counted in grid indices, not in value.
+/// 0.105 (P index 4) is one step from 0.1 (index 3); 0.08 (index 0) is three. Of equal steps, 0.09
+/// (index 1, two steps, 0.01 away) beats 0.11 (index 5, two steps) on the smaller P, and an arm at
+/// 0.12 (index 6, three steps, 0.02 away) loses to 0.095 (index 2, one step, 0.005 away) either way:
+/// the steps are indices, so the spacing of the grid does not enter.
+/// Kills: a tie-break by smaller P first; steps measured in value; the larger P on equal steps.
+#[test]
+fn fewest_grid_steps_when_the_reference_is_not_tied() {
+    let tied = |set: &'static [(f64, f64)]| {
+        default_grid(move |p, q| {
+            if set.contains(&(p, q)) {
+                (0, 0, 7)
+            } else {
+                (1, 1, 7)
+            }
+        })
+    };
+    assert_eq!(
+        pick_of_rule(&tied(&[(0.08, 0.05), (0.105, 0.05)])),
+        "roster:0.105:0.05"
+    );
+    assert_eq!(
+        pick_of_rule(&tied(&[(0.11, 0.05), (0.09, 0.05)])),
+        "roster:0.09:0.05"
+    );
+    assert_eq!(
+        pick_of_rule(&tied(&[(0.12, 0.05), (0.095, 0.05)])),
+        "roster:0.095:0.05"
+    );
+    // A step in Q counts as a step in P: (0.1, 0.08) is one step away, (0.12, 0.05) is three.
+    assert_eq!(
+        pick_of_rule(&tied(&[(0.12, 0.05), (0.1, 0.08)])),
+        "roster:0.1:0.08"
+    );
+}
+
+/// On equal steps the smaller P, then the smaller Q.
+/// Kills: the larger P or Q on a tie; a tie left to the arms' order; the Q clause deleted.
+#[test]
+fn equal_steps_break_to_the_smaller_p_then_the_smaller_q() {
+    let tied = |set: &'static [(f64, f64)]| {
+        default_grid(move |p, q| {
+            if set.contains(&(p, q)) {
+                (0, 0, 7)
+            } else {
+                (1, 1, 7)
+            }
+        })
+    };
+    // One step each: (0.105, 0.05) and (0.1, 0.08): the smaller P wins.
+    assert_eq!(
+        pick_of_rule(&tied(&[(0.105, 0.05), (0.1, 0.08)])),
+        "roster:0.1:0.08"
+    );
+    // One step each, the same P: (0.1, 0.02) and (0.1, 0.08): the smaller Q wins, whichever order the
+    // arms come in (`min_by` keeps the first of equals, so the Q clause must decide it).
+    let both = tied(&[(0.1, 0.08), (0.1, 0.02)]);
+    assert_eq!(pick_of_rule(&both), "roster:0.1:0.02");
+    let mut reversed = both;
+    reversed.reverse();
+    assert_eq!(pick_of_rule(&reversed), "roster:0.1:0.02");
+}
+
+/// The same inputs in any order give the same pick and the same ties.
+/// Kills: a tie resolved by the arms' order.
+#[test]
+fn the_tie_is_deterministic() {
+    let set: &[(f64, f64)] = &[(0.09, 0.05), (0.11, 0.05), (0.1, 0.02), (0.1, 0.1)];
+    let make = || {
+        default_grid(|p, q| {
+            if set.contains(&(p, q)) {
+                (0, 0, 7)
+            } else {
+                (1, 1, 7)
+            }
+        })
+    };
+    let forward = choose_arm(&make(), REF);
+    let mut shuffled = make();
+    shuffled.reverse();
+    shuffled.rotate_left(7);
+    let backward = choose_arm(&shuffled, REF);
+    assert_eq!(forward.pick, backward.pick);
+    assert_eq!(forward.pick.as_deref(), Some("roster:0.1:0.02"));
+    let mut a = forward.ties.clone();
+    let mut b = backward.ties.clone();
+    a.sort();
+    b.sort();
+    assert_eq!(a, b);
+}
+
+/// The pick's edge flag, on all four edges and with the design's wording; none in the interior; none
+/// on an axis that has one value.
+/// Kills: a missing edge; wording drift; an edge on a one-value axis.
+#[test]
+fn the_edge_flag_reads_all_four_edges_in_the_designs_words() {
+    let at = |ps: &[f64], qs: &[f64], target: (f64, f64)| {
+        let arms = grid_of(ps, qs, |p, q| {
+            if (p, q) == target {
+                (0, 0, 9)
+            } else {
+                (1, 1, 1)
+            }
+        });
+        choose_arm(&arms, "roster:none:none")
+    };
+    let texts = |out: &engine_core::reference::tier_b_rule::RuleOutcome| -> Vec<String> {
+        out.edge.iter().map(Edge::text).collect()
+    };
+    // Both tops.
+    let out = at(&P_AXIS, &Q_AXIS, (0.15, 0.15));
+    assert_eq!(
+        texts(&out),
+        [
+            "on the grid's edge (P = 0.15): read r_by_label and the floor rows before widening",
+            "on the grid's edge (Q = 0.15): read r_by_label and the floor rows before widening",
+        ]
+    );
+    assert_eq!(out.edge[0].axis, Axis::P);
+    assert_eq!(out.edge[1].side, EdgeSide::Top);
+    // Q = 0 at the bottom of Q: the off-role grade is doing no work.
+    let out = at(&P_AXIS, &Q_AXIS, (0.1, 0.0));
+    assert_eq!(
+        texts(&out),
+        ["on the grid's edge (Q = 0): the off-role grade is doing no work here"]
+    );
+    // The bottom of P above zero is an edge of the sweep too; P = 0 says its price does no work.
+    assert_eq!(
+        texts(&at(&P_AXIS, &Q_AXIS, (0.08, 0.05))),
+        ["on the grid's edge (P = 0.08)"]
+    );
+    assert_eq!(
+        texts(&at(&[0.0, 0.1], &Q_AXIS, (0.0, 0.05))),
+        ["on the grid's edge (P = 0): the off-pool price is doing no work here"]
+    );
+    // A bottom edge above zero, on Q too, prints the bare flag with no advice.
+    assert_eq!(
+        texts(&at(&P_AXIS, &[0.02, 0.1], (0.1, 0.02))),
+        ["on the grid's edge (Q = 0.02)"]
+    );
+    // The interior, and an axis of one value, carry none.
+    assert!(at(&P_AXIS, &Q_AXIS, (0.1, 0.05)).edge.is_empty());
+    assert_eq!(
+        texts(&at(&[0.1], &Q_AXIS, (0.1, 0.15))),
+        ["on the grid's edge (Q = 0.15): read r_by_label and the floor rows before widening"]
+    );
+}
+
+/// An arm with every key best but a silent position is not readable.
+/// Kills: `readable` ignoring a position that does not speak.
+#[test]
+fn an_arm_where_a_position_does_not_speak_is_not_readable() {
+    let mut arms = default_grid(|_, _| (2, 2, 2));
+    arms[1].all.speaking = 2;
+    arms[1].all.never = [0, 0, 0, 0];
+    arms[1].all.pick = [0, 9, 0, 0];
+    let out = choose_arm(&arms, REF);
+    assert_eq!(out.readable, 47);
+    assert_ne!(out.pick.as_deref(), Some(arms[1].spec.id.as_str()));
+}
+
+/// `unjudged@3 = 0` with `unjudged@1 > 0` is not readable, and with `unjudged@3 > 0` and `unjudged@1 =
+/// 0` neither. Each arm has the best keys.
+/// Kills: `readable` reading only @3; reading only @1.
+#[test]
+fn readable_needs_both_unjudged_counts_at_zero() {
+    for (u1, u3) in [(1, 0), (0, 1), (1, 1)] {
+        let mut arms = default_grid(|_, _| (2, 2, 2));
+        arms[5].all.never = [0, 0, 0, 0];
+        arms[5].all.pick = [0, 9, 0, 0];
+        arms[5].all.unjudged = [u1, u3, 0, 0];
+        let out = choose_arm(&arms, REF);
+        assert_eq!(out.readable, 47, "{u1} {u3}");
+        assert_ne!(
+            out.pick.as_deref(),
+            Some(arms[5].spec.id.as_str()),
+            "{u1} {u3}"
+        );
+    }
+}
+
+/// No readable arm: the rule says so (no pick, no receipt, no edge), however good `pool_or_roster` is.
+/// Kills: a pick among unreadable arms; `pool_or_roster` selectable.
+#[test]
+fn no_readable_arm_says_so() {
+    let mut arms = default_grid(|_, _| (0, 0, 9));
+    for a in &mut arms {
+        a.all.unjudged = [1, 1, 0, 0];
+    }
+    let out = choose_arm(&arms, REF);
+    assert_eq!(out.readable, 0);
+    assert_eq!(out.roster_arms, 48);
+    assert!(out.pick.is_none() && out.ties.is_empty() && out.edge.is_empty());
+    assert!(out.receipt.is_none());
+}
+
+// ---- positions built from rankings -----------------------------------------------------------------
+
+fn act(n: u8) -> Action {
+    Action::Pick(ChampionIdx(n))
+}
+
+fn opt(n: u8) -> OptionKey {
+    OptionKey {
+        action: act(n),
+        comp: None,
+    }
+}
+
+/// A position whose `arms` are `(arm id, [(champion, strength)])`, strength best-first (the mover's
+/// view: a Red value is the negated strength). An empty list is a position that does not speak at that
+/// arm. Both folds read `labels`; champion `own` is the own pick.
+fn rpos(
+    id: &str,
+    draft: &str,
+    mover: Side,
+    stable: Option<bool>,
+    labels: &[(u8, Label)],
+    own: Option<u8>,
+    arms: &[(&str, &[(u8, f64)])],
+) -> PositionInput {
+    let sign = if mover == Side::Blue { 1.0 } else { -1.0 };
+    let labels: HashMap<OptionKey, Label> = labels.iter().map(|(c, l)| (opt(*c), *l)).collect();
+    let fold = Fold {
+        labels: labels.clone(),
+        own_pick: own.map(act),
+    };
+    PositionInput {
+        id: id.to_string(),
+        draft: draft.to_string(),
+        mover,
+        stable,
+        rule: fold.clone(),
+        current: fold,
+        label_fallbacks: 0,
+        pick_fallback: false,
+        lines: HashMap::new(),
+        arms: arms
+            .iter()
+            .map(|(arm, list)| ArmInput {
+                id: arm.to_string(),
+                speaks: !list.is_empty(),
+                ranking: list
+                    .iter()
+                    .map(|(c, v)| ScoredAction {
+                        action: act(*c),
+                        value: sign * v,
+                        option: labels.contains_key(&opt(*c)).then(|| opt(*c)),
+                        in_pool: true,
+                        class: TopClassName::InPool,
+                        opponent_charge: 0.0,
+                    })
+                    .collect(),
+                own_in_pool: own.map(|o| (act(o), true)).into_iter().collect(),
+                top_line: None,
+                unknown_r_kept: 0,
+            })
+            .collect(),
+        unlabelled_rows: Vec::new(),
+        r_labels: Vec::new(),
+        reveal: RevealRead::default(),
+    }
+}
+
+/// c0 is the `never`; every other champion is a `play`.
+const LABELS: [(u8, Label); 6] = [
+    (0, Label::Never),
+    (1, Label::Play),
+    (2, Label::Play),
+    (3, Label::Play),
+    (4, Label::Play),
+    (5, Label::Play),
+];
+
+/// The `never` first: `never@1` and `never@3`. The own pick c2 is at rank 2.
+const BAD_C2_AT_2: [(u8, f64); 6] = [(0, 1.0), (2, 0.5), (1, 0.4), (3, 0.3), (4, 0.2), (5, 0.1)];
+/// The `never` first again; the own pick at rank 5.
+const BAD_C2_AT_5: [(u8, f64); 6] = [(0, 1.0), (1, 0.5), (3, 0.4), (4, 0.3), (2, 0.2), (5, 0.1)];
+/// Three plays above the `never`; the own pick at rank 5 (out of the top 3).
+const GOOD_C2_AT_5: [(u8, f64); 6] = [(1, 1.0), (3, 0.9), (4, 0.8), (5, 0.7), (2, 0.6), (0, 0.1)];
+/// Three plays above the `never`; the own pick at rank 2.
+const GOOD_C2_AT_2: [(u8, f64); 6] = [(1, 1.0), (2, 0.9), (3, 0.8), (4, 0.7), (5, 0.6), (0, 0.1)];
+
+const ARM_A: &str = "roster:0.1:0.05";
+const ARM_B: &str = "roster:0.15:0.05";
+
+fn specs_ab() -> Vec<ArmSpec> {
+    vec![roster_spec(0.1, 0.05), roster_spec(0.15, 0.05)]
+}
+
+fn refs(ps: &[PositionInput]) -> Vec<&PositionInput> {
+    ps.iter().collect()
+}
+
+/// The rule reads the blind fold, not the current one: the label of c0 is `never` blind and `play`
+/// current, so arm A (the `never` first) has `never@1` on the rule's fold and not on the current one,
+/// and the rule picks B; the second line, on the current fold, keeps the reference arm A and is
+/// flagged.
+/// Kills: reading the current fold for the rule; a second line that is the first.
+#[test]
+fn the_rule_reads_the_blind_fold_not_the_current_one() {
+    for mover in [Side::Blue, Side::Red] {
+        let mut p = rpos(
+            "p",
+            "d",
+            mover,
+            None,
+            &LABELS,
+            None,
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        );
+        p.current.labels.insert(opt(0), Label::Play);
+        let ps = [p];
+        let arms = read_arms(&refs(&ps), &specs_ab(), FoldKind::Rule, 0.01);
+        assert_eq!(arms[0].all.never[0], 1, "{mover:?}");
+        let current = read_arms(&refs(&ps), &specs_ab(), FoldKind::Current, 0.01);
+        assert_eq!(current[0].all.never[0], 0, "{mover:?}");
+        let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+        assert_eq!(read.rule.pick.as_deref(), Some(ARM_B), "{mover:?}");
+        assert_eq!(
+            read.second_line.outcome.pick.as_deref(),
+            Some(ARM_A),
+            "{mover:?}"
+        );
+        assert!(read.second_line.differs, "{mover:?}");
+    }
+}
+
+/// Folds that agree give a second line that is not flagged, and the fallback counts add up.
+/// Kills: a flag that is always on.
+#[test]
+fn the_second_line_is_flagged_only_when_the_pick_differs() {
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        None,
+        &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+    );
+    p.label_fallbacks = 2;
+    p.pick_fallback = true;
+    let q = rpos(
+        "q",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        None,
+        &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+    );
+    let ps = [p, q];
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    assert!(!read.second_line.differs);
+    assert_eq!(read.second_line.outcome.pick, read.rule.pick);
+    assert_eq!((read.fallbacks.labels, read.fallbacks.picks), (2, 1));
+}
+
+/// Codex's case at a position with arms A and B: A reads `[N 1.000, U 0.995, P 0.800]` (certain at k = 3,
+/// unjudged at k = 1) and so looks best on `never@1` (0) but is not readable; B (all labelled, with a
+/// `never@1` of one) is the only readable arm and is picked.
+/// Kills: `readable` reading only `unjudged@3`.
+#[test]
+fn an_arm_unjudged_at_one_and_certain_at_three_is_not_readable() {
+    let labels = [(0, Label::Never), (2, Label::Play), (3, Label::Play)];
+    let p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &labels,
+        None,
+        &[
+            (ARM_A, &[(0, 1.0), (1, 0.995), (2, 0.8)]),
+            (ARM_B, &[(0, 1.0), (2, 0.5), (3, 0.4)]),
+        ],
+    );
+    let ps = [p];
+    let arms = read_arms(&refs(&ps), &specs_ab(), FoldKind::Rule, 0.01);
+    assert_eq!(arms[0].all.unjudged, [1, 0, 0, 0]);
+    assert_eq!(arms[0].all.never, [0, 1, 1, 1]);
+    assert!(!arms[0].readable());
+    assert!(arms[1].readable());
+    let out = choose_arm(&arms, ARM_A);
+    assert_eq!((out.readable, out.pick.as_deref()), (1, Some(ARM_B)));
+}
+
+/// Never selectable: a floor row and `pool_or_roster` read the same positions through the same seam,
+/// and are never picked even where they read best.
+/// Kills: a floor row or `pool_or_roster` chosen by the rule; floor rows left unscored.
+#[test]
+fn a_floor_row_is_scored_through_the_seam_and_never_selected() {
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        None,
+        &[
+            (ARM_A, &BAD_C2_AT_2),
+            (ARM_B, &BAD_C2_AT_2),
+            ("pool_or_roster", &GOOD_C2_AT_2),
+        ],
+    );
+    let mut floor = p.arms[2].clone();
+    floor.id = "floor:0.25".to_string();
+    p.arms.push(floor);
+    let mut specs = specs_ab();
+    specs.push(ArmSpec {
+        id: "pool_or_roster".to_string(),
+        role: ArmRole::PoolOrRoster,
+        p: None,
+        q: None,
+    });
+    specs.push(ArmSpec {
+        id: "floor:0.25".to_string(),
+        role: ArmRole::Floor,
+        p: None,
+        q: None,
+    });
+    let ps = [p];
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    // A good ranking: the `never` is last, clear only at k = 10.
+    assert_eq!(
+        read.arms[3].all.never,
+        [0, 0, 0, 1],
+        "the floor row is scored"
+    );
+    assert_eq!(read.arms[3].all.never, read.arms[2].all.never);
+    assert_eq!(read.arms[3].all.speaking, 1);
+    assert_eq!(read.rule.readable, 2);
+    assert_eq!(read.rule.roster_arms, 2);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
+}
+
+/// The receipt says what the move does, from the reference to the pick: `never@1 2 -> 0`, `pick@3 2 ->
+/// 2`, and names own picks that leave the top 3 (p1) and enter it (p2), with the position whose depth
+/// check did not hold (p1) counted apart from the rest.
+/// Kills: from and to swapped; the leaving set not named; the unstable split mixed into the rest.
+#[test]
+fn the_receipt_reads_from_the_reference_to_the_pick() {
+    for mover in [Side::Blue, Side::Red] {
+        let mk = |id: &str, stable, a: &[(u8, f64)], b: &[(u8, f64)]| {
+            rpos(
+                id,
+                "d",
+                mover,
+                stable,
+                &LABELS,
+                Some(2),
+                &[(ARM_A, a), (ARM_B, b)],
+            )
+        };
+        let ps = [
+            mk("p1", Some(false), &BAD_C2_AT_2, &GOOD_C2_AT_5),
+            mk("p2", Some(true), &BAD_C2_AT_5, &GOOD_C2_AT_2),
+            mk("p3", None, &GOOD_C2_AT_2, &GOOD_C2_AT_2),
+        ];
+        let arms = read_arms(&refs(&ps), &specs_ab(), FoldKind::Rule, 0.01);
+        let out = choose_arm(&arms, ARM_A);
+        assert_eq!(out.pick.as_deref(), Some(ARM_B), "{mover:?}");
+        let r = out.receipt.expect("a pick has a receipt");
+        assert_eq!((r.reference.as_str(), r.pick.as_str()), (ARM_A, ARM_B));
+        assert_eq!((r.from.never[0], r.to.never[0]), (2, 0), "{mover:?}");
+        assert_eq!((r.from.never[1], r.to.never[1]), (2, 0), "{mover:?}");
+        assert_eq!((r.from.pick[1], r.to.pick[1]), (2, 2), "{mover:?}");
+        assert_eq!(r.leaves_top_3, ["p1"], "{mover:?}");
+        assert_eq!(r.enters_top_3, ["p2"], "{mover:?}");
+        assert_eq!(r.unstable.positions, ["p1"]);
+        assert_eq!((r.unstable.from.never[0], r.unstable.to.never[0]), (1, 0));
+        assert_eq!(r.stable.positions, ["p2", "p3"]);
+        assert_eq!((r.stable.from.never[0], r.stable.to.never[0]), (1, 0));
+        assert_eq!((r.stable.from.pick[1], r.stable.to.pick[1]), (1, 2));
+    }
+}
+
+/// The sensitivity line re-scores at the two other margins. Arm A has `[N 1.000, P 0.993, ...]`: at
+/// 0.02 and the run's 0.01 the play is inside the margin (no clear `never@1`, A keeps the more
+/// `pick@3`); at 0.005 it is outside and A has a clear `never@1`, so B wins. The pick at 0.005 is not
+/// the pick at 0.02, and the order of the list is (0.005, 0.02).
+/// Kills: sensitivity re-using the main scoring; the margins swapped or ignored.
+#[test]
+fn sensitivity_re_scores_at_the_other_margins() {
+    let a: &[(u8, f64)] = &[(0, 1.0), (1, 0.993), (2, 0.5), (3, 0.4), (4, 0.3), (5, 0.2)];
+    let b: &[(u8, f64)] = &[(1, 1.0), (0, 0.9), (3, 0.8), (4, 0.7), (2, 0.6), (5, 0.5)];
+    let ps = [rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, a), (ARM_B, b)],
+    )];
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
+    assert_eq!(
+        read.sensitivity.margins,
+        [
+            (0.005, Some(ARM_B.to_string())),
+            (0.02, Some(ARM_A.to_string()))
+        ]
+    );
+}
+
+/// Leave-one-draft-out re-sums without that draft: A has the `never` first at d1, B at d2 and d3, so on
+/// the whole A wins 1 to 2; without d1 A wins on 0 to 2; without d2 (or d3) they tie at 1 and the
+/// reference arm (B) is kept. The drafts are listed in order.
+/// Kills: a leave-out that keeps the draft; the reference not kept on the tie.
+#[test]
+fn sensitivity_leaves_each_draft_out_in_turn() {
+    let good = &GOOD_C2_AT_2[..];
+    let bad = &BAD_C2_AT_2[..];
+    let mk = |id: &str, draft: &str, a: &[(u8, f64)], b: &[(u8, f64)]| {
+        rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            None,
+            &[(ARM_A, a), (ARM_B, b)],
+        )
+    };
+    let ps = [
+        mk("p1", "d1", bad, good),
+        mk("p2", "d2", good, bad),
+        mk("p3", "d3", good, bad),
+    ];
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_B, 0.01);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
+    assert_eq!(
+        read.sensitivity.leave_out,
+        [
+            ("d1".to_string(), Some(ARM_A.to_string())),
+            ("d2".to_string(), Some(ARM_B.to_string())),
+            ("d3".to_string(), Some(ARM_B.to_string())),
+        ]
+    );
+}
+
+/// With no readable arm the worklist names what is left: the unlabelled rows per position, and the #1
+/// lines (at the reference arm here) with no verdict.
+/// Kills: a worklist that is empty without a pick.
+#[test]
+fn no_readable_arm_names_the_worklist() {
+    let labels = [(0, Label::Never), (2, Label::Play)];
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &labels,
+        None,
+        &[
+            (ARM_A, &[(0, 1.0), (1, 0.995), (2, 0.8)]),
+            (ARM_B, &[(1, 1.0), (2, 0.5)]),
+        ],
+    );
+    p.unlabelled_rows = vec!["c1".to_string(), "c7".to_string()];
+    p.arms[0].top_line = Some(TopLine {
+        option: opt(0),
+        option_id: "c0".to_string(),
+        line: "Zyra > Karma+Lulu".to_string(),
+    });
+    let ps = [p];
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    assert_eq!(read.rule.readable, 0);
+    assert!(read.rule.pick.is_none());
+    assert_eq!(
+        read.worklist.unlabelled_rows,
+        [("p".to_string(), vec!["c1".to_string(), "c7".to_string()])]
+    );
+    assert_eq!(read.worklist.lines_at.as_deref(), Some(ARM_A));
+    assert_eq!(read.worklist.unjudged_lines.len(), 1);
+    assert_eq!(read.worklist.unjudged_lines[0].line, "Zyra > Karma+Lulu");
+}
+
+/// `bad_line@1` is "bad of judged", keyed by the exact (option, line): a #1 whose line has a verdict
+/// counts judged (and bad when `ok` is false); the same line on another option, or another line on the
+/// same option, is unjudged and reads as such, not as a good line; the canonical text sorts each turn's
+/// champions, so a pair written in the other order still matches.
+/// Kills: a bad count that treats unjudged as good; a match on the line alone or the option alone.
+#[test]
+fn bad_line_reads_bad_of_judged_by_option_and_line() {
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        None,
+        &[
+            (ARM_A, &GOOD_C2_AT_2),
+            (ARM_B, &GOOD_C2_AT_2),
+            ("third", &GOOD_C2_AT_2),
+            ("fourth", &GOOD_C2_AT_2),
+        ],
+    );
+    let top = |option: u8, line: &str| {
+        Some(TopLine {
+            option: opt(option),
+            option_id: format!("c{option}"),
+            line: line.to_string(),
+        })
+    };
+    p.lines
+        .insert((opt(1), canonical_line("Lulu+Karma > Zyra")), false);
+    p.arms[0].top_line = top(
+        1,
+        &line_text(&[vec!["Lulu".into(), "Karma".into()], vec!["Zyra".into()]]),
+    );
+    p.arms[1].top_line = top(1, "Zyra");
+    p.arms[2].top_line = top(2, "Karma+Lulu > Zyra");
+    let mut specs = specs_ab();
+    for id in ["third", "fourth"] {
+        specs.push(roster_spec(0.2, if id == "third" { 0.1 } else { 0.2 }));
+        specs.last_mut().expect("just pushed").id = id.to_string();
+    }
+    let ps = [p];
+    let arms = read_arms(&refs(&ps), &specs, FoldKind::Rule, 0.01);
+    assert_eq!(arms[0].rows[0].line, LineState::Bad);
+    assert_eq!(
+        (
+            arms[0].all.bad_line,
+            arms[0].all.judged_line,
+            arms[0].all.unjudged_line
+        ),
+        (1, 1, 0)
+    );
+    assert_eq!(
+        arms[1].rows[0].line,
+        LineState::Unjudged,
+        "another line, the same option"
+    );
+    assert_eq!(
+        (
+            arms[1].all.bad_line,
+            arms[1].all.judged_line,
+            arms[1].all.unjudged_line
+        ),
+        (0, 0, 1)
+    );
+    assert_eq!(
+        arms[2].rows[0].line,
+        LineState::Unjudged,
+        "the same line, another option"
+    );
+    assert_eq!(arms[3].rows[0].line, LineState::None, "no #1 line read");
+    assert_eq!(canonical_line("Lulu+Karma > Zyra"), "Karma+Lulu > Zyra");
+    assert_eq!(canonical_line(""), "");
+    assert_eq!(line_text(&[]), "");
+}
+
+/// `never_everywhere` names the positions with a clear `never` at #1 at every readable arm; an
+/// unreadable arm does not count, and with no readable arm it is empty.
+/// Kills: reading any arm instead of every one; counting unreadable arms.
+#[test]
+fn never_everywhere_needs_every_readable_arm() {
+    let mk = |id: &str, a: &[(u8, f64)], b: &[(u8, f64)], c: &[(u8, f64)]| {
+        rpos(
+            id,
+            "d",
+            Side::Blue,
+            None,
+            &LABELS,
+            None,
+            &[(ARM_A, a), (ARM_B, b), ("roster:0.2:0.05", c)],
+        )
+    };
+    let bad = &BAD_C2_AT_2[..];
+    let good = &GOOD_C2_AT_2[..];
+    let ps = [
+        mk("stuck", bad, bad, bad),
+        mk("fixable", bad, bad, good),
+        mk("fine", good, good, good),
+    ];
+    let mut specs = specs_ab();
+    specs.push(roster_spec(0.2, 0.05));
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    assert_eq!(read.never_everywhere, ["stuck"]);
+    // An arm that is not readable (a silent position) does not hold `fixable` back.
+    let mut quiet = mk("fine", good, good, &[]);
+    quiet.id = "fine".to_string();
+    let ps = [
+        mk("stuck", bad, bad, bad),
+        mk("fixable", bad, bad, bad),
+        quiet,
+    ];
+    let read = read_run(&refs(&ps), &specs, ARM_A, 0.01);
+    assert_eq!(read.never_everywhere, ["stuck", "fixable"]);
+    // No readable arm, no list.
+    let ps = [mk("only", bad, bad, &[])];
+    let read = read_run(&refs(&ps), &[roster_spec(0.2, 0.05)], ARM_A, 0.01);
+    assert!(read.never_everywhere.is_empty());
+}
+
+/// `r_by_label`'s buckets and their edges: below 0.1, below 0.25, below 0.5, below 1, exactly 1,
+/// unknown; the counts add per label in the order play, maybe, never.
+/// Kills: a boundary off by one bucket; unknown folded into a bucket.
+#[test]
+fn r_by_label_buckets_and_sums() {
+    assert_eq!(RBucket::of(Some(0.0999)), RBucket::Below10);
+    assert_eq!(RBucket::of(Some(0.1)), RBucket::Below25);
+    assert_eq!(RBucket::of(Some(0.2499)), RBucket::Below25);
+    assert_eq!(RBucket::of(Some(0.25)), RBucket::Below50);
+    assert_eq!(RBucket::of(Some(0.5)), RBucket::Below100);
+    assert_eq!(RBucket::of(Some(0.9999)), RBucket::Below100);
+    assert_eq!(RBucket::of(Some(1.0)), RBucket::One);
+    assert_eq!(RBucket::of(None), RBucket::Unknown);
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        None,
+        &[(ARM_A, &GOOD_C2_AT_2)],
+    );
+    p.r_labels = vec![
+        (RBucket::Below25, Label::Never),
+        (RBucket::Below25, Label::Never),
+        (RBucket::Below25, Label::Play),
+        (RBucket::Unknown, Label::Maybe),
+        (RBucket::One, Label::Play),
+    ];
+    let ps = [p];
+    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01);
+    assert_eq!(read.r_by_label.counts[1], [1, 0, 2]);
+    assert_eq!(read.r_by_label.counts[5], [0, 1, 0]);
+    assert_eq!(read.r_by_label.counts[4], [1, 0, 0]);
+    assert_eq!(read.r_by_label.counts[0], [0, 0, 0]);
+}
+
+/// `reveal_changes` lists the labels and own picks that differ between the folds over those given
+/// blind, and the revealed drafts where nothing changed; a draft never revealed is in neither list.
+/// Kills: counting an unrevealed draft; a changed label read as no change.
+#[test]
+fn reveal_changes_lists_differences_and_quiet_reveals() {
+    let mk = |id: &str, draft: &str, revealed: bool| {
+        let mut p = rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            None,
+            &[(ARM_A, &GOOD_C2_AT_2)],
+        );
+        p.reveal = RevealRead {
+            revealed,
+            blind_labels: 3,
+            blind_pick: true,
+            ..RevealRead::default()
+        };
+        p
+    };
+    let mut changed = mk("a1", "d1", true);
+    changed.reveal.label_changes = vec![LabelChange {
+        option: "c1".to_string(),
+        blind: Label::Never,
+        current: Label::Play,
+    }];
+    let mut picked = mk("a2", "d1", false);
+    picked.reveal.pick_change = Some(PickChange {
+        blind: Some("c2".to_string()),
+        current: None,
+    });
+    let ps = [changed, picked, mk("b1", "d2", true), mk("c1", "d3", false)];
+    let read = read_run(&refs(&ps), &[roster_spec(0.1, 0.05)], ARM_A, 0.01);
+    let rc = &read.reveal_changes;
+    assert_eq!(rc.labels.len(), 1);
+    assert_eq!(rc.picks.len(), 1);
+    assert_eq!((rc.blind_labels, rc.blind_picks), (12, 4));
+    assert_eq!(rc.drafts_revealed, ["d1", "d2"]);
+    assert_eq!(rc.reveals_without_change, ["d2"]);
+}
+
+// ---- Task 10: the runner's half --------------------------------------------------------------------
+
+/// The opponent's charge is its off-pool count x P plus its grade x Q/100, for the right side, and
+/// never carries the infeasibility band: an infeasible end (whose `L'` is in the value) charges the
+/// same as a feasible one with the same counts.
+/// Kills: a band folded into the charge; Blue's counts read for a Blue mover; Q read as per unit
+/// instead of per 100.
+#[test]
+fn the_opponent_charge_leaves_the_infeasibility_band_out() {
+    let end = |red_feasible| LeafEnd {
+        kind: LeafKind::Horizon,
+        blue_feasible: true,
+        red_feasible,
+        blue_off_pool: 1,
+        red_off_pool: 2,
+        blue_grade: 30,
+        red_grade: 150,
+    };
+    let price = Price::of(0.1, 0.05);
+    let red_side = 2.0 * 0.1 + 150.0 * 0.0005;
+    assert!((opponent_charge(&end(true), Side::Blue, price) - red_side).abs() < 1e-12);
+    assert_eq!(
+        opponent_charge(&end(false), Side::Blue, price),
+        opponent_charge(&end(true), Side::Blue, price),
+        "an infeasible end charges its counts only"
+    );
+    assert!(opponent_charge(&end(false), Side::Blue, price) < 1.0);
+    let blue_side = 1.0 * 0.1 + 30.0 * 0.0005;
+    assert!((opponent_charge(&end(true), Side::Red, price) - blue_side).abs() < 1e-12);
+    assert_eq!(opponent_charge(&end(true), Side::Blue, Price::ZERO), 0.0);
+}
+
+/// The labelled position's ranking at one input, as the ids of the entries that resolved an option.
+fn resolved_ids(a: &ArmInput, u: &Universe) -> BTreeSet<String> {
+    a.ranking
+        .iter()
+        .filter_map(|e| e.option.as_ref().map(|k| k.id(u)))
+        .collect()
+}
+
+/// What the rule reads is the whole ranking, kept before the catalog prunes anything: at every arm the
+/// ranking holds every searched action (the rows are a tenth of it), `option` is resolved for the three
+/// labelled options (the arrangement at that arm's price gives the labelled comp), and the floor rows
+/// follow the arms.
+/// Kills: a ranking pruned to the catalog's rows; a trace that resolves no option; arms and floor rows
+/// out of order.
+#[test]
+fn the_rule_reads_every_arms_whole_ranking_with_its_options_resolved() {
+    let live = live();
+    let run = run_of(&[labelled()], &review_config(), &live);
+    let p = &run.positions[0];
+    let ids: Vec<&str> = p.scoring.arms.iter().map(|a| a.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "pool_or_roster",
+            "roster:0.02:0",
+            "roster:0.1:0",
+            "roster:0.02:0.05",
+            "roster:0.1:0.05",
+            "floor:0.1",
+            "floor:0.25"
+        ]
+    );
+    let labelled_ids: BTreeSet<String> = [OPT_A, OPT_B, OPT_C].map(String::from).into();
+    for reading in &p.readings {
+        let input = p
+            .scoring
+            .arms
+            .iter()
+            .find(|a| a.id == reading.arm)
+            .expect("an input per arm");
+        assert!(input.speaks);
+        assert_eq!(
+            Some(input.ranking.len()),
+            reading.searched,
+            "{}",
+            reading.arm
+        );
+        assert!(
+            input.ranking.len() > 10 * reading.ranked.len(),
+            "{}",
+            reading.arm
+        );
+        assert_eq!(
+            resolved_ids(input, &live.universe),
+            labelled_ids,
+            "{}",
+            reading.arm
+        );
+    }
+    assert!(p.scoring.arms[5..].iter().all(|a| a.speaks));
+}
+
+/// A label whose comp differs from the arm's arrangement reads unlabelled at every arm (the fail-safe):
+/// with option A's comp written the other way round, no entry of that action resolves an option at any
+/// arm, while B and C still do.
+/// Kills: a label carried to another arrangement; the action matched without its comp.
+#[test]
+fn an_arrangement_that_differs_from_the_labelled_comp_reads_unlabelled_in_the_rule() {
+    let live = live();
+    let swapped = "Galio+MonkeyKing|top=Rumble,jungle=Galio,mid=MonkeyKing";
+    let mut file = labelled();
+    rename_label(&mut file, 0, OPT_A, swapped);
+    let run = run_of(&[file], &review_config(), &live);
+    let p = &run.positions[0];
+    let wanted: BTreeSet<String> = [OPT_B, OPT_C].map(String::from).into();
+    for a in &p.scoring.arms {
+        assert_eq!(resolved_ids(a, &live.universe), wanted, "{}", a.id);
+    }
+    // The label itself is in the rule's labels as written; no ranked entry resolves to it (above).
+    let original = loaded(&labelled(), &live);
+    let (root, picks) = root_and_picks(&original.fixture, &live.universe);
+    let key =
+        OptionKey::parse(swapped, root, &picks, &live.universe).expect("the swapped id parses");
+    assert!(p.scoring.rule.labels.contains_key(&key));
+}
+
+/// The rule's fold is blind with a per-option fallback to current, and counts the fallbacks: the labelled
+/// position holds B `never` blind and `maybe` after, and C `play` only after, so the rule reads B `never`
+/// and C `play` (one fallback) while the current fold reads B `maybe`; the reveal record lists the one
+/// change over the two blind labels.
+/// Kills: the rule fold reading the current labels; no fallback to current; an uncounted fallback.
+#[test]
+fn the_rule_fold_is_blind_with_a_counted_fallback_to_current() {
+    let live = live();
+    let run = run_of(&[labelled()], &review_config(), &live);
+    let sc = &run.positions[0].scoring;
+    let u = &live.universe;
+    let by_id = |m: &HashMap<OptionKey, Label>| -> HashMap<String, Label> {
+        m.iter().map(|(k, v)| (k.id(u), *v)).collect()
+    };
+    let rule = by_id(&sc.rule.labels);
+    let current = by_id(&sc.current.labels);
+    assert_eq!(rule[OPT_A], Label::Play);
+    assert_eq!(rule[OPT_B], Label::Never);
+    assert_eq!(rule[OPT_C], Label::Play);
+    assert_eq!(current[OPT_B], Label::Maybe);
+    assert_eq!(sc.label_fallbacks, 1);
+    assert!(!sc.pick_fallback);
+    assert_eq!(
+        sc.rule.own_pick,
+        Some(pick_of(&live, "MonkeyKing", "Galio"))
+    );
+    assert!(sc.reveal.revealed);
+    assert_eq!(sc.reveal.blind_labels, 2);
+    assert_eq!(
+        sc.reveal.label_changes,
+        [LabelChange {
+            option: OPT_B.to_string(),
+            blind: Label::Never,
+            current: Label::Maybe
+        }]
+    );
+    assert!(sc.reveal.pick_change.is_none());
+    assert_eq!(run.read.fallbacks.labels, 1);
+    // Unlabelled rows: every row not in the rule fold, none that is.
+    let p = normalised(&run)["positions"][0].clone();
+    let rows: BTreeSet<String> = p["options"]
+        .as_object()
+        .expect("options")
+        .iter()
+        .filter(|(_, o)| o["row"] == true)
+        .map(|(id, _)| id.clone())
+        .filter(|id| !rule.contains_key(id))
+        .collect();
+    assert_eq!(
+        sc.unlabelled_rows.iter().cloned().collect::<BTreeSet<_>>(),
+        rows
+    );
+    assert!(!rows.is_empty());
+    // No arm is readable on this corpus (every #1 is unlabelled), and the worklist says what is left.
+    assert_eq!(run.read.rule.readable, 0);
+    assert_eq!(run.read.worklist.unlabelled_rows.len(), 1);
+    assert_eq!(run.read.worklist.lines_at.as_deref(), Some(REFERENCE_ARM));
+    assert_eq!(run.read.worklist.unjudged_lines.len(), 1);
+}
+
+/// The 09-29 supp-17 position, small: the reference arm and `pool_or_roster` only.
+fn supp_config() -> ReviewConfig {
+    ReviewConfig {
+        ps: vec![0.1],
+        qs: vec![0.05],
+        ..review_config()
+    }
+}
+
+fn supp_17() -> Value {
+    review_data("unlabelled/2026-09-29-supp-pinch-slot-17-dme.json")
+}
+
+/// The opponent's charge in the rankings the rule reads is its off-pool count x P plus its grade x Q/100
+/// at the arm's price, for every ranked action, the rows whose leaf ends are infeasible included (45 of
+/// them here, whose band is in the value, about 1 here, and not in the charge).
+/// Kills: the band left in the charge; a charge at the wrong price; the wrong side's counts.
+#[test]
+fn the_runner_charges_the_opponent_its_counts_and_leaves_the_band_out() {
+    let live = live();
+    let run = run_of(&[supp_17()], &supp_config(), &live);
+    let p = &run.positions[0];
+    let (mut checked, mut infeasible) = (0, 0);
+    for reading in &p.readings {
+        let (pp, q) = match reading.arm.as_str() {
+            "pool_or_roster" => (live.universe.off_pool_cost(), 0.0),
+            REFERENCE_ARM => (0.1, 0.05),
+            other => panic!("{other}"),
+        };
+        let input = p
+            .scoring
+            .arms
+            .iter()
+            .find(|a| a.id == reading.arm)
+            .expect("an input per arm");
+        for row in &reading.ranked {
+            let action = &p.options[&row.option].action;
+            let entry = input
+                .ranking
+                .iter()
+                .find(|e| {
+                    let ids: Vec<String> = e
+                        .action
+                        .champions()
+                        .map(|c| live.universe.id(c).to_string())
+                        .collect();
+                    &ids == action && e.value == row.value
+                })
+                .expect("the row's action is in the whole ranking");
+            // The mover is Blue: the opponent is Red.
+            let expected =
+                row.ends.red_off_pool as f64 * pp + row.ends.red_grade as f64 * q / 100.0;
+            assert!(
+                (entry.opponent_charge - expected).abs() < 1e-12,
+                "{} {action:?}: {} vs {expected}",
+                reading.arm,
+                entry.opponent_charge
+            );
+            checked += 1;
+            infeasible += usize::from(!row.ends.red_feasible || !row.ends.blue_feasible);
+        }
+    }
+    assert!(checked > 20);
+    assert!(infeasible > 0, "the test must include infeasible ends");
+    for a in &p.scoring.arms {
+        assert!(a
+            .ranking
+            .iter()
+            .all(|e| (0.0..1.0).contains(&e.opponent_charge)));
+    }
+}
+
+const F5: &str = "Syndra+Ziggs|top=Camille,jungle=LeeSin,mid=Syndra,adc=Ziggs,support=Galio";
+
+/// The floor rows trace every action of the reference ranking, so a moved locked pick counts: at the
+/// reference arm the #1 is `Syndra+Ziggs` with the locked Galio moved to support (r 0.176, the only
+/// off-pool placement, the action's own champions in-pool), so a floor that read the action's own
+/// placements would keep it at both cut-offs. The 0.10 floor keeps it (0.176 is above) and the 0.25
+/// floor removes it; each floor's ranking is the reference's with options removed, in the same order,
+/// and the 0.25 floor is shorter than the 0.10 one.
+/// Kills: a floor that ignores locked picks; a floor read from the action's placements alone; the
+/// wrong cut-off; a reordered ranking.
+#[test]
+fn the_floor_rows_remove_an_option_that_moves_a_locked_pick() {
+    let live = live();
+    let run = run_of(&[supp_17()], &supp_config(), &live);
+    let p = &run.positions[0];
+    let side = &p.options[F5].side;
+    let off_pool: Vec<(&str, bool)> = side
+        .iter()
+        .filter(|s| !s.in_pool)
+        .map(|s| (s.champion.as_str(), s.locked))
+        .collect();
+    assert_eq!(
+        off_pool,
+        [("Galio", true)],
+        "the only off-pool placement is the moved locked pick"
+    );
+    let r = side
+        .iter()
+        .find(|s| s.champion == "Galio")
+        .and_then(|s| s.r)
+        .expect("a known r");
+    assert!(r > 0.10 && r < 0.25, "{r}");
+    let input = |id: &str| p.scoring.arms.iter().find(|a| a.id == id).expect(id);
+    let (reference, f10, f25) = (
+        input(REFERENCE_ARM),
+        input("floor:0.1"),
+        input("floor:0.25"),
+    );
+    let first = |a: &ArmInput| a.top_line.as_ref().map(|t| t.option_id.clone());
+    assert_eq!(first(reference).as_deref(), Some(F5));
+    assert_eq!(first(f10).as_deref(), Some(F5));
+    assert_ne!(first(f25).as_deref(), Some(F5));
+    assert!(reference.ranking.len() > f10.ranking.len());
+    assert!(f10.ranking.len() > f25.ranking.len());
+    // Each floor is a subsequence of the reference ranking.
+    for f in [f10, f25] {
+        let mut at = reference.ranking.iter().map(|e| e.action);
+        assert!(
+            f.ranking.iter().all(|e| at.any(|a| a == e.action)),
+            "{}",
+            f.id
+        );
+        assert!(f.speaks);
+        assert_eq!(f.unknown_r_kept, 0);
+    }
+    // A floor is scored through the seam: it has a row in the read.
+    let read = &run.read;
+    assert_eq!(read.arms.len(), 4);
+    assert_eq!(read.arms[3].spec.id, "floor:0.25");
+    assert_eq!(read.arms[3].spec.role, ArmRole::Floor);
+    assert_eq!(read.arms[3].all.speaking, 1);
+}
+
+/// An option with exactly one off-pool placement is read in `r_by_label` by that placement's share
+/// ratio: labelling `Syndra+Ziggs` (the moved locked Galio, r 0.176) `never` puts one `never` in the 0.1
+/// to 0.25 bucket, and an in-pool option labelled alongside is in no bucket.
+/// Kills: counting options with other than one off-pool placement; a locked pick left out; the wrong
+/// bucket.
+#[test]
+fn r_by_label_reads_the_single_off_pool_placement() {
+    let live = live();
+    let mut file = supp_17();
+    let mut entry = labelled()["verdicts"][0].clone();
+    entry
+        .as_object_mut()
+        .expect("an entry")
+        .remove("would_pick");
+    entry["labels"] = json!({F5: "never"});
+    file["verdicts"] = json!([entry]);
+    let run = run_of(&[file], &supp_config(), &live);
+    let sc = &run.positions[0].scoring;
+    assert_eq!(sc.r_labels, [(RBucket::Below25, Label::Never)]);
+    assert_eq!(run.read.r_by_label.counts[1], [0, 0, 1]);
+    assert_eq!(
+        run.read.r_by_label.counts.iter().flatten().sum::<usize>(),
+        1
+    );
+}
+
+/// The second line reads the current fold's own pick as well as its labels: the rule's own pick is c2
+/// (in the top 3 at A, out at B) and the current fold's is c5 (the other way round), so the rule keeps A
+/// and the second line picks B.
+/// Kills: a second line that reads the rule fold's own pick.
+#[test]
+fn the_second_line_reads_the_current_folds_own_pick() {
+    let b: &[(u8, f64)] = &[(1, 1.0), (5, 0.9), (3, 0.8), (4, 0.7), (2, 0.6), (0, 0.1)];
+    let mut p = rpos(
+        "p",
+        "d",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, &GOOD_C2_AT_2), (ARM_B, b)],
+    );
+    p.current.own_pick = Some(act(5));
+    p.arms[0].own_in_pool.push((act(5), true));
+    p.arms[1].own_in_pool.push((act(5), true));
+    let ps = [p];
+    let read = read_run(&refs(&ps), &specs_ab(), ARM_A, 0.01);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_A));
+    assert_eq!(read.second_line.outcome.pick.as_deref(), Some(ARM_B));
+    assert!(read.second_line.differs);
+}
+
+fn sp(champion: u8, in_pool: bool, locked: bool) -> SidePlacement {
+    SidePlacement {
+        champion: ChampionIdx(champion),
+        role: Role::Top,
+        grade: 0,
+        in_pool,
+        locked,
+    }
+}
+
+/// A floor keeps an option whose off-pool placement has unknown r, and counts it; removes one whose
+/// known r is below the cut (a locked placement too); keeps one whose r is at the cut. When it removes
+/// every option the floor row does not speak, so the position is not read as a clean one.
+/// Kills: unknown r removed; unknown r uncounted; the cut inclusive; an emptied floor that speaks.
+#[test]
+fn a_floor_keeps_and_counts_unknown_r_and_an_emptied_floor_does_not_speak() {
+    let r_of = |p: &SidePlacement| match p.champion.0 {
+        1 => Some(0.05),
+        2 => Some(0.25),
+        _ => None,
+    };
+    let sides = vec![
+        vec![sp(0, true, false)],                      // all in-pool: kept
+        vec![sp(1, false, true)],                      // locked, r 0.05: removed
+        vec![sp(2, false, false)],                     // r 0.25: kept at 0.25
+        vec![sp(3, false, false)],                     // unknown r: kept, counted
+        vec![sp(3, false, false), sp(1, false, true)], // unknown and low: removed, not counted
+    ];
+    assert_eq!(floor_keep(&sides, 0.25, r_of), (vec![0, 2, 3], 1));
+    assert_eq!(floor_keep(&sides, 0.03, r_of), (vec![0, 1, 2, 3, 4], 2));
+    let all_low = vec![
+        vec![sp(1, false, true)],
+        vec![sp(1, false, true), sp(0, true, false)],
+    ];
+    assert_eq!(floor_keep(&all_low, 0.25, r_of), (vec![], 0));
+}
+
+/// An own pick first given after the reveal (the blind entry has none) is read by the rule through the
+/// fallback and counted: the position counts in the reference arm's `pick` on the rule's fold and
+/// `fallbacks.picks` says 1. A blind "no view" stays no view with no fallback; a "no view" given only
+/// after is counted but reads no pick.
+/// Kills: the rule fold dropping a pick given only after the reveal; an uncounted fallback.
+#[test]
+fn an_own_pick_first_given_after_the_reveal_is_read_and_counted() {
+    let live = live();
+    let pick = json!(["MonkeyKing", "Galio"]);
+    let run_with = |blind_pick: Option<Value>, scored_pick: Value| {
+        let mut file = labelled();
+        let blind = file["verdicts"][0].as_object_mut().expect("entry");
+        blind.remove("would_pick");
+        if let Some(b) = blind_pick {
+            blind.insert("would_pick".to_string(), b);
+        }
+        file["verdicts"][1]["would_pick"] = scored_pick;
+        run_of(&[file], &review_config(), &live)
+    };
+    let with_reference = |run: &ReviewRun| {
+        run.read
+            .arms
+            .iter()
+            .find(|a| a.spec.id == REFERENCE_ARM)
+            .expect("the reference arm")
+            .all
+            .with_pick
+    };
+    // Given only after.
+    let run = run_with(None, pick.clone());
+    let sc = &run.positions[0].scoring;
+    assert!(sc.pick_fallback);
+    assert_eq!(
+        sc.rule.own_pick,
+        Some(pick_of(&live, "MonkeyKing", "Galio"))
+    );
+    assert_eq!(sc.rule.own_pick, sc.current.own_pick);
+    assert_eq!(run.read.fallbacks.picks, 1);
+    assert_eq!(with_reference(&run), 1);
+    // Given blind as "no view", then a pick after: blind stands.
+    let run = run_with(Some(Value::Null), pick);
+    let sc = &run.positions[0].scoring;
+    assert!(!sc.pick_fallback);
+    assert_eq!(sc.rule.own_pick, None);
+    assert_eq!(run.read.fallbacks.picks, 0);
+    assert_eq!(with_reference(&run), 0);
+    // No pick blind, "no view" after: counted, reads no pick.
+    let run = run_with(None, Value::Null);
+    assert!(run.positions[0].scoring.pick_fallback);
+    assert_eq!(run.positions[0].scoring.rule.own_pick, None);
+    assert_eq!(run.read.fallbacks.picks, 1);
+}
+
+// ---- Task 11: the run's `metrics`, the text summary, the history ---------------------------------------
+
+/// The labelled position's run, kept in memory (the in-memory `Read` is not in the JSON).
+fn base_review() -> &'static ReviewRun {
+    static BASE: std::sync::OnceLock<ReviewRun> = std::sync::OnceLock::new();
+    BASE.get_or_init(|| run_of(&[labelled()], &review_config(), &live()))
+}
+
+/// The summary on the labelled position is pinned: the table, floor rows, the rule's line, receipt,
+/// sensitivity, second line, `never_everywhere`, `r_by_label`, `bad_line@1` and the worklist, in order.
+/// Nothing in it is wall-clock or platform dependent (the run id and commit are the config's).
+/// Kills: any change to what the summary prints or the order it prints it in.
+#[test]
+fn the_summary_on_the_labelled_position_is_pinned() {
+    insta::assert_snapshot!(
+        "summary_on_the_labelled_position",
+        render_summary(base_review())
+    );
+}
+
+/// `bad_line@1` reads "bad of judged": an arm whose #1 line has no verdict prints 0 bad of 0 judged
+/// with the line counted as unjudged, never as a clean zero; the figures are the arm's `Metrics`.
+/// Kills: printing `bad_line` alone; unjudged lines left out of the line.
+#[test]
+fn the_summary_reads_bad_line_as_bad_of_judged() {
+    let run = base_review();
+    let text = render_summary(run);
+    let arm = run
+        .read
+        .arms
+        .iter()
+        .find(|a| a.spec.id == REFERENCE_ARM)
+        .expect("the reference arm");
+    let line = format!(
+        "{REFERENCE_ARM}: {} bad of {} judged, {} unjudged",
+        arm.all.bad_line, arm.all.judged_line, arm.all.unjudged_line
+    );
+    assert!(text.contains(&line), "{line}\n{text}");
+    assert!(text.contains("bad_line@1 (bad of judged"), "{text}");
+    let m = &run.metrics.as_ref().expect("labelled run has metrics")["arms"];
+    let wire = m
+        .as_array()
+        .and_then(|a| a.iter().find(|a| a["id"] == REFERENCE_ARM))
+        .expect("the reference arm's metrics");
+    assert_eq!(wire["metrics"]["bad_line"], arm.all.bad_line);
+    assert_eq!(wire["metrics"]["judged_line"], arm.all.judged_line);
+    assert_eq!(wire["metrics"]["unjudged_line"], arm.all.unjudged_line);
+}
+
+/// A run header for the constructed summaries (nothing in it is measured).
+fn test_header(arm_ids: &[&str]) -> RunHeader {
+    RunHeader {
+        id: "2026-11-11T00:00:00Z".to_string(),
+        engine: EngineStamp {
+            name: "reference".to_string(),
+            commit: Some("abc1234".to_string()),
+            dirty: Some(false),
+        },
+        data: DataStamp {
+            fm_version: "fm-test".to_string(),
+            meta_version: "meta-test".to_string(),
+            positions_patch: "16.19".to_string(),
+        },
+        search: SearchStamp {
+            horizon: 2,
+            widths: WidthsWire {
+                singles: 1,
+                pairs: 1,
+                root_off_pool: 1,
+            },
+            node_budget: 1,
+            jobs: 1,
+        },
+        k: 3,
+        margin: 0.01,
+        reference_arm: arm_ids[0].to_string(),
+        arms: arm_ids
+            .iter()
+            .map(|id| ArmWire {
+                id: id.to_string(),
+                rule: "roster",
+                p: None,
+                q: None,
+            })
+            .collect(),
+    }
+}
+
+/// Every field `metrics.arms[]` emits for an arm, against the in-memory `ArmScore`.
+fn assert_wire_arm(wire: &Value, arm: &ArmScore, unknown_r_kept: usize) {
+    let m = &wire["metrics"];
+    let a = &arm.all;
+    assert_eq!(wire["id"], arm.spec.id);
+    assert_eq!(wire["readable"], arm.readable());
+    assert_eq!(wire["unknown_r_kept"], unknown_r_kept);
+    for (name, got) in [
+        ("never", a.never),
+        ("near", a.near),
+        ("unjudged", a.unjudged),
+        ("play", a.play),
+        ("no_play", a.no_play),
+        ("neither_play", a.neither_play),
+        ("pick", a.pick),
+        ("pick_off", a.pick_off),
+    ] {
+        assert_eq!(m[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    for (name, got) in [
+        ("positions", a.positions),
+        ("speaking", a.speaking),
+        ("non_speaking", a.positions - a.speaking),
+        ("with_pick", a.with_pick),
+        ("pick_off_eligible", a.pick_off_eligible),
+        ("top_in_pool", a.top_in_pool),
+        ("pick_absent", a.pick_absent),
+        ("opp_charge_lead", a.opp_charge_lead),
+        ("bad_line", a.bad_line),
+        ("judged_line", a.judged_line),
+        ("unjudged_line", a.unjudged_line),
+    ] {
+        assert_eq!(m[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    assert_eq!(
+        m["never_1_by_class"],
+        json!({"in_pool": a.never_1_in_pool, "off_pool_base": a.never_1_base, "off_pool_graded": a.never_1_graded})
+    );
+    assert_eq!(m["pick_median_regret"], json!(a.pick_median_regret));
+    let ids = |f: &dyn Fn(&PositionScore) -> bool| -> Vec<String> {
+        arm.rows
+            .iter()
+            .filter(|r| r.score.as_ref().is_some_and(f))
+            .map(|r| r.id.clone())
+            .collect()
+    };
+    let behind = &wire["positions"];
+    for (name, got) in [
+        ("never_1", ids(&|s| s.never[0])),
+        ("never_3", ids(&|s| s.never[1])),
+        ("near_1", ids(&|s| s.near[0])),
+        ("near_3", ids(&|s| s.near[1])),
+        ("unjudged_1", ids(&|s| s.unjudged[0])),
+        ("unjudged_3", ids(&|s| s.unjudged[1])),
+        ("pick_3", ids(&|s| s.pick[1])),
+    ] {
+        assert_eq!(behind[name], json!(got), "{name} of {}", arm.spec.id);
+    }
+    let silent: Vec<&str> = arm
+        .rows
+        .iter()
+        .filter(|r| r.score.is_none())
+        .map(|r| r.id.as_str())
+        .collect();
+    assert_eq!(behind["not_speaking"], json!(silent));
+}
+
+/// The `metrics` block carries what the page and the summary read, and agrees with the in-memory read.
+/// Kills: a metrics block that drifts from `Read`; positions behind a count missing.
+#[test]
+fn the_metrics_block_agrees_with_the_read() {
+    let run = base_review();
+    let v = serde_json::to_value(run).expect("serialises");
+    let m = &v["metrics"];
+    assert_eq!(m["ks"], json!([1, 3, 5, 10]));
+    assert_eq!(m["reference"], REFERENCE_ARM);
+    assert_eq!(m["labels"]["positions"], 1);
+    assert_eq!(m["labels"]["labelled_positions"], 1);
+    assert_eq!(m["rule"]["roster_arms"], 4);
+    assert_eq!(
+        m["rule"]["pick"],
+        serde_json::to_value(&run.read.rule.pick).unwrap()
+    );
+    let arms = array(&m["arms"], "arms");
+    assert_eq!(
+        arms.len(),
+        run.read.arms.len(),
+        "arms then the two floor rows"
+    );
+    for (wire, arm) in arms.iter().zip(&run.read.arms) {
+        assert_wire_arm(wire, arm, 0);
+    }
+    let roles: Vec<&str> = arms.iter().map(|a| text(&a["role"], "role")).collect();
+    assert_eq!(roles.iter().filter(|r| **r == "floor").count(), 2);
+    for key in [
+        "sensitivity",
+        "second_line",
+        "never_everywhere",
+        "r_by_label",
+        "reveal_changes",
+        "worklist",
+    ] {
+        assert!(m.get(key).is_some(), "metrics.{key}");
+    }
+    assert_eq!(array(&m["r_by_label"], "r_by_label").len(), 6);
+}
+
+/// With no labels there is nothing to read: `metrics` is absent (not null, not empty), the JSON still
+/// parses and carries `tier-b-run/1`, and the summary says so.
+/// Kills: an always-present `metrics`; a summary that tables an unread corpus.
+#[test]
+fn metrics_are_absent_with_no_labels_and_the_json_still_parses() {
+    let run = run_of(&[supp_17()], &supp_config(), &live());
+    assert!(run.metrics.is_none());
+    let written = serde_json::to_string_pretty(&run).expect("serialises");
+    let v: Value = serde_json::from_str(&written).expect("it parses");
+    assert_eq!(v["schema"], "tier-b-run/1");
+    assert!(v.as_object().expect("an object").get("metrics").is_none());
+    let summary = render_summary(&run);
+    assert!(summary.contains("No labels yet"), "{summary}");
+    assert!(!summary.contains("P x Q"), "{summary}");
+}
+
+/// `history.jsonl` beside the fixtures is not a fixture: `load_dir` reads `*.json` only, so a history
+/// line (even one that is not a fixture at all) adds no load result and no error.
+/// Kills: a loader that reads every file in the directory.
+#[test]
+fn a_history_jsonl_in_the_fixtures_dir_is_not_loaded() {
+    let live = live();
+    let dir = std::env::temp_dir().join(format!("tier-b-history-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    std::fs::write(dir.join("2026-10-07-labelled.json"), labelled().to_string())
+        .expect("fixture copy");
+    let before = TierBFixture::load_dir(&dir, &live).expect("loads");
+    std::fs::write(dir.join("history.jsonl"), "{\"not\": \"a fixture\"}\n").expect("history");
+    let after = TierBFixture::load_dir(&dir, &live).expect("loads");
+    std::fs::remove_dir_all(&dir).expect("clean up");
+    assert_eq!(before.len(), 1);
+    assert_eq!(after.len(), 1, "the history file is not a position");
+    assert!(after[0].is_ok());
+}
+
+/// The binary writes `summary.txt` beside the run JSON.
+/// Kills: a summary written elsewhere or not at all.
+#[test]
+fn the_binary_writes_summary_txt_beside_the_run_json() {
+    let exe = env!("CARGO_BIN_EXE_tier_b_review");
+    let fixtures =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/tier-b-review/por-only");
+    let dir = std::env::temp_dir().join(format!("tier-b-summary-bin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let ran = std::process::Command::new(exe)
+        .env("TIER_B_JSON", dir.join("run.json"))
+        .env("TIER_B_FIXTURES", &fixtures)
+        .env("TIER_B_P", "0.1")
+        .env("TIER_B_Q", "0.05")
+        .env("TIER_B_WIDTHS", "10,20,30")
+        .env("TIER_B_K", "3")
+        .env("TIER_B_JOBS", "2")
+        .env("TIER_B_RUN_ID", "2026-11-09T00:00:00Z")
+        .output()
+        .expect("the binary runs");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let summary = std::fs::read_to_string(dir.join("summary.txt")).expect("summary.txt");
+    std::fs::remove_dir_all(&dir).expect("clean up");
+    assert!(
+        summary.starts_with("Tier B review summary: run 2026-11-09T00:00:00Z"),
+        "{summary}"
+    );
+}
+
+/// A constructed run where the rule reads: two positions, arm A (the reference) with the `never` first
+/// at one and arm B clean, so B is picked, A's `never@1` is the receipt's `from`, and the table marks
+/// the pick and the reference. Pinned, so the readable half of the text (the pick line, the receipt, the
+/// sensitivity and second lines) is under test as well as the unread half above.
+/// Kills: a summary that prints only the unread case; a receipt printed to-from; a pick unmarked.
+#[test]
+fn the_summary_of_a_readable_run_is_pinned() {
+    let ps = [
+        rpos(
+            "2026-10-01-a",
+            "2026-10-01",
+            Side::Blue,
+            Some(false),
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        ),
+        rpos(
+            "2026-10-02-b",
+            "2026-10-02",
+            Side::Blue,
+            None,
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &GOOD_C2_AT_5), (ARM_B, &GOOD_C2_AT_2)],
+        ),
+    ];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    assert_eq!(
+        read.rule.pick.as_deref(),
+        Some(ARM_B),
+        "the premise: B is readable and better"
+    );
+    let header = test_header(&[ARM_A, ARM_B]);
+    let text = summary_of(&header, &read, &inputs);
+    assert!(
+        text.contains("The rule: 2 of 2 arms readable. Pick: roster:0.15:0.05"),
+        "{text}"
+    );
+    assert!(
+        text.contains("never@1 1 → 0"),
+        "the receipt reads reference then pick\n{text}"
+    );
+    insta::assert_snapshot!("summary_of_a_readable_run", text);
+}
+
+/// A constructed run that reaches every branch the labelled run does not: a near tie (`(+n)`), an arm
+/// where a position does not speak (`!`, the count), two arms tied on the three keys with the reference
+/// among them (so the pick is the reference: `bad_line@1` prints once), a second line that DIFFERS, floor
+/// rows with a non-speaking count and unknown-r placements kept, the grid's bottom edge above zero (bare
+/// flag, per the ruling on Task 10's C1), and `≥` cells with their upper bounds. The wire block is
+/// compared to the same read field by field, on values that are not all zero.
+/// Kills: `(+n)`, `!`, DIFFERS, the ties text, the floor rows' counts, the upper-bound lines or the
+/// single bad_line block dropped or changed; a wire field that drifts where the labelled run holds zeros.
+#[test]
+fn the_summary_reaches_near_ties_silence_differs_ties_floors_and_upper_bounds() {
+    // c0 is `never`; p1: the never is first and a play sits within the margin: near at 1 and 3.
+    const NEAR: [(u8, f64); 6] = [(0, 1.0), (1, 0.995), (2, 0.9), (3, 0.8), (4, 0.7), (5, 0.6)];
+    // c5 first, then the plays, the `never` last.
+    const C5_FIRST: [(u8, f64); 6] = [(5, 1.0), (1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6), (0, 0.1)];
+    let c = "roster:0.2:0.05";
+    let (f1, f2) = ("floor:0.1", "floor:0.25");
+    let mut p1 = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        Some(true),
+        &LABELS,
+        Some(2),
+        &[
+            (ARM_A, &NEAR),
+            (ARM_B, &NEAR),
+            (c, &NEAR),
+            (f1, &NEAR),
+            (f2, &NEAR),
+        ],
+    );
+    p1.arms[3].unknown_r_kept = 2;
+    let mut p2 = rpos(
+        "2026-10-02-b",
+        "2026-10-02",
+        Side::Blue,
+        Some(false),
+        &LABELS,
+        Some(2),
+        &[
+            (ARM_A, &C5_FIRST),
+            (ARM_B, &GOOD_C2_AT_2),
+            (c, &[]),
+            (f1, &GOOD_C2_AT_2),
+            (f2, &[]),
+        ],
+    );
+    // After the reveal c5 reads `never`: arm A puts it first, B does not, so the current fold prefers B.
+    p2.current.labels.insert(opt(5), Label::Never);
+    let ps = [p1, p2];
+    let inputs = refs(&ps);
+    let mut specs = vec![
+        roster_spec(0.1, 0.05),
+        roster_spec(0.15, 0.05),
+        roster_spec(0.2, 0.05),
+    ];
+    for (id, _) in [(f1, 0), (f2, 1)] {
+        specs.push(ArmSpec {
+            id: id.to_string(),
+            role: ArmRole::Floor,
+            p: None,
+            q: None,
+        });
+    }
+    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    assert_eq!(
+        read.rule.pick.as_deref(),
+        Some(ARM_A),
+        "premise: the tie keeps the reference"
+    );
+    assert_eq!(read.rule.ties.len(), 2, "premise: A and B tie");
+    assert!(
+        read.second_line.differs,
+        "premise: the current fold picks B"
+    );
+
+    let header = test_header(&[ARM_A, ARM_B, c]);
+    let text = summary_of(&header, &read, &inputs);
+    assert!(text.contains("(+1)"), "{text}");
+    assert!(text.contains("! some positions do not speak"), "{text}");
+    assert!(text.contains("DIFFERS"), "{text}");
+    assert!(text.contains("tied on the three keys"), "{text}");
+    assert!(
+        text.contains("non-speaking 1 of 2, unknown r kept 0"),
+        "{text}"
+    );
+    assert!(text.contains("unknown r kept 2"), "{text}");
+    assert!(
+        text.contains("on the grid's edge (P = 0.1)\n"),
+        "bare bottom edge\n{text}"
+    );
+    assert_eq!(
+        text.matches("0 bad of 0 judged").count(),
+        1,
+        "pick = reference prints the line once\n{text}"
+    );
+    assert!(text.contains("reference = pick, "), "{text}");
+    insta::assert_snapshot!("summary_of_every_branch", text);
+
+    let header_run = test_header(&[ARM_A, ARM_B, c]);
+    let wire = engine_core::reference::tier_b_summary::metrics_of(&header_run, &read, &inputs)
+        .expect("labelled");
+    let arms = array(&wire["arms"], "arms");
+    assert_eq!(arms.len(), read.arms.len());
+    for (w, arm) in arms.iter().zip(&read.arms) {
+        let unknown: usize = inputs
+            .iter()
+            .flat_map(|p| p.arms.iter())
+            .filter(|a| a.id == arm.spec.id)
+            .map(|a| a.unknown_r_kept)
+            .sum();
+        assert_wire_arm(w, arm, unknown);
+        assert_eq!(arm.unknown_r_kept, unknown, "the ArmScore carries the sum");
+    }
+    for (kind, got) in [
+        ("margins", &read.sensitivity.margins_readable),
+        ("leave_out", &read.sensitivity.leave_out_readable),
+    ] {
+        let wired: Vec<u64> = array(&wire["sensitivity"][kind], kind)
+            .iter()
+            .map(|e| e["readable"].as_u64().expect("readable"))
+            .collect();
+        let want: Vec<u64> = got.iter().map(|n| *n as u64).collect();
+        assert_eq!(wired, want, "{kind}: readable arms per re-read");
+    }
+    assert_eq!(wire["rule"]["pick"], ARM_A);
+    assert_eq!(wire["second_line"]["differs"], true);
+    assert_eq!(
+        wire["rule"]["receipt"]["pick"],
+        wire["rule"]["receipt"]["reference"]
+    );
+}
+
+fn top(option: u8, line: &str) -> Option<TopLine> {
+    Some(TopLine {
+        option: opt(option),
+        option_id: format!("c{option}"),
+        line: line.to_string(),
+    })
+}
+
+/// An empty continuation (slot 19) is no line: not unjudged, not in the worklist, counted as "with no
+/// line" in `bad_line@1`, and on the wire.
+/// Kills: an empty line read as an unjudged line (the page refuses a verdict on it, so it could never
+/// clear); the count of no-line #1s dropped.
+#[test]
+fn an_empty_continuation_is_no_line_not_unjudged() {
+    let mut p = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        None,
+        &LABELS,
+        Some(2),
+        &[(ARM_A, &GOOD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+    );
+    p.arms[0].top_line = top(1, "");
+    p.arms[1].top_line = top(1, "");
+    let ps = [p];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    let m = &read.arms[0].all;
+    assert_eq!(
+        (m.no_line, m.unjudged_line, m.judged_line, m.bad_line),
+        (1, 0, 0, 0)
+    );
+    assert_eq!(read.arms[0].rows[0].line, LineState::None);
+    assert!(read.worklist.unjudged_lines.is_empty());
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(
+        text.contains("0 bad of 0 judged, 0 unjudged, 1 with no line"),
+        "{text}"
+    );
+    let wire = engine_core::reference::tier_b_summary::metrics_of(
+        &test_header(&[ARM_A, ARM_B]),
+        &read,
+        &inputs,
+    )
+    .expect("labelled");
+    assert_eq!(wire["arms"][0]["metrics"]["no_line"], 1);
+    assert_eq!(
+        wire["arms"][0]["positions"]["no_line_1"],
+        json!(["2026-10-01-a"])
+    );
+}
+
+/// The runner leaves a slot-19 #1 with no line at every arm that speaks.
+/// Kills: `top_line_of` returning an empty line.
+#[test]
+fn the_runner_gives_a_slot_19_number_one_no_line() {
+    let run = run_of(&[por_only_fixture()], &supp_config(), &live());
+    let arms: Vec<_> = run.positions[0]
+        .scoring
+        .arms
+        .iter()
+        .filter(|a| a.speaks)
+        .collect();
+    assert!(!arms.is_empty());
+    for a in arms {
+        assert!(a.top_line.is_none(), "{}: {:?}", a.id, a.top_line);
+    }
+}
+
+/// A pick #1 line the page cannot judge (its option or line differs from the reference arm's at that
+/// position) is listed marked, and counted; the same line at both arms is judgeable.
+/// Kills: a worklist that lists unclearable lines unmarked; the marker on a judgeable line.
+#[test]
+fn a_pick_line_the_page_cannot_judge_is_marked() {
+    let mk = |id: &str, draft: &str, line_b: &str| {
+        let mut p = rpos(
+            id,
+            draft,
+            Side::Blue,
+            None,
+            &LABELS,
+            Some(2),
+            &[(ARM_A, &BAD_C2_AT_2), (ARM_B, &GOOD_C2_AT_2)],
+        );
+        p.arms[0].top_line = top(0, "Zyra");
+        p.arms[1].top_line = top(1, line_b);
+        p
+    };
+    // p1: the pick's #1 is another option than the reference's; p2: the same option and line.
+    let mut p2 = mk("2026-10-02-b", "2026-10-02", "Zyra");
+    p2.arms[1].top_line = top(0, "Zyra");
+    let ps = [mk("2026-10-01-a", "2026-10-01", "Karma"), p2];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs_ab(), ARM_A, 0.01);
+    assert_eq!(read.rule.pick.as_deref(), Some(ARM_B), "the premise");
+    let lines = &read.worklist.unjudged_lines;
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines
+            .iter()
+            .map(|l| (l.position.as_str(), l.judgeable))
+            .collect::<Vec<_>>(),
+        [("2026-10-01-a", false), ("2026-10-02-b", true)]
+    );
+    assert_eq!(read.worklist.not_judgeable(), 1);
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(
+        text.contains("with no line verdict: 2 (1 not judgeable on the page"),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("[not judgeable on the page]").count(),
+        1,
+        "{text}"
+    );
+    let wire = engine_core::reference::tier_b_summary::metrics_of(
+        &test_header(&[ARM_A, ARM_B]),
+        &read,
+        &inputs,
+    )
+    .expect("labelled");
+    assert_eq!(wire["worklist"]["not_judgeable"], 1);
+    assert_eq!(wire["worklist"]["unjudged_lines"][0]["judgeable"], false);
+    assert_eq!(wire["worklist"]["unjudged_lines"][1]["judgeable"], true);
+}
+
+/// A floor row's `≥` cell gets its upper bound under the table like an arm's.
+/// Kills: floors left out of the upper-bound block.
+#[test]
+fn a_floor_rows_unjudged_cell_gets_an_upper_bound() {
+    // c5 is unlabelled and first: read as `never` it is clear at one, as a play it is not.
+    const C5_FIRST: [(u8, f64); 6] = [(5, 1.0), (1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6), (0, 0.1)];
+    let labels: Vec<(u8, Label)> = LABELS.iter().copied().filter(|(c, _)| *c != 5).collect();
+    let p = rpos(
+        "2026-10-01-a",
+        "2026-10-01",
+        Side::Blue,
+        None,
+        &labels,
+        Some(2),
+        &[
+            (ARM_A, &GOOD_C2_AT_2),
+            (ARM_B, &GOOD_C2_AT_2),
+            ("floor:0.1", &C5_FIRST),
+        ],
+    );
+    let mut specs = specs_ab();
+    specs.push(ArmSpec {
+        id: "floor:0.1".to_string(),
+        role: ArmRole::Floor,
+        p: None,
+        q: None,
+    });
+    let ps = [p];
+    let inputs = refs(&ps);
+    let read = read_run(&inputs, &specs, ARM_A, 0.01);
+    let text = summary_of(&test_header(&[ARM_A, ARM_B]), &read, &inputs);
+    assert!(text.contains("floor:0.1  r < 0.1  ≥0/"), "{text}");
+    assert!(text.contains("  floor:0.1  ≤1 / "), "{text}");
 }
