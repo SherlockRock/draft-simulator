@@ -33,6 +33,7 @@ const {
   generateUniqueCanvasGroupName,
 } = require("../helpers");
 const { planCanvasGroupImport } = require("../services/canvasGroupImport");
+const { seriesCardOrigin } = require("../utils/seriesCardLayout");
 const { touchCanvasTimestamp } = require("../services/canvasWriteGuards");
 
 const VALID_CHAMPION_IDS = new Set(
@@ -1472,12 +1473,14 @@ router.post("/me/import/canvas/:canvasId", protect, async (req, res) => {
         draftIndex += 1
       ) {
         const draft = syncedDrafts[draftIndex];
+        // Container-relative (ADR-0006), like every canvas.js seeding site.
+        const origin = seriesCardOrigin(draftIndex);
         await CanvasDraft.create(
           {
             canvas_id: canvasId,
             draft_id: draft.id,
-            positionX: existingGroup.positionX + draftIndex * 380,
-            positionY: existingGroup.positionY,
+            positionX: origin.x,
+            positionY: origin.y,
             is_locked: true,
             group_id: existingGroup.id,
             source_type: "versus",
