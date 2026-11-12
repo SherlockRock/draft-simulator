@@ -24,5 +24,7 @@ Replaced, consistently across files: `id_oauth_riot` (same player → same
 fake), `name_riot_game` / `tag_riot` (`PlayerNN` / `TNN`, null kept),
 `key_encryption`, the Riot match `id_game`, and `code_tournament` when set.
 Team names, acronyms, colours and esclub ids are public and kept.
+Also kept: the stage's Riot tournament id (`id_tournament`, the league's
+tournament-provider id; not player data).
 
 Tests never open a connection; they replay these through a fake socket.

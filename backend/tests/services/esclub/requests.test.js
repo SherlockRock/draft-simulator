@@ -172,6 +172,32 @@ describe("protocol checks", () => {
     expect(err.message).toContain("matches[1].config.integrations[0].LeagueOfLegends.participants[3].id_champion");
   });
 
+  it("a null lane_team is accepted and reaches the normaliser as lane: null", async () => {
+    const f = fx("group-bo3/matches.json");
+    const reply = structuredClone(f.reply);
+    const m = reply.matches.find((x) => x.number === 1);
+    m.config.integrations[0].LeagueOfLegends.participants[0].lane_team = null;
+    const { client } = await session(() => reply);
+    const { items } = await R.fetchMatches(client, { id_serie: f.context.id_serie });
+    const N = require("../../../services/esclub/normalize");
+    const rosters = fx("team-rosters.json").reply.teams.map(N.normalizeTeamRoster);
+    const drafts = {};
+    const choices = {};
+    for (const n of [0, 1]) {
+      const d = fx(`group-bo3/draft-${n}.json`).reply.drafts[0];
+      drafts[d.id_match] = d;
+      choices[d.id_match] = fx(`group-bo3/choices-${n}.json`).reply.choices;
+    }
+    const ids = [...new Set(Object.values(choices).flat().filter((c) => c.is_final).map((c) => c.id_team_roster_source))];
+    const out = N.normalizeSeries({
+      serie: fx("group-bo3/serie.json").reply.series[0], seasonId: "s", stageId: "t",
+      teams: ids.map((id) => rosters.find((r) => r.externalId === id)),
+      matches: items, drafts, choices, resources: fx("game-resources.json").reply.resources,
+    });
+    const lanes = Object.values(out.series.games[1].participants).map((p) => p.lane);
+    expect(lanes.filter((l) => l === null)).toHaveLength(1);
+  });
+
   it("a reply without the array key is EsclubProtocolChanged", async () => {
     const { client } = await session(() => ({ other: [] }));
     await expect(R.fetchRounds(client, { id_event_stage: "s" })).rejects.toBeInstanceOf(EsclubProtocolChanged);

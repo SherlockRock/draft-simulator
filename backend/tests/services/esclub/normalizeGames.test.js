@@ -245,6 +245,44 @@ describe("synthetic variants", () => {
     const r = run((d) => { gm(d, 0).config.integrations[0].LeagueOfLegends.participants = []; }, bracket);
     expect(r.pending).toEqual([{ externalMatchId: gm(bracket, 0).id_match, number: 0, reason: "sides unknown" }]);
   });
+  const sideRes = (ext) => resources.find((x) => x.type_resource === "Side" && x.id_external === ext).id_game_resource;
+  const noParticipants = (d, id) => { d.matches.find((m) => m.id_match === id).config.integrations[0].LeagueOfLegends.participants = []; };
+  it("a changed unlocked PickSide hover does not matter when participants decide", () => {
+    const ref = N.normalizeSeries(input(group)).series.games[0];
+    const r = run((d) => {
+      for (const c of d.choices[id0]) if (c.type_choice === "PickSide" && !c.is_locked) c.id_game_resource = sideRes("2");
+    });
+    expect(r.series.games[0]).toEqual(ref);
+  });
+  it("an unlocked hover alone never decides sides (no participants -> pending)", () => {
+    const r = run((d) => {
+      noParticipants(d, id0);
+      d.choices[id0] = d.choices[id0].filter((c) => !(c.type_choice === "PickSide" && c.is_locked));
+    });
+    expect(r.pending).toEqual([{ externalMatchId: id0, number: 0, reason: "sides unknown" }]);
+  });
+  it("both rosters' locked rows on the same side, no participants -> pending, not a throw", () => {
+    const r = run((d) => {
+      noParticipants(d, id0);
+      const row = d.choices[id0].find((c) => c.type_choice === "PickSide" && c.is_locked);
+      const otherRoster = d.choices[id0].find((c) => c.is_final && c.id_team_roster_source !== row.id_team_roster_source).id_team_roster_source;
+      d.choices[id0].push({ ...row, id_team_roster_source: otherRoster });
+    });
+    expect(r.pending).toEqual([{ externalMatchId: id0, number: 0, reason: "sides unknown" }]);
+  });
+  it("self-contradicting locked rows with participants present: participants decide", () => {
+    const ref = N.normalizeSeries(input(group)).series.games[0];
+    const r = run((d) => {
+      const row = d.choices[id0].find((c) => c.type_choice === "PickSide" && c.is_locked);
+      d.choices[id0].push({ ...row, id_game_resource: sideRes("2") });
+    });
+    expect(r.series.games[0]).toEqual(ref);
+  });
+  it("locked PickSide rows contradicting participants -> EsclubProtocolChanged", () => {
+    expect(() => run((d) => {
+      for (const c of d.choices[id0]) if (c.type_choice === "PickSide" && c.is_locked) c.id_game_resource = sideRes("2");
+    })).toThrow(EsclubProtocolChanged);
+  });
   it("participants and PickSide disagreeing -> EsclubProtocolChanged", () => {
     expect(() => run((d) => {
       for (const c of d.choices[id0]) {

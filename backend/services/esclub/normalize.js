@@ -139,7 +139,7 @@ const iso = (unixSeconds) =>
 
 /**
  * Which roster is on which side, for one game (Reading 3).
- * Participants matched by picked champion decide; a PickSide row decides when
+ * Participants matched by picked champion decide; a locked PickSide row decides when
  * there are no matched participants; both must agree when both exist.
  * @returns {Map<string, "blue"|"red">|null} null when nothing decides
  */
@@ -175,26 +175,37 @@ function rosterSides(rosterIds, finals, allChoices, participants, byResource, ma
     }
   }
 
-  // From PickSide rows.
+  // From PickSide rows. Only locked rows are the actual choice; unlocked rows
+  // are hovers (the fixtures hold an unlocked and a locked row per choice).
+  // Inconsistent locked rows (a roster naming two sides, or both rosters naming
+  // the same side) decide nothing; they only throw if participants contradict them.
   const fromPickSide = new Map();
+  let pickSideConsistent = true;
   for (const c of allChoices) {
-    if (c.type_choice !== "PickSide") continue;
+    if (c.type_choice !== "PickSide" || c.is_locked !== true) continue;
     const res = byResource.get(c.id_game_resource);
     const side = res && res.type_resource === "Side" ? { 1: "blue", 2: "red" }[res.id_external] : undefined;
     if (!side) throw fail("a PickSide row does not name a Side resource 1 or 2");
     if (!rosterIds.includes(c.id_team_roster_source)) throw fail("a PickSide row names a roster outside the game");
     const known = fromPickSide.get(c.id_team_roster_source);
-    if (known && known !== side) throw fail("PickSide rows disagree");
+    if (known && known !== side) pickSideConsistent = false;
     fromPickSide.set(c.id_team_roster_source, side);
   }
   let viaPickSide = null;
-  if (fromPickSide.size > 0) {
-    viaPickSide = new Map();
-    for (const [id, side] of fromPickSide) {
-      viaPickSide.set(id, side);
-      viaPickSide.set(rosterIds.find((r) => r !== id), other(side));
+  if (fromPickSide.size > 0 && pickSideConsistent) {
+    const sides = [...fromPickSide.values()];
+    if (fromPickSide.size === 2 && sides[0] === sides[1]) pickSideConsistent = false;
+    else {
+      viaPickSide = new Map();
+      for (const [id, side] of fromPickSide) {
+        viaPickSide.set(id, side);
+        viaPickSide.set(rosterIds.find((r) => r !== id), other(side));
+      }
     }
-    if (new Set(viaPickSide.values()).size !== 2 || viaPickSide.size !== 2) throw fail("PickSide rows disagree");
+  }
+  if (fromPickSide.size > 0 && !pickSideConsistent && resolved) {
+    // Participants decide; the locked rows contradict themselves, so no cross-check is possible.
+    return resolved;
   }
 
   if (resolved && viaPickSide) {

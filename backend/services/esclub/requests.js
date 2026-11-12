@@ -87,7 +87,7 @@ const SERIE = {
   time_start: NN, time_start_agreed: NN, time_start_default: NN, time_start_forced: NN,
 };
 const PARTICIPANT = {
-  id_champion: N, side: N, lane_team: S,
+  id_champion: N, side: N, lane_team: NS,
   id_oauth_riot: NS, name_riot_game: NS, tag_riot: NS,
 };
 const MATCH = {
