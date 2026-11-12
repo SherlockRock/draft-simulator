@@ -40,22 +40,30 @@ describe("TeamListRowSchema", () => {
     });
 
     it("accepts a null Tournament (Sequelize sends null for a missing belongsTo)", () => {
-        expect(TeamListRowSchema.safeParse({ ...pickup, Tournament: null }).success).toBe(true);
+        expect(TeamListRowSchema.safeParse({ ...pickup, Tournament: null }).success).toBe(
+            true
+        );
     });
 
     it("accepts an unknown source string", () => {
-        expect(TeamListRowSchema.safeParse({ ...pickup, source: "somewhere-new" }).success).toBe(true);
+        expect(
+            TeamListRowSchema.safeParse({ ...pickup, source: "somewhere-new" }).success
+        ).toBe(true);
     });
 
     it("rejects a list row without canEditRoster", () => {
-        const { canEditRoster: _omitted, ...withoutFlag } = pickup;
+        const withoutFlag = Object.fromEntries(
+            Object.entries(pickup).filter(([key]) => key !== "canEditRoster")
+        );
         expect(TeamListRowSchema.safeParse(withoutFlag).success).toBe(false);
     });
 });
 
 describe("TeamSchema (canvas payload team)", () => {
     it("parses a team without canEditRoster", () => {
-        const { canEditRoster: _omitted, ...withoutFlag } = pickup;
+        const withoutFlag = Object.fromEntries(
+            Object.entries(pickup).filter(([key]) => key !== "canEditRoster")
+        );
         expect(TeamSchema.safeParse(withoutFlag).success).toBe(true);
     });
 
