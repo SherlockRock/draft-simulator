@@ -70,7 +70,9 @@ const TeamsPage: Component = () => {
 
     const teamsQuery = useQuery(() => ({
         queryKey: ["teamsManage"],
-        queryFn: fetchTeamsManage
+        queryFn: fetchTeamsManage,
+        // Wait for sign-in: a signed-out visit would 401 and retry.
+        enabled: Boolean(user())
     }));
 
     // Everything below renders by stable string keys (team ids, league ids) and
@@ -128,6 +130,7 @@ const TeamsPage: Component = () => {
 
     const [selection, setSelection] = createSignal(emptySelection());
     const [deleteRows, setDeleteRows] = createSignal<ManagedTeamRow[]>([]);
+    const [deleteFromBar, setDeleteFromBar] = createSignal(false);
     const [archivedOpen, setArchivedOpen] = createSignal(false);
 
     // After every refetch drop selected ids that are gone or no longer selectable.
@@ -192,15 +195,24 @@ const TeamsPage: Component = () => {
         const data = teamsQuery.data;
         if (!data || !summary().canDelete) return;
         const rows = selectedRows(selection(), data);
-        if (rows.length > 0) setDeleteRows(rows);
+        if (rows.length > 0) {
+            setDeleteFromBar(true);
+            setDeleteRows(rows);
+        }
+    };
+
+    const requestDeleteRow = (team: ManagedTeamRow) => {
+        setDeleteFromBar(false);
+        setDeleteRows([team]);
     };
 
     const confirmDelete = () => {
         const ids = deleteRows().map((r) => r.id);
         if (ids.length === 0) return;
-        // Rows deleted from the bar clear the selection; a single row doesn't.
-        const clear = ids.every((id) => selection().ids.has(id));
-        bulkMutation.mutate({ action: "delete", ids, clear });
+        // A delete from the bar clears the selection. A single row deleted from
+        // its own icon keeps the rest of the selection (the refetch prunes the
+        // deleted id), even when that row was selected.
+        bulkMutation.mutate({ action: "delete", ids, clear: deleteFromBar() });
     };
 
     const scopeOf = (team: ManagedTeamRow): SelectionScope =>
@@ -223,7 +235,7 @@ const TeamsPage: Component = () => {
                         }
                         onArchive={() => runRow("archive", team())}
                         onRestore={() => runRow("restore", team())}
-                        onDelete={() => setDeleteRows([team()])}
+                        onDelete={() => requestDeleteRow(team())}
                     />
                 )}
             </Show>

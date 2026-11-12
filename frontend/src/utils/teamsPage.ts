@@ -5,6 +5,7 @@ import type {
     TeamsManageResponse,
     TeamUseCounts
 } from "@draft-sim/shared-types";
+import { SCOUT_REGION_OPTIONS } from "@draft-sim/shared-types";
 
 export const PAGE_INTRO =
     "Your pickup teams and the teams of leagues you've added. Imported teams come from the league and can't be edited. Archiving hides a team or league from your pickers; it stays linked wherever it's used.";
@@ -282,17 +283,22 @@ export function teamCountLabel(n: number): string {
     return n === 1 ? "1 team" : `${n} teams`;
 }
 
+// The app's usual region labels (NA, EUW, ...); an unknown value is shown
+// upper-cased rather than hidden.
 export function regionLabel(region: string): string {
-    return region.toUpperCase();
+    const known = SCOUT_REGION_OPTIONS.find((o) => o.value === region);
+    return known ? known.label : region.toUpperCase();
 }
 
 // "Archived · 2 leagues, 5 teams": teams counts every team in the group,
-// leagues' teams and archived pickup teams alike.
+// leagues' teams and archived pickup teams alike. With no archived league
+// the league part is left out ("Archived · 1 team").
 export function archivedHeaderLabel(group: ArchivedGroup): string {
     const leagues = group.tournaments.length;
     const teams =
         group.pickupTeams.length +
         group.tournaments.reduce((n, t) => n + t.teams.length, 0);
+    if (leagues === 0) return `Archived · ${teamCountLabel(teams)}`;
     const leagueText = leagues === 1 ? "1 league" : `${leagues} leagues`;
     return `Archived · ${leagueText}, ${teamCountLabel(teams)}`;
 }

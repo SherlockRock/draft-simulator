@@ -107,15 +107,22 @@ export const TeamsRow: Component<{
                                 </div>
                             </div>
                             <div class="ml-auto flex flex-wrap items-center">
-                                <button
-                                    type="button"
-                                    onClick={scout}
-                                    class={ACTION_CLASS}
-                                    title="Scout this team"
-                                    aria-label="Scout this team"
-                                >
-                                    <Crosshair size={16} />
-                                </button>
+                                {/* Not on an archived team: Scout's roster
+                                    write-back follows the picker list, which
+                                    leaves archived teams out, so changes made
+                                    there would silently not save. Restore
+                                    first. */}
+                                <Show when={!isArchived()}>
+                                    <button
+                                        type="button"
+                                        onClick={scout}
+                                        class={ACTION_CLASS}
+                                        title="Scout this team"
+                                        aria-label="Scout this team"
+                                    >
+                                        <Crosshair size={16} />
+                                    </button>
+                                </Show>
                                 <button
                                     type="button"
                                     onClick={() => setExpanded((cur) => !cur)}

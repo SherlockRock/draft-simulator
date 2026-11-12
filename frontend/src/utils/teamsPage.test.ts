@@ -538,8 +538,14 @@ describe("teamCountLabel and regionLabel", () => {
         expect(teamCountLabel(12)).toBe("12 teams");
     });
 
-    it("upper-cases a region", () => {
-        expect(regionLabel("na1")).toBe("NA1");
+    it("uses the app's region labels", () => {
+        expect(regionLabel("na1")).toBe("NA");
+        expect(regionLabel("euw1")).toBe("EUW");
+        expect(regionLabel("oc1")).toBe("OCE");
+    });
+
+    it("upper-cases a region it doesn't know", () => {
+        expect(regionLabel("xx9")).toBe("XX9");
     });
 });
 
@@ -569,12 +575,12 @@ describe("archivedHeaderLabel", () => {
         expect(archivedHeaderLabel(g)).toBe("Archived · 2 leagues, 1 team");
     });
 
-    it("handles zero leagues", () => {
+    it("leaves out the league count when no league is archived", () => {
         const g = archivedGroup({
             tournaments: [],
             teams: [team("x", "X", { archived_at: old })]
         });
-        expect(archivedHeaderLabel(g)).toBe("Archived · 0 leagues, 1 team");
+        expect(archivedHeaderLabel(g)).toBe("Archived · 1 team");
     });
 });
 
