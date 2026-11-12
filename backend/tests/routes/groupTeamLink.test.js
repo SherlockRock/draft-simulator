@@ -33,4 +33,29 @@ describe("resolveTeamLinkUpdate", () => {
   it("rejects a non-string, non-null team id", () => {
     expect(resolveTeamLinkUpdate({ team1_id: 5 }, owned).error).toBeTruthy();
   });
+
+  describe("with the group's current links", () => {
+    const current = { team1_id: "t-owner", team2_id: null };
+
+    it("passes an unowned id equal to the current one in the same slot", () => {
+      expect(
+        resolveTeamLinkUpdate({ team1_id: "t-owner" }, owned, current),
+      ).toEqual({ updates: { team1_id: "t-owner" } });
+    });
+    it("refuses an unowned id equal to the other slot's current id", () => {
+      expect(
+        resolveTeamLinkUpdate({ team2_id: "t-owner" }, owned, current).error,
+      ).toBe("team2_id must reference a team you own");
+    });
+    it("refuses an unowned id that is not current", () => {
+      expect(
+        resolveTeamLinkUpdate({ team1_id: "t-other" }, owned, current).error,
+      ).toBe("team1_id must reference a team you own");
+    });
+    it("still refuses a non-string", () => {
+      expect(
+        resolveTeamLinkUpdate({ team1_id: 5 }, owned, current).error,
+      ).toBe("team1_id must be a team id string or null");
+    });
+  });
 });

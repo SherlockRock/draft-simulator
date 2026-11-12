@@ -141,15 +141,25 @@ async function destroyUnreferencedDrafts(draftIds, transaction) {
 
 // Validates optional team1_id/team2_id from a group-update body against the
 // set of team ids the requesting user owns. Absent field => no change; null =>
-// unlink; a string must be in ownedTeamIds. Returns {updates} or {error}.
-function resolveTeamLinkUpdate(body, ownedTeamIds) {
+// unlink; a string must be in ownedTeamIds, or equal the group's current id in
+// the same slot (currentLinks). Returns {updates} or {error}.
+//
+// The current-id pass-through is the collaborator fix (Teams decision 10): the
+// Group Settings dialog always sends team1_id/team2_id back, so an editor who
+// does not own the linked team could not save any setting on the group. An
+// unchanged id is not a new link. Linking a *new* team stays owner-only until
+// T1; so does moving an id into the other slot.
+function resolveTeamLinkUpdate(body, ownedTeamIds, currentLinks = {}) {
   const updates = {};
   for (const key of ["team1_id", "team2_id"]) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
     const value = body[key];
     if (value === null) {
       updates[key] = null;
-    } else if (typeof value === "string" && ownedTeamIds.has(value)) {
+    } else if (
+      typeof value === "string" &&
+      (ownedTeamIds.has(value) || value === currentLinks[key])
+    ) {
       updates[key] = value;
     } else if (typeof value === "string") {
       return { error: `${key} must reference a team you own` };
@@ -1686,7 +1696,10 @@ router.post(
           transaction: t,
         });
         const ownedIds = new Set(owned.map((row) => row.id));
-        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+          team1_id: group.team1_id,
+          team2_id: group.team2_id,
+        });
         if (linkResult.error) {
           await t.rollback();
           return res.status(400).json({ error: linkResult.error });
@@ -2218,7 +2231,10 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
         transaction: t,
       });
       const ownedIds = new Set(owned.map((row) => row.id));
-      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds);
+      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+        team1_id: group.team1_id,
+        team2_id: group.team2_id,
+      });
       if (linkResult.error) {
         await t.rollback();
         return res.status(400).json({ error: linkResult.error });

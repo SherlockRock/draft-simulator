@@ -158,6 +158,16 @@ describe("POST convert-to-series team linking", () => {
     expect(transaction.commit).not.toHaveBeenCalled();
   });
 
+  it("passes the team already linked on the group for a user who does not own it", async () => {
+    group.team1_id = "t-owner";
+    group.team2_id = null;
+
+    const res = await convert({ team1_id: "t-owner" });
+
+    expect(res.status).toBe(201);
+    expect(group.update.mock.calls.at(-1)[0].team1_id).toBe("t-owner");
+  });
+
   it("returns the group hydrated with its linked teams so the client can render Scout", async () => {
     const hydrated = {
       toJSON: () => ({
