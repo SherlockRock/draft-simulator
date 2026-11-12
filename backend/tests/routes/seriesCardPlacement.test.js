@@ -241,3 +241,98 @@ describe("series game Cards are placed relative to their group", () => {
     });
   });
 });
+
+// The JSON import (users.js) was the one writer these placements missed: it
+// seeded each game Card at `group.positionX + i * 380` / `group.positionY`, a
+// world coordinate, where every canvas.js route seeds container-relative.
+describe("JSON series import places game Cards relative to the series group", () => {
+  function buildUsersApp() {
+    const routePath = require.resolve("../../routes/users");
+    delete require.cache[routePath];
+    const app = express();
+    app.use(express.json());
+    app.use("/api/users", require("../../routes/users"));
+    return app;
+  }
+
+  const importTwoGames = async ({ existing, dedupeStrategy }) => {
+    const sequelize = require("../../config/database");
+    vi.spyOn(sequelize, "transaction").mockResolvedValue(transaction);
+    vi.spyOn(CanvasDraft, "findOne").mockResolvedValue(null);
+    vi.spyOn(CanvasDraft, "destroy").mockResolvedValue(0);
+    vi.spyOn(VersusDraft, "findOne").mockResolvedValue(null);
+    vi.spyOn(VersusDraft, "create").mockResolvedValue({
+      id: "vd-1",
+      name: "Imported Series",
+      blueTeamName: "MEOW",
+      redTeamName: "TSR",
+      length: 3,
+      competitive: true,
+      type: "standard",
+      disabledChampions: [],
+    });
+    vi.spyOn(Draft, "findOne").mockResolvedValue(null);
+    vi.spyOn(Draft, "findAll").mockResolvedValue([
+      { id: "d-0", seriesIndex: 0 },
+      { id: "d-1", seriesIndex: 1 },
+    ]);
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(existing ? group : null);
+    vi.spyOn(CanvasGroup, "create").mockResolvedValue({
+      id: "g-new",
+      positionX: GROUP_X,
+      positionY: GROUP_Y,
+      toJSON: () => ({ id: "g-new" }),
+    });
+    const created = CanvasDraft.create;
+
+    const res = await request(buildUsersApp())
+      .post("/api/users/me/import/canvas/c-1")
+      .send({
+        data: {
+          drafts: [],
+          versusSeries: [
+            {
+              name: "Imported Series",
+              blueTeamName: "MEOW",
+              redTeamName: "TSR",
+              seriesLength: 3,
+              draftType: "standard",
+              competitive: true,
+              disabledChampions: [],
+              drafts: [
+                { name: "Game 1", gameNumber: 1, picks: Array(20).fill("") },
+                { name: "Game 2", gameNumber: 2, picks: Array(20).fill("") },
+              ],
+            },
+          ],
+        },
+        options: { dedupeStrategy },
+      });
+    expect(res.status).toBe(200);
+    return created.mock.calls.map(([values]) => values);
+  };
+
+  const expectRelative = (placed, groupId) => {
+    expect(placed.map((v) => [v.positionX, v.positionY])).toEqual([
+      [SERIES_PADDING_X, SERIES_FIRST_CARD_Y],
+      [SERIES_PADDING_X + SERIES_GAME_STEP, SERIES_FIRST_CARD_Y],
+    ]);
+    for (const values of placed) expect(values.group_id).toBe(groupId);
+  };
+
+  it("seeds a newly created series group's cards container-relative", async () => {
+    const placed = await importTwoGames({
+      existing: false,
+      dedupeStrategy: "overwrite",
+    });
+    expectRelative(placed, "g-new");
+  });
+
+  it("seeds an overwritten series group's cards container-relative", async () => {
+    const placed = await importTwoGames({
+      existing: true,
+      dedupeStrategy: "overwrite",
+    });
+    expectRelative(placed, "g-1");
+  });
+});
