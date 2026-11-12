@@ -11,7 +11,7 @@ import {
 import { useNavigate } from "@solidjs/router";
 import toast from "solid-toast";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/solid-query";
-import type { Team } from "@draft-sim/shared-types";
+import type { TeamListRow } from "@draft-sim/shared-types";
 import { fetchTeams, updateTeam, deleteTeam } from "../utils/actions";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { TeamRosterEditor } from "./TeamRosterEditor";
@@ -26,13 +26,13 @@ export const MyTeamsSection: Component = () => {
 
     const [editingId, setEditingId] = createSignal<string | null>(null);
     const [editValue, setEditValue] = createSignal("");
-    const [teamToDelete, setTeamToDelete] = createSignal<Team | null>(null);
+    const [teamToDelete, setTeamToDelete] = createSignal<TeamListRow | null>(null);
     const [expandedId, setExpandedId] = createSignal<string | null>(null);
     const navigate = useNavigate();
 
     const invalidate = () => queryClient.invalidateQueries({ queryKey: ["teams"] });
 
-    const scoutTeam = (team: Team) => {
+    const scoutTeam = (team: TeamListRow) => {
         const link = buildScoutLink(team, null);
         if (!link) {
             toast.error("Add players to this team's roster first");
@@ -62,7 +62,7 @@ export const MyTeamsSection: Component = () => {
         onError: (error: Error) => toast.error(`Delete failed: ${error.message}`)
     }));
 
-    const startEdit = (team: Team) => {
+    const startEdit = (team: TeamListRow) => {
         setEditingId(team.id);
         setEditValue(team.name);
     };
@@ -111,43 +111,50 @@ export const MyTeamsSection: Component = () => {
                                                 >
                                                     <Crosshair size={16} />
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setExpandedId((cur) =>
-                                                            cur === team.id
-                                                                ? null
-                                                                : team.id
-                                                        )
-                                                    }
-                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
-                                                    title="Edit roster"
-                                                >
-                                                    <Show
-                                                        when={expandedId() === team.id}
-                                                        fallback={
-                                                            <ChevronRight size={16} />
+                                                {/* Only teams the user can edit get roster/rename/delete controls. */}
+                                                <Show when={team.canEditRoster}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setExpandedId((cur) =>
+                                                                cur === team.id
+                                                                    ? null
+                                                                    : team.id
+                                                            )
                                                         }
+                                                        class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
+                                                        title="Edit roster"
                                                     >
-                                                        <ChevronDown size={16} />
-                                                    </Show>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => startEdit(team)}
-                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
-                                                    title="Rename"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setTeamToDelete(team)}
-                                                    class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-red-400"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                        <Show
+                                                            when={
+                                                                expandedId() === team.id
+                                                            }
+                                                            fallback={
+                                                                <ChevronRight size={16} />
+                                                            }
+                                                        >
+                                                            <ChevronDown size={16} />
+                                                        </Show>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startEdit(team)}
+                                                        class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-darius-purple-bright"
+                                                        title="Rename"
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setTeamToDelete(team)
+                                                        }
+                                                        class="rounded p-1.5 text-darius-text-secondary transition-colors hover:bg-darius-card-hover hover:text-red-400"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </Show>
                                             </>
                                         }
                                     >
@@ -185,7 +192,9 @@ export const MyTeamsSection: Component = () => {
                                         </button>
                                     </Show>
                                 </div>
-                                <Show when={expandedId() === team.id}>
+                                <Show
+                                    when={team.canEditRoster && expandedId() === team.id}
+                                >
                                     <div class="px-3 pb-3">
                                         <TeamRosterEditor
                                             team={team}

@@ -1,7 +1,7 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import toast from "solid-toast";
 import { useMutation, useQueryClient } from "@tanstack/solid-query";
-import type { Role, RosterInput, Team } from "@draft-sim/shared-types";
+import type { Role, RosterInput, TeamListRow } from "@draft-sim/shared-types";
 import { SCOUT_REGION_OPTIONS } from "@draft-sim/shared-types";
 import { updateTeamRoster } from "../utils/actions";
 import { parsePlayersInput, ROLE_ORDER } from "../utils/playerStats";
@@ -26,7 +26,7 @@ const idLabel = (p: { gameName: string; tagLine: string }) =>
 type DragFrom = { kind: "slot"; index: number } | { kind: "bench"; index: number };
 
 export const TeamRosterEditor: Component<{
-    team: Team;
+    team: TeamListRow;
     onSaved: () => void;
 }> = (props) => {
     const queryClient = useQueryClient();
@@ -139,140 +139,168 @@ export const TeamRosterEditor: Component<{
         onDragEnd: () => setDragFrom(null)
     });
 
+    // A team the user cannot edit (an imported tournament team) gets a read-only
+    // roster; the server would refuse the PUT anyway.
     return (
-        <div class="mt-2 rounded-md border border-darius-border bg-darius-card-hover p-4">
-            <div class="mb-3 flex items-center gap-2">
-                <span class="text-sm text-darius-text-secondary">Region</span>
-                <StyledSelect
-                    value={region()}
-                    options={SCOUT_REGION_OPTIONS}
-                    onChange={(v) => setRegion(v)}
-                />
-            </div>
-
-            {/* Role slots */}
-            <div class="mb-3 space-y-1">
-                <For each={ROLE_ORDER}>
-                    {(role, i) => (
-                        <div
-                            class="flex items-center gap-2 rounded border border-dashed border-darius-border px-2 py-1.5"
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={() => moveTo({ kind: "slot", index: i() })}
-                        >
-                            <span class="w-16 shrink-0 text-xs font-medium uppercase text-darius-text-secondary">
-                                {ROLE_LABEL[role]}
-                            </span>
-                            <Show
-                                when={slots()[i()]}
-                                fallback={
-                                    <span class="text-xs italic text-darius-text-secondary/60">
-                                        drop a player here
-                                    </span>
-                                }
-                            >
-                                {(slot) => (
-                                    <span
-                                        class="flex-1 cursor-grab select-text truncate text-sm text-darius-text-primary"
-                                        {...dragProps({ kind: "slot", index: i() })}
-                                    >
-                                        {idLabel(slot())}
-                                    </span>
-                                )}
-                            </Show>
-                            <Show when={slots()[i()]}>
-                                <button
-                                    type="button"
-                                    title="Move to bench"
-                                    class="text-xs text-darius-text-secondary hover:text-darius-crimson"
-                                    onClick={() =>
-                                        removePlayer({ kind: "slot", index: i() })
-                                    }
-                                >
-                                    ✕
-                                </button>
-                            </Show>
-                        </div>
-                    )}
-                </For>
-            </div>
-
-            {/* Bench */}
-            <div
-                class="mb-3 min-h-10 rounded border border-darius-border p-2"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => moveTo({ kind: "bench", index: bench().length })}
-            >
-                <div class="mb-1 text-xs uppercase text-darius-text-secondary">Bench</div>
-                <div class="flex flex-wrap gap-1">
+        <Show
+            when={props.team.canEditRoster}
+            fallback={
+                <div class="mt-2 rounded-md border border-darius-border bg-darius-card-hover p-4">
                     <For
-                        each={bench()}
+                        each={[...(props.team.TeamPlayers ?? [])].sort(
+                            (a, b) => a.ordinal - b.ordinal
+                        )}
                         fallback={
                             <span class="text-xs italic text-darius-text-secondary/60">
-                                unroled players land here
+                                No players listed
                             </span>
                         }
                     >
-                        {(p, i) => (
-                            <span
-                                class="flex cursor-grab items-center gap-1 rounded bg-darius-card px-2 py-0.5 text-xs text-darius-text-primary"
-                                {...dragProps({ kind: "bench", index: i() })}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => {
-                                    e.stopPropagation();
-                                    moveTo({ kind: "bench", index: i() });
-                                }}
-                            >
-                                <span class="select-text">{idLabel(p)}</span>
-                                <button
-                                    type="button"
-                                    title="Remove from roster"
-                                    class="text-darius-text-secondary hover:text-darius-crimson"
-                                    onClick={() =>
-                                        removePlayer({ kind: "bench", index: i() })
-                                    }
-                                >
-                                    ✕
-                                </button>
-                            </span>
+                        {(p) => (
+                            <div class="select-text text-sm text-darius-text-primary">
+                                {idLabel(p)}
+                            </div>
                         )}
                     </For>
                 </div>
-            </div>
+            }
+        >
+            <div class="mt-2 rounded-md border border-darius-border bg-darius-card-hover p-4">
+                <div class="mb-3 flex items-center gap-2">
+                    <span class="text-sm text-darius-text-secondary">Region</span>
+                    <StyledSelect
+                        value={region()}
+                        options={SCOUT_REGION_OPTIONS}
+                        onChange={(v) => setRegion(v)}
+                    />
+                </div>
 
-            {/* Paste */}
-            <div class="mb-3 flex gap-2">
-                <input
-                    type="text"
-                    value={pasteText()}
-                    placeholder="Paste op.gg multisearch link or Name#TAG, Name#TAG…"
-                    onInput={(e) => setPasteText(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") applyPaste();
-                    }}
-                    class="flex-1 select-text rounded border border-darius-border bg-darius-card px-2 py-1 text-sm text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
-                />
-                <button
-                    type="button"
-                    onClick={applyPaste}
-                    class="rounded bg-darius-border px-3 py-1 text-sm text-darius-text-primary hover:brightness-110"
-                >
-                    Fill
-                </button>
-            </div>
+                {/* Role slots */}
+                <div class="mb-3 space-y-1">
+                    <For each={ROLE_ORDER}>
+                        {(role, i) => (
+                            <div
+                                class="flex items-center gap-2 rounded border border-dashed border-darius-border px-2 py-1.5"
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => moveTo({ kind: "slot", index: i() })}
+                            >
+                                <span class="w-16 shrink-0 text-xs font-medium uppercase text-darius-text-secondary">
+                                    {ROLE_LABEL[role]}
+                                </span>
+                                <Show
+                                    when={slots()[i()]}
+                                    fallback={
+                                        <span class="text-xs italic text-darius-text-secondary/60">
+                                            drop a player here
+                                        </span>
+                                    }
+                                >
+                                    {(slot) => (
+                                        <span
+                                            class="flex-1 cursor-grab select-text truncate text-sm text-darius-text-primary"
+                                            {...dragProps({ kind: "slot", index: i() })}
+                                        >
+                                            {idLabel(slot())}
+                                        </span>
+                                    )}
+                                </Show>
+                                <Show when={slots()[i()]}>
+                                    <button
+                                        type="button"
+                                        title="Move to bench"
+                                        class="text-xs text-darius-text-secondary hover:text-darius-crimson"
+                                        onClick={() =>
+                                            removePlayer({ kind: "slot", index: i() })
+                                        }
+                                    >
+                                        ✕
+                                    </button>
+                                </Show>
+                            </div>
+                        )}
+                    </For>
+                </div>
 
-            <div class="flex items-center justify-between">
-                <span class="text-xs text-darius-text-secondary">
-                    {totalPlayers()}/10 players
-                </span>
-                <button
-                    type="button"
-                    onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending}
-                    class="rounded bg-darius-purple-bright px-4 py-1.5 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50"
+                {/* Bench */}
+                <div
+                    class="mb-3 min-h-10 rounded border border-darius-border p-2"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => moveTo({ kind: "bench", index: bench().length })}
                 >
-                    Save roster
-                </button>
+                    <div class="mb-1 text-xs uppercase text-darius-text-secondary">
+                        Bench
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                        <For
+                            each={bench()}
+                            fallback={
+                                <span class="text-xs italic text-darius-text-secondary/60">
+                                    unroled players land here
+                                </span>
+                            }
+                        >
+                            {(p, i) => (
+                                <span
+                                    class="flex cursor-grab items-center gap-1 rounded bg-darius-card px-2 py-0.5 text-xs text-darius-text-primary"
+                                    {...dragProps({ kind: "bench", index: i() })}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                        e.stopPropagation();
+                                        moveTo({ kind: "bench", index: i() });
+                                    }}
+                                >
+                                    <span class="select-text">{idLabel(p)}</span>
+                                    <button
+                                        type="button"
+                                        title="Remove from roster"
+                                        class="text-darius-text-secondary hover:text-darius-crimson"
+                                        onClick={() =>
+                                            removePlayer({ kind: "bench", index: i() })
+                                        }
+                                    >
+                                        ✕
+                                    </button>
+                                </span>
+                            )}
+                        </For>
+                    </div>
+                </div>
+
+                {/* Paste */}
+                <div class="mb-3 flex gap-2">
+                    <input
+                        type="text"
+                        value={pasteText()}
+                        placeholder="Paste op.gg multisearch link or Name#TAG, Name#TAG…"
+                        onInput={(e) => setPasteText(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") applyPaste();
+                        }}
+                        class="flex-1 select-text rounded border border-darius-border bg-darius-card px-2 py-1 text-sm text-darius-text-primary focus:border-darius-purple-bright focus:outline-none"
+                    />
+                    <button
+                        type="button"
+                        onClick={applyPaste}
+                        class="rounded bg-darius-border px-3 py-1 text-sm text-darius-text-primary hover:brightness-110"
+                    >
+                        Fill
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-darius-text-secondary">
+                        {totalPlayers()}/10 players
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => saveMutation.mutate()}
+                        disabled={saveMutation.isPending}
+                        class="rounded bg-darius-purple-bright px-4 py-1.5 text-sm font-medium text-white hover:brightness-110 disabled:opacity-50"
+                    >
+                        Save roster
+                    </button>
+                </div>
             </div>
-        </div>
+        </Show>
     );
 };

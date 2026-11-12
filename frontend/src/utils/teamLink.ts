@@ -1,4 +1,4 @@
-import type { Team } from "@draft-sim/shared-types";
+import type { TeamListRow } from "@draft-sim/shared-types";
 
 export type TeamLinkResolution = { name: string; teamId: string | null };
 
@@ -15,14 +15,18 @@ export function isPlaceholderTeamName(name: string | null | undefined): boolean 
     return typeof name === "string" && SENTINEL_NAMES.has(normalize(name));
 }
 
-// Exactly one owned team by that name, or nothing. Ambiguity fails safe: team
+// Exactly one team the user can edit (their own pickup teams) by that name, or
+// nothing. Imported tournament teams never match by name, so typing "DOG" cannot
+// silently link a public team; picking one explicitly still links. Ambiguity fails safe: team
 // names carry no unique constraint (no index on (owner_id, name), and rename is
 // unchecked), so on a duplicate we cannot tell which one was meant — and
 // guessing would scout the wrong five players.
-export function findTeamByName(name: string, teams: Team[]): Team | null {
+export function findTeamByName(name: string, teams: TeamListRow[]): TeamListRow | null {
     const needle = normalize(name);
     if (!needle || isPlaceholderTeamName(needle)) return null;
-    const matches = teams.filter((team) => normalize(team.name) === needle);
+    const matches = teams.filter(
+        (team) => team.canEditRoster && normalize(team.name) === needle
+    );
     return matches.length === 1 ? matches[0] : null;
 }
 
@@ -40,7 +44,7 @@ export function findTeamByName(name: string, teams: Team[]): Team | null {
 export function resolveTeamLink(
     name: string,
     teamId: string | null,
-    teams: Team[],
+    teams: TeamListRow[],
     fallbackName: string
 ): TeamLinkResolution {
     const trimmed = name.trim();

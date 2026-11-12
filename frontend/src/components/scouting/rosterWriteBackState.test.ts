@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot, createSignal, type Setter } from "solid-js";
-import type { Team, TeamPlayer } from "@draft-sim/shared-types";
+import type { TeamListRow, TeamPlayer } from "@draft-sim/shared-types";
 import type { SavePayload } from "../../utils/rosterSaver";
 import type { PlayerId } from "../../utils/playerStats";
 import {
@@ -23,11 +23,12 @@ const player = (gameName: string, ordinal: number): TeamPlayer => ({
     ordinal
 });
 
-const team = (id: string, name: string, names: string[]): Team => ({
+const team = (id: string, name: string, names: string[]): TeamListRow => ({
     id,
     owner_id: "owner-1",
     name,
     region: "na1",
+    canEditRoster: true,
     TeamPlayers: names.map((n, i) => ({ ...player(n, i), team_id: id }))
 });
 
@@ -42,7 +43,7 @@ type Harness = {
     disarmed: ScoutSide[];
     toasts: { id: string; message: string }[];
     setTeamId: Setter<Record<ScoutSide, string>>;
-    setOwnedTeams: Setter<Team[]>;
+    setOwnedTeams: Setter<TeamListRow[]>;
     setResolved: Setter<boolean>;
     setFailed: Setter<boolean>;
     setSignedIn: Setter<boolean>;
@@ -51,7 +52,7 @@ type Harness = {
 
 type Options = {
     teamId?: Partial<Record<ScoutSide, string>>;
-    ownedTeams?: Team[];
+    ownedTeams?: TeamListRow[];
     resolved?: boolean;
     failed?: boolean;
     signedIn?: boolean;
@@ -67,7 +68,7 @@ const setup = (options: Options = {}): Harness => {
             you: options.teamId?.you ?? "",
             enemy: options.teamId?.enemy ?? ""
         });
-        const [ownedTeams, setOwnedTeams] = createSignal<Team[]>(
+        const [ownedTeams, setOwnedTeams] = createSignal<TeamListRow[]>(
             options.ownedTeams ?? []
         );
         const [resolved, setResolved] = createSignal(options.resolved ?? true);
@@ -131,6 +132,20 @@ describe("createRosterWriteBack", () => {
         it("arms nothing for a team the user does not own", () => {
             const h = setup({ teamId: { you: "team-z" }, ownedTeams: [alpha] });
             expect(h.state.armedTeam("you")).toBeNull();
+            h.dispose();
+        });
+    });
+
+    describe("canEditRoster gate", () => {
+        it("does not arm an imported team that is in the list", () => {
+            const imported = { ...alpha, owner_id: null, canEditRoster: false };
+            const h = setup({ teamId: { you: "team-a" }, ownedTeams: [imported] });
+            expect(h.state.armedTeam("you")).toBeNull();
+            expect(
+                h.state.writeBack("you", lineup("Ann", "Ben", "Cal", "Dot", "Eve"))
+            ).toBe("inert");
+            flushDebounce();
+            expect(h.saves).toEqual([]);
             h.dispose();
         });
     });
@@ -222,11 +237,12 @@ describe("createRosterWriteBack", () => {
         });
 
         it("treats an absent TeamPlayers array as an empty roster", () => {
-            const bare: Team = {
+            const bare: TeamListRow = {
                 id: "team-d",
                 owner_id: "owner-1",
                 name: "Delta",
-                region: "na1"
+                region: "na1",
+                canEditRoster: true
             };
             const h = setup({ teamId: { you: "team-d" }, ownedTeams: [bare] });
             h.state.writeBack("you", lineup("Ann", null, null, null, null));

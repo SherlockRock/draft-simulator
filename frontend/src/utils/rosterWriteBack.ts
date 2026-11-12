@@ -1,4 +1,4 @@
-import type { Team, TeamPlayer, RosterInput } from "@draft-sim/shared-types";
+import type { TeamListRow, TeamPlayer, RosterInput } from "@draft-sim/shared-types";
 import { MAX_ROSTER, ROLE_ORDER, type PlayerId } from "./playerStats";
 
 // Mirrors MAX_ROSTER in backend/routes/teams.js. Defined in playerStats.ts,
@@ -107,12 +107,16 @@ export function mergeScoutedRoster(
     return { ok: true, players };
 }
 
-// `fetchTeams` returns ONLY teams the user owns, so resolving an id against
-// that list IS the ownership check — a shared scout link naming someone else's
-// team resolves to null and arms nothing.
-export function resolveWriteBackTeam(teamId: string, teams: Team[]): Team | null {
+// `fetchTeams` also lists imported tournament teams the user can see, so being
+// in the list is NOT ownership: the gate is the server-computed `canEditRoster`.
+// A shared scout link naming a team the user cannot edit resolves to null and
+// arms nothing.
+export function resolveWriteBackTeam(
+    teamId: string,
+    teams: TeamListRow[]
+): TeamListRow | null {
     if (!teamId) return null;
-    return teams.find((t) => t.id === teamId) ?? null;
+    return teams.find((t) => t.id === teamId && t.canEditRoster) ?? null;
 }
 
 // Decision 26a. `setSearchParams` merges, so a stale `team` id would otherwise

@@ -15,9 +15,10 @@ import {
     SCOUT_REGION_OPTIONS,
     type PlayerScoutResult,
     type Role,
-    type Team
+    type TeamListRow
 } from "@draft-sim/shared-types";
 import { fetchTeams, updateTeamRoster } from "../../utils/actions";
+import { mergeTeamIntoList } from "../../utils/teamLabel";
 import { useUser } from "../../userProvider";
 import { createRosterWriteBack } from "./rosterWriteBackState";
 import { createScoutFetch } from "./scoutFetchCoordinator";
@@ -106,8 +107,8 @@ const ScoutView: Component = () => {
     const teamIdParam = () => getParamString(searchParams.team);
     const enemyTeamIdParam = () => getParamString(searchParams.enemyTeam);
 
-    // fetchTeams returns ONLY owned teams, so resolving against this list IS
-    // the ownership check. Anonymous visitors and shared links never arm.
+    // fetchTeams also lists imported teams the user can see; arming gates on
+    // canEditRoster. Anonymous visitors and shared links never arm.
     const teamsQuery = useQuery(() => ({
         queryKey: ["teams"],
         queryFn: fetchTeams,
@@ -116,7 +117,7 @@ const ScoutView: Component = () => {
     const { armedTeam, savedTeams, writeBack, shouldKeepTeamParam } =
         createRosterWriteBack({
             isSignedIn: () => !!user(),
-            ownedTeams: (): Team[] => teamsQuery.data ?? [],
+            ownedTeams: (): TeamListRow[] => teamsQuery.data ?? [],
             teamsResolved: () => teamsQuery.isSuccess,
             teamsFailed: () => teamsQuery.isError,
             teamIdFor: (side) => (side === "you" ? teamIdParam() : enemyTeamIdParam()),
@@ -141,8 +142,8 @@ const ScoutView: Component = () => {
                 // before the refetch lands would otherwise merge against a
                 // stale roster and delete a player the previous save just
                 // added.
-                queryClient.setQueryData<Team[]>(["teams"], (prev) =>
-                    prev ? prev.map((t) => (t.id === fresh.id ? fresh : t)) : prev
+                queryClient.setQueryData<TeamListRow[]>(["teams"], (prev) =>
+                    prev ? mergeTeamIntoList(prev, fresh) : prev
                 );
                 void queryClient.invalidateQueries({ queryKey: ["teams"] });
             },
