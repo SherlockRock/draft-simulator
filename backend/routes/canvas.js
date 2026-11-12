@@ -19,6 +19,7 @@ const {
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
+const { canLinkTeam } = require("../services/teamAccess");
 const { withoutPlaceholderTeamNames } = require("../utils/teamPlaceholders");
 const Pool = require("../models/Pool.js");
 const {
@@ -106,16 +107,17 @@ async function destroyUnreferencedDrafts(draftIds, transaction) {
 }
 
 // Validates optional team1_id/team2_id from a group-update body against the
-// set of team ids the requesting user owns. Absent field => no change; null =>
-// unlink; a string must be in ownedTeamIds, or equal the group's current id in
-// the same slot (currentLinks). Returns {updates} or {error}.
+// set of team ids the requesting user may link (linkableTeamIds, from
+// loadLinkableTeamIds). Absent field => no change; null => unlink; a string
+// must be in linkableTeamIds, or equal the group's current id in the same slot
+// (currentLinks). Returns {updates} or {error}. Pure.
 //
 // The current-id pass-through is the collaborator fix (Teams decision 10): the
 // Group Settings dialog always sends team1_id/team2_id back, so an editor who
-// does not own the linked team could not save any setting on the group. An
-// unchanged id is not a new link. Linking a *new* team stays owner-only until
-// T1; so does moving an id into the other slot.
-function resolveTeamLinkUpdate(body, ownedTeamIds, currentLinks = {}) {
+// cannot link the linked team (someone else's pickup team, seen through this
+// canvas) could not save any setting on the group. An unchanged id is not a
+// new link. Moving an id into the other slot is a new link and is refused.
+function resolveTeamLinkUpdate(body, linkableTeamIds, currentLinks = {}) {
   const updates = {};
   for (const key of ["team1_id", "team2_id"]) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
@@ -124,16 +126,48 @@ function resolveTeamLinkUpdate(body, ownedTeamIds, currentLinks = {}) {
       updates[key] = null;
     } else if (
       typeof value === "string" &&
-      (ownedTeamIds.has(value) || value === currentLinks[key])
+      (linkableTeamIds.has(value) || value === currentLinks[key])
     ) {
       updates[key] = value;
     } else if (typeof value === "string") {
-      return { error: `${key} must reference a team you own` };
+      return { error: `${key} must reference a team you can link` };
     } else {
       return { error: `${key} must be a team id string or null` };
     }
   }
   return { updates };
+}
+
+const TEAM_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The ids in the body that name a team the user may link (own right only,
+// fix 4; never canvas-derived). One query, for exactly the new ids: an id equal
+// to the group's current id in the same slot passes through resolveTeamLinkUpdate
+// and is not looked up. Malformed ids are not sent to the UUID column (that
+// would be a database error, not a 400); they are simply not linkable.
+async function loadLinkableTeamIds(body, currentLinks, userId, transaction) {
+  const wanted = new Set();
+  for (const key of ["team1_id", "team2_id"]) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = body[key];
+    if (
+      typeof value === "string" &&
+      value !== currentLinks[key] &&
+      TEAM_ID_PATTERN.test(value)
+    ) {
+      wanted.add(value);
+    }
+  }
+  if (wanted.size === 0) return new Set();
+  const teams = await Team.findAll({
+    where: { id: [...wanted] },
+    attributes: ["id", "source", "owner_id"],
+    transaction,
+  });
+  return new Set(
+    teams.filter((team) => canLinkTeam(team, userId)).map((team) => team.id),
+  );
 }
 
 const VALID_GAME_TYPES = new Set(["scrim", "official", "scratch"]);
@@ -1659,16 +1693,21 @@ router.post(
         Object.prototype.hasOwnProperty.call(req.body, "team1_id") ||
         Object.prototype.hasOwnProperty.call(req.body, "team2_id")
       ) {
-        const owned = await Team.findAll({
-          where: { owner_id: req.user.id },
-          attributes: ["id"],
-          transaction: t,
-        });
-        const ownedIds = new Set(owned.map((row) => row.id));
-        const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+        const currentLinks = {
           team1_id: group.team1_id,
           team2_id: group.team2_id,
-        });
+        };
+        const linkableIds = await loadLinkableTeamIds(
+          req.body,
+          currentLinks,
+          req.user.id,
+          t,
+        );
+        const linkResult = resolveTeamLinkUpdate(
+          req.body,
+          linkableIds,
+          currentLinks,
+        );
         if (linkResult.error) {
           await t.rollback();
           return res.status(400).json({ error: linkResult.error });
@@ -2191,21 +2230,26 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       updates.metadata = mergeGroupMetadata(group.metadata, metadata);
     }
 
-    // Team linking (owner-validated). team1_id/team2_id may be string|null.
+    // Team linking (own-right validated, teamAccess.canLinkTeam). team1_id/team2_id may be string|null.
     if (
       Object.prototype.hasOwnProperty.call(req.body, "team1_id") ||
       Object.prototype.hasOwnProperty.call(req.body, "team2_id")
     ) {
-      const owned = await Team.findAll({
-        where: { owner_id: req.user.id },
-        attributes: ["id"],
-        transaction: t,
-      });
-      const ownedIds = new Set(owned.map((row) => row.id));
-      const linkResult = resolveTeamLinkUpdate(req.body, ownedIds, {
+      const currentLinks = {
         team1_id: group.team1_id,
         team2_id: group.team2_id,
-      });
+      };
+      const linkableIds = await loadLinkableTeamIds(
+        req.body,
+        currentLinks,
+        req.user.id,
+        t,
+      );
+      const linkResult = resolveTeamLinkUpdate(
+        req.body,
+        linkableIds,
+        currentLinks,
+      );
       if (linkResult.error) {
         await t.rollback();
         return res.status(400).json({ error: linkResult.error });
@@ -3351,3 +3395,4 @@ router.use(require("./canvasPools"));
 
 module.exports = router;
 module.exports.resolveTeamLinkUpdate = resolveTeamLinkUpdate;
+module.exports.loadLinkableTeamIds = loadLinkableTeamIds;

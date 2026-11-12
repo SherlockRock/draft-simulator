@@ -35,6 +35,10 @@ function buildApp() {
   return app;
 }
 
+const T_OWNER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const T_OTHER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const T_IMPORTED = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
 let group;
 let transaction;
 let versusDraft;
@@ -56,7 +60,7 @@ beforeEach(() => {
     width: 600,
     height: 400,
     versus_draft_id: "vd-1",
-    team1_id: "t-owner",
+    team1_id: T_OWNER,
     team2_id: null,
     metadata: { gameType: "scrim" },
     update: vi.fn(async function (values) {
@@ -112,7 +116,7 @@ describe("PUT group by a collaborator who owns no teams", () => {
   it("saves a setting when the dialog sends the unchanged team ids back", async () => {
     const res = await putGroup({
       metadata: { disabledChampions: ["Ahri"] },
-      team1_id: "t-owner",
+      team1_id: T_OWNER,
       team2_id: null,
     });
 
@@ -124,7 +128,7 @@ describe("PUT group by a collaborator who owns no teams", () => {
     );
     const patch = group.update.mock.calls.at(-1)[0];
     expect(patch.metadata).toMatchObject({ gameType: "scrim" });
-    expect(patch.team1_id).toBe("t-owner");
+    expect(patch.team1_id).toBe(T_OWNER);
     expect(patch.team2_id).toBe(null);
     expect(transaction.commit).toHaveBeenCalled();
   });
@@ -132,21 +136,95 @@ describe("PUT group by a collaborator who owns no teams", () => {
   it("still refuses a team that is neither owned nor already linked", async () => {
     const res = await putGroup({
       metadata: { disabledChampions: ["Ahri"] },
-      team1_id: "t-other",
+      team1_id: T_OTHER,
       team2_id: null,
     });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("team1_id must reference a team you own");
+    expect(res.body.error).toBe("team1_id must reference a team you can link");
     expect(transaction.rollback).toHaveBeenCalled();
     expect(transaction.commit).not.toHaveBeenCalled();
     expect(group.update).not.toHaveBeenCalled();
   });
 
   it("refuses the linked id moved into the other slot", async () => {
-    const res = await putGroup({ team1_id: null, team2_id: "t-owner" });
+    const res = await putGroup({ team1_id: null, team2_id: T_OWNER });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("team2_id must reference a team you own");
+    expect(res.body.error).toBe("team2_id must reference a team you can link");
+  });
+
+  it("does not query teams at all when every id is unchanged or null", async () => {
+    await putGroup({ team1_id: T_OWNER, team2_id: null });
+
+    expect(Team.findAll).not.toHaveBeenCalled();
+  });
+
+  it("makes one Team query for exactly the new ids, inside the transaction", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_IMPORTED, source: "esclub", owner_id: null },
+    ]);
+
+    const res = await putGroup({ team1_id: T_OWNER, team2_id: T_IMPORTED });
+
+    expect(res.status).toBe(200);
+    expect(Team.findAll).toHaveBeenCalledTimes(1);
+    expect(Team.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: [T_IMPORTED] },
+        transaction,
+      }),
+    );
+  });
+
+  it("lets any editor link an imported team", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_IMPORTED, source: "esclub", owner_id: null },
+    ]);
+
+    const res = await putGroup({ team2_id: T_IMPORTED });
+
+    expect(res.status).toBe(200);
+    expect(group.update.mock.calls.at(-1)[0].team2_id).toBe(T_IMPORTED);
+  });
+
+  it("refuses someone else's pickup team that is only visible through this canvas", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_OTHER, source: "manual", owner_id: "someone-else" },
+    ]);
+
+    const res = await putGroup({ team2_id: T_OTHER });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("team2_id must reference a team you can link");
+    expect(group.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to move the canvas-only team into the other slot", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_OWNER, source: "manual", owner_id: "someone-else" },
+    ]);
+
+    const res = await putGroup({ team1_id: null, team2_id: T_OWNER });
+
+    expect(res.status).toBe(400);
+    expect(Team.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: [T_OWNER] } }),
+    );
+  });
+
+  it("unlinks with null from any editor", async () => {
+    const res = await putGroup({ team1_id: null });
+
+    expect(res.status).toBe(200);
+    expect(group.update.mock.calls.at(-1)[0].team1_id).toBe(null);
+    expect(Team.findAll).not.toHaveBeenCalled();
+  });
+
+  it("answers 400 (not a database error) for a malformed id", async () => {
+    const res = await putGroup({ team1_id: "not-a-uuid" });
+
+    expect(res.status).toBe(400);
+    expect(Team.findAll).not.toHaveBeenCalled();
   });
 });
