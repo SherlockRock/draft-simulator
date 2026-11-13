@@ -1,9 +1,10 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
-import { Plus } from "lucide-solid";
-import type { Team, TeamListRow } from "@draft-sim/shared-types";
-import { teamOptionLabel } from "../utils/teamLabel";
-import { createTeam } from "../utils/actions";
+import { Plus, RotateCcw } from "lucide-solid";
+import { toast } from "solid-toast";
+import type { ManagedTeamRow, Team, TeamListRow } from "@draft-sim/shared-types";
+import { pickerRows, type PickerRow } from "../utils/teamPicker";
+import { bulkTeams, createTeam } from "../utils/actions";
 import { createDropdownKeyboard } from "../utils/useDropdownKeyboard";
 
 type TeamNameSelectProps = {
@@ -11,24 +12,32 @@ type TeamNameSelectProps = {
     value: string;
     /** Linked team id, or null when the name is free text. */
     teamId: string | null;
-    /** The user's owned teams to autocomplete against. */
+    /** The teams to autocomplete against (owned, imported, and linked on this canvas). */
     teams: TeamListRow[];
+    /** Archived pickup teams of the user's that can be restored from the picker. */
+    archivedOwned?: ManagedTeamRow[];
     /** Disable entity linking (local/anonymous canvases): plain text input. */
     disabled?: boolean;
     placeholder?: string;
     onChange: (name: string, teamId: string | null) => void;
     /** Called after a new team is created so the parent can refresh its list. */
     onCreated?: (team: Team) => void;
+    /** Called after an archived team is restored so the parent can refresh its lists. */
+    onRestored?: (team: ManagedTeamRow) => void;
 };
 
-type Row = { kind: "team"; team: TeamListRow } | { kind: "create"; name: string };
+const rowText = (row: PickerRow) => {
+    if (row.kind === "team") return row.label;
+    if (row.kind === "restore") return `Restore archived "${row.label}" and link it`;
+    return `Create team "${row.name}"`;
+};
 
 const inputClass =
     "w-full select-text rounded-md border border-darius-border bg-darius-card-hover px-3 py-2 text-darius-text-primary focus:border-darius-purple-bright focus:outline-none";
 
 export const TeamNameSelect = (props: TeamNameSelectProps) => {
     const [open, setOpen] = createSignal(false);
-    const [creating, setCreating] = createSignal(false);
+    const [busy, setBusy] = createSignal(false);
     const [position, setPosition] = createSignal({ top: 0, left: 0, width: 0 });
     let containerRef: HTMLDivElement | undefined;
 
@@ -49,40 +58,44 @@ export const TeamNameSelect = (props: TeamNameSelectProps) => {
         });
     });
 
-    const rows = createMemo<Row[]>(() => {
-        const query = props.value.trim().toLowerCase();
-        const matches = props.teams.filter((team) =>
-            team.name.toLowerCase().includes(query)
-        );
-        const result: Row[] = matches.map((team) => ({ kind: "team", team }));
-        const trimmed = props.value.trim();
-        // Only your own teams block "Create": an imported team of the same name is
-        // a different entity, and typing its name never links it.
-        const exactExists = props.teams.some(
-            (team) => team.canEditRoster && team.name.toLowerCase() === query
-        );
-        if (trimmed.length > 0 && !exactExists) {
-            result.push({ kind: "create", name: trimmed });
-        }
-        return result;
-    });
+    const rows = createMemo<PickerRow[]>(() =>
+        pickerRows(props.value, props.teams, {
+            archivedOwned: props.archivedOwned ?? []
+        })
+    );
 
-    const selectRow = async (row: Row | undefined) => {
+    const selectRow = async (row: PickerRow | undefined) => {
         if (!row) return;
         if (row.kind === "team") {
             props.onChange(row.team.name, row.team.id);
             setOpen(false);
             return;
         }
-        if (creating()) return;
-        setCreating(true);
+        if (busy()) return;
+        setBusy(true);
         try {
-            const team = await createTeam(row.name);
-            props.onCreated?.(team);
-            props.onChange(team.name, team.id);
+            if (row.kind === "create") {
+                const team = await createTeam(row.name);
+                props.onCreated?.(team);
+                props.onChange(team.name, team.id);
+            } else {
+                const result = await bulkTeams("restore", [row.team.id]);
+                if (!result.ids.includes(row.team.id)) {
+                    toast.error("Could not restore that team");
+                    return;
+                }
+                props.onRestored?.(row.team);
+                props.onChange(row.team.name, row.team.id);
+            }
             setOpen(false);
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? `Failed to ${row.kind === "create" ? "create" : "restore"} team: ${error.message}`
+                    : `Failed to ${row.kind === "create" ? "create" : "restore"} team`
+            );
         } finally {
-            setCreating(false);
+            setBusy(false);
         }
     };
 
@@ -167,28 +180,19 @@ export const TeamNameSelect = (props: TeamNameSelectProps) => {
                                                     : "border-transparent text-darius-text-primary hover:bg-darius-card-hover"
                                             }`}
                                         >
-                                            <Show
-                                                when={row.kind === "create"}
-                                                fallback={
-                                                    <span class="truncate">
-                                                        {row.kind === "team"
-                                                            ? teamOptionLabel(row.team)
-                                                            : ""}
-                                                    </span>
-                                                }
-                                            >
+                                            <Show when={row.kind === "restore"}>
+                                                <RotateCcw
+                                                    size={14}
+                                                    class="shrink-0 text-darius-purple-bright"
+                                                />
+                                            </Show>
+                                            <Show when={row.kind === "create"}>
                                                 <Plus
                                                     size={14}
                                                     class="shrink-0 text-darius-purple-bright"
                                                 />
-                                                <span class="truncate">
-                                                    Create team "
-                                                    {row.kind === "create"
-                                                        ? row.name
-                                                        : ""}
-                                                    "
-                                                </span>
                                             </Show>
+                                            <span class="truncate">{rowText(row)}</span>
                                         </div>
                                     </div>
                                 )}

@@ -37,6 +37,7 @@ import {
     updateCanvasDraftPositions,
     convertGroupToSeries,
     fetchTeams,
+    fetchTeamsManage,
     createAnnotation,
     updateAnnotation,
     deleteAnnotation,
@@ -182,6 +183,7 @@ import {
 } from "./utils/useLocalCanvasMutations";
 import { getLocalCanvas, saveLocalCanvas } from "./utils/localCanvasStore";
 import { handleLogin } from "./utils/actions";
+import { archivedOwnedTeams, buildPickerTeams } from "./utils/teamPicker";
 import { SeriesGroupContainer } from "./components/SeriesGroupContainer";
 import { CustomGroupContainer } from "./components/CustomGroupContainer";
 import { DeleteGroupDialog } from "./components/DeleteGroupDialog";
@@ -3050,8 +3052,27 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         enabled: teamsEnabled()
     }));
     const ownedTeams = () => teamsQuery.data ?? [];
+    // Picker list: the raw list plus teams already linked on this canvas's groups
+    // (read-only). Everything else keeps using the raw ownedTeams().
+    const pickerTeams = createMemo(() => buildPickerTeams(ownedTeams(), canvasGroups));
+    const seriesSettingsOpen = () =>
+        disabledChampionsGroupId() !== null || pendingGroupSettingsPosition() !== null;
+    // Archived pickup teams you could restore from the picker; only fetched while
+    // the series settings dialog is open.
+    const teamsManageQuery = useQuery(() => ({
+        queryKey: ["teamsManage"],
+        queryFn: fetchTeamsManage,
+        enabled: teamsEnabled() && seriesSettingsOpen()
+    }));
+    const archivedOwned = createMemo(() =>
+        archivedOwnedTeams(teamsManageQuery.data?.teams ?? [])
+    );
     const handleTeamCreated = () => {
         void queryClient.invalidateQueries({ queryKey: ["teams"] });
+    };
+    const handleTeamRestored = () => {
+        void queryClient.invalidateQueries({ queryKey: ["teams"] });
+        void queryClient.invalidateQueries({ queryKey: ["teamsManage"] });
     };
 
     createEffect(() => {
@@ -8282,9 +8303,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     }
                     initialTeam1Id={settingsGroup()?.team1_id ?? null}
                     initialTeam2Id={settingsGroup()?.team2_id ?? null}
-                    teams={ownedTeams()}
+                    teams={pickerTeams()}
+                    archivedOwned={archivedOwned()}
                     teamsEnabled={teamsEnabled()}
                     onTeamCreated={handleTeamCreated}
+                    onTeamRestored={handleTeamRestored}
                     initialLength={settingsGroup()?.metadata.length ?? 3}
                     initialGameType={settingsGroup()?.metadata.gameType}
                     isNewGroup={pendingGroupSettingsPosition() !== null}

@@ -112,8 +112,11 @@ export function pickerRows(
     }
 
     if (needle.length > 0) {
+        // A team already in the list was just restored (the archived list has
+        // not refetched yet): offer it once, as a team.
+        const listed = new Set(teams.map((team) => team.id));
         for (const team of options.archivedOwned) {
-            if (normalize(team.name) === needle) {
+            if (normalize(team.name) === needle && !listed.has(team.id)) {
                 rows.push({ kind: "restore", team, label: teamOptionLabel(team) });
             }
         }

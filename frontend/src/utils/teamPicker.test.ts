@@ -200,6 +200,13 @@ describe("pickerRows", () => {
         expect(rows[1]).toEqual({ kind: "create", name: "dog" });
     });
 
+    it("offers no restore row for a team already back in the list (just restored)", () => {
+        const rows = pickerRows("DOG", [listRow("old", "DOG")], {
+            archivedOwned: [managed("old", "DOG")]
+        });
+        expect(kinds(rows)).toEqual(["team"]);
+    });
+
     it("offers no restore row for a partial name", () => {
         const rows = pickerRows("do", [], { archivedOwned: [managed("old", "DOG")] });
         expect(kinds(rows)).toEqual(["create"]);

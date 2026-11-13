@@ -7,7 +7,13 @@ import {
     untrack
 } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
-import type { DraftMode, GameType, Team, TeamListRow } from "@draft-sim/shared-types";
+import type {
+    DraftMode,
+    GameType,
+    ManagedTeamRow,
+    Team,
+    TeamListRow
+} from "@draft-sim/shared-types";
 import { Dialog, EscapeKeyHint, ReturnKeyHint } from "./Dialog";
 import { ChampionToggleGrid } from "./ChampionToggleGrid";
 import { StyledSelect } from "./StyledSelect";
@@ -67,7 +73,10 @@ interface GroupSettingsDialogProps {
     teams?: TeamListRow[];
     /** Enable entity linking; false on local/anonymous canvases. */
     teamsEnabled?: boolean;
+    /** Archived pickup teams of yours that the picker may offer to restore. */
+    archivedOwned?: ManagedTeamRow[];
     onTeamCreated?: (team: Team) => void;
+    onTeamRestored?: (team: ManagedTeamRow) => void;
     onSave: (data: {
         name: string;
         disabledChampions: string[];
@@ -378,12 +387,14 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                                 value={blueTeamName()}
                                                 teamId={team1Id()}
                                                 teams={props.teams ?? []}
+                                                archivedOwned={props.archivedOwned ?? []}
                                                 disabled={!(props.teamsEnabled ?? false)}
                                                 onChange={(nextName, nextId) => {
                                                     setBlueTeamName(nextName);
                                                     setTeam1Id(nextId);
                                                 }}
                                                 onCreated={props.onTeamCreated}
+                                                onRestored={props.onTeamRestored}
                                             />
                                         </div>
                                     </label>
@@ -394,12 +405,14 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                                                 value={redTeamName()}
                                                 teamId={team2Id()}
                                                 teams={props.teams ?? []}
+                                                archivedOwned={props.archivedOwned ?? []}
                                                 disabled={!(props.teamsEnabled ?? false)}
                                                 onChange={(nextName, nextId) => {
                                                     setRedTeamName(nextName);
                                                     setTeam2Id(nextId);
                                                 }}
                                                 onCreated={props.onTeamCreated}
+                                                onRestored={props.onTeamRestored}
                                             />
                                         </div>
                                     </label>
