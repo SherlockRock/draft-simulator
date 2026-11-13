@@ -10,7 +10,7 @@ import type { CanvasDraft, CanvasGroup } from "./schemas";
  * hold team1/team2 IDENTITY, which is exactly why they need this mapping.
  *
  * Precedence (card override → linked Team entity → group metadata) matches
- * resolveGroupTeamNames in canvasSearch.ts, so the card, the full-screen view
+ * the key index in searchTeamKeys.ts, so the card, the full-screen view
  * and the search filter finally agree on what a team is called.
  */
 export const resolveTeamNames = (

@@ -2,11 +2,10 @@ import {
     appearsInScope,
     countsInScope,
     effectiveGameType,
-    resolvesTeamNames,
     type SearchScope
 } from "./gameClassification";
 import type { CanvasDraft, CanvasGroup } from "./schemas";
-import { isPlaceholderTeamName } from "./teamLink";
+import type { SearchTeamKey, TeamKeyIndex } from "./searchTeamKeys";
 
 export type SlotPhase = "ban" | "pick";
 export type SlotSide = "blue" | "red";
@@ -15,17 +14,17 @@ export type SearchBucket = "pickedBy" | "pickedAgainst" | "bannedBy" | "bannedAg
 export type SlotKind = { phase: SlotPhase; side: SlotSide };
 
 export type SearchQuery = {
-    /** Canonical champion id (e.g. "Jinx"); null/"" = no champion (team-only when teamName set). */
+    /** Canonical champion id (e.g. "Jinx"); null/"" = no champion (team-only when teamKey set). */
     championId: string | null;
-    /** Case-insensitive team-name filter; null = champion-only search. */
-    teamName: string | null;
+    /** Team key (see searchTeamKeys); null = champion-only search. */
+    teamKey: SearchTeamKey | null;
     /**
-     * Narrows to head-to-head games (design R1); only meaningful with teamName
-     * set — the engine ignores it when teamName is null, and the UI disables
-     * the field until a team is chosen. teamName stays the perspective anchor:
+     * Narrows to head-to-head games (design R1); only meaningful with teamKey
+     * set — the engine ignores it when teamKey is null, and the UI disables
+     * the field until a team is chosen. teamKey stays the perspective anchor:
      * buckets, outcome and teamRecord keep their one-team semantics exactly.
      */
-    opponentTeamName: string | null;
+    opponentKey: SearchTeamKey | null;
     /** Restrict match highlights to one bucket; null = all buckets. */
     bucket: SearchBucket | null;
     /**
@@ -96,59 +95,23 @@ export const isDraftInProgress = (draft: CanvasDraft): boolean => {
     return draft.Draft.picks.some((value, index) => index >= 10 && value === "");
 };
 
-const normalizeName = (name: string | undefined): string | null => {
-    const trimmed = name?.trim().toLowerCase();
-    return trimmed ? trimmed : null;
-};
-
 /**
- * Effective team names for a group: the linked Team entity's name wins, else
- * the free-text metadata string. Keeps unlinked groups and anonymous/local
- * canvases (no Team entity) working via the fallback.
- *
- * CLASSIFIED GROUPS ONLY, deliberately. Search aggregates per-team win/loss
- * records across every draft it can attribute to a team, so an unclassified
- * custom group must not resolve names at all — otherwise throwaway drafts
- * attach themselves to a real team and its dropdown fills with junk.
- *
- * Note this admits `scratch`, which does NOT count. Resolving names and
- * counting are two different questions: a scratch group has to resolve names so
- * that a scratch-scoped search can find its games, and it is then excluded by
- * the scope filter under every other scope. Folding the two together — as an
- * earlier revision did — makes a scratch scope structurally impossible, because
- * the team never matches a side and never reaches the filter.
- *
- * See docs/designs/canvas-game-classification-design.md (D6/D8).
+ * Which side `key` played in `draft`, via group identity (the key index maps
+ * each group's two slots to keys). Per-card name overrides never match. If a
+ * group holds the same key in both slots, team1 wins, as it always has.
  */
-export const resolveGroupTeamNames = (
-    group: CanvasGroup
-): { team1: string | null; team2: string | null } => {
-    if (!resolvesTeamNames(group)) return { team1: null, team2: null };
-    // A linked entity is a deliberate choice and always counts; the free-text
-    // fallback ignores the "Team 1"/"Team 2" placeholders.
-    const freeText = (name: string | undefined): string | null => {
-        const trimmed = name?.trim();
-        return trimmed && !isPlaceholderTeamName(trimmed) ? trimmed : null;
-    };
-    const team1 = group.Team1?.name?.trim() || freeText(group.metadata.blueTeamName);
-    const team2 = group.Team2?.name?.trim() || freeText(group.metadata.redTeamName);
-    return { team1, team2 };
-};
-
 export const teamSideInDraft = (
     draft: CanvasDraft,
     group: CanvasGroup | undefined,
-    teamName: string
+    key: SearchTeamKey,
+    index: TeamKeyIndex
 ): SlotSide | null => {
     if (!group) return null;
-    const target = normalizeName(teamName);
-    if (!target) return null;
-    const { team1, team2 } = resolveGroupTeamNames(group);
-    const t1 = normalizeName(team1 ?? undefined);
-    const t2 = normalizeName(team2 ?? undefined);
+    const keys = index.keysByGroup.get(group.id);
+    if (keys === undefined) return null;
     const blueSideTeam = draft.Draft.blueSideTeam ?? 1;
-    if (t1 === target) return blueSideTeam === 1 ? "blue" : "red";
-    if (t2 === target) return blueSideTeam === 1 ? "red" : "blue";
+    if (keys.team1 === key) return blueSideTeam === 1 ? "blue" : "red";
+    if (keys.team2 === key) return blueSideTeam === 1 ? "red" : "blue";
     return null;
 };
 
@@ -157,34 +120,6 @@ export const bucketFor = (kind: SlotKind, teamSide: SlotSide): SearchBucket => {
         return kind.side === teamSide ? "pickedBy" : "pickedAgainst";
     }
     return kind.side === teamSide ? "bannedBy" : "bannedAgainst";
-};
-
-/**
- * Distinct team names across all groups (case-insensitive, first casing wins),
- * sorted.
- *
- * Scope-aware: a team is only offered if it appears in a group the current scope
- * would actually search. Without this, selecting scope "scratch" would still
- * list every scrim-only team and hand you an empty record with no explanation —
- * and now that scratch groups resolve names, the reverse would happen under
- * "all".
- */
-export const getTeamNameOptions = (
-    groups: readonly CanvasGroup[],
-    scope: SearchScope = "all"
-): string[] => {
-    const seen = new Map<string, string>();
-    for (const group of groups) {
-        if (!countsInScope(effectiveGameType(undefined, group), scope)) continue;
-        const { team1, team2 } = resolveGroupTeamNames(group);
-        for (const raw of [team1, team2]) {
-            const trimmed = raw?.trim();
-            if (!trimmed) continue;
-            const key = trimmed.toLowerCase();
-            if (!seen.has(key)) seen.set(key, trimmed);
-        }
-    }
-    return [...seen.values()].sort((a, b) => a.localeCompare(b));
 };
 
 const emptyBucketSummary = (): BucketSummary => ({
@@ -215,11 +150,12 @@ const computeOutcome = (
 const passesOpponentFilter = (
     canvasDraft: CanvasDraft,
     group: CanvasGroup | undefined,
-    opponentTeamName: string | null,
-    teamSide: SlotSide
+    opponentKey: SearchTeamKey | null,
+    teamSide: SlotSide,
+    index: TeamKeyIndex
 ): boolean => {
-    if (opponentTeamName === null) return true;
-    const oppSide = teamSideInDraft(canvasDraft, group, opponentTeamName);
+    if (opponentKey === null) return true;
+    const oppSide = teamSideInDraft(canvasDraft, group, opponentKey, index);
     return oppSide !== null && oppSide !== teamSide;
 };
 
@@ -231,9 +167,10 @@ const passesOpponentFilter = (
 const computeTeamOnlyResults = (
     drafts: readonly CanvasDraft[],
     groupById: Map<string, CanvasGroup>,
-    teamName: string,
-    opponentTeamName: string | null,
-    scope: SearchScope
+    teamKey: SearchTeamKey,
+    opponentKey: SearchTeamKey | null,
+    scope: SearchScope,
+    index: TeamKeyIndex
 ): SearchResults => {
     const matches: DraftMatch[] = [];
     const teamRecord = emptyBucketSummary();
@@ -244,9 +181,9 @@ const computeTeamOnlyResults = (
             : undefined;
         // Unconditional here: this path only runs under a team filter.
         if (!countsInScope(effectiveGameType(canvasDraft, group), scope)) continue;
-        const teamSide = teamSideInDraft(canvasDraft, group, teamName);
+        const teamSide = teamSideInDraft(canvasDraft, group, teamKey, index);
         if (teamSide === null) continue;
-        if (!passesOpponentFilter(canvasDraft, group, opponentTeamName, teamSide))
+        if (!passesOpponentFilter(canvasDraft, group, opponentKey, teamSide, index))
             continue;
 
         const inProgress = isDraftInProgress(canvasDraft);
@@ -275,26 +212,28 @@ export const computeSearchResults = (
     drafts: readonly CanvasDraft[],
     groups: readonly CanvasGroup[],
     query: SearchQuery,
-    resolvePick: (pickValue: string) => string
+    resolvePick: (pickValue: string) => string,
+    index: TeamKeyIndex
 ): SearchResults => {
     const groupById = new Map(groups.map((group) => [group.id, group]));
 
     const championId = query.championId;
     if (championId === null || championId === "") {
-        if (query.teamName === null) {
+        if (query.teamKey === null) {
             return { matches: [], buckets: null, teamRecord: null };
         }
         return computeTeamOnlyResults(
             drafts,
             groupById,
-            query.teamName,
-            query.opponentTeamName,
-            query.scope
+            query.teamKey,
+            query.opponentKey,
+            query.scope,
+            index
         );
     }
 
     const buckets =
-        query.teamName !== null
+        query.teamKey !== null
             ? {
                   pickedBy: emptyBucketSummary(),
                   pickedAgainst: emptyBucketSummary(),
@@ -315,21 +254,22 @@ export const computeSearchResults = (
         // cards and unclassified groups — most of a typical canvas.
         const effective = effectiveGameType(canvasDraft, group);
         const inScope =
-            query.teamName !== null
+            query.teamKey !== null
                 ? countsInScope(effective, query.scope)
                 : appearsInScope(effective, query.scope);
         if (!inScope) continue;
 
         let teamSide: SlotSide | null = null;
-        if (query.teamName !== null) {
-            teamSide = teamSideInDraft(canvasDraft, group, query.teamName);
+        if (query.teamKey !== null) {
+            teamSide = teamSideInDraft(canvasDraft, group, query.teamKey, index);
             if (teamSide === null) continue;
             if (
                 !passesOpponentFilter(
                     canvasDraft,
                     group,
-                    query.opponentTeamName,
-                    teamSide
+                    query.opponentKey,
+                    teamSide,
+                    index
                 )
             )
                 continue;
@@ -383,18 +323,6 @@ export const computeSearchResults = (
     }
 
     return { matches, buckets, teamRecord: null };
-};
-
-/** The opponent dropdown: the same scope-aware list minus the selected team (R1). */
-export const getOpponentNameOptions = (
-    groups: readonly CanvasGroup[],
-    scope: SearchScope,
-    teamName: string
-): string[] => {
-    const target = teamName.trim().toLowerCase();
-    return getTeamNameOptions(groups, scope).filter(
-        (name) => name.trim().toLowerCase() !== target
-    );
 };
 
 const parseTime = (iso: string | undefined): number => {
@@ -478,9 +406,10 @@ export const computeMatchupScopeHint = (
     drafts: readonly CanvasDraft[],
     groups: readonly CanvasGroup[],
     query: SearchQuery,
-    resolvePick: (pickValue: string) => string
+    resolvePick: (pickValue: string) => string,
+    index: TeamKeyIndex
 ): ScopeHint[] => {
-    if (query.teamName === null || query.opponentTeamName === null) return [];
+    if (query.teamKey === null || query.opponentKey === null) return [];
     const hints: ScopeHint[] = [];
     for (const scope of NAMED_SCOPES) {
         if (scope === query.scope) continue;
@@ -488,7 +417,8 @@ export const computeMatchupScopeHint = (
             drafts,
             groups,
             { ...query, scope },
-            resolvePick
+            resolvePick,
+            index
         ).matches.length;
         if (games > 0) hints.push({ scope, games });
     }
