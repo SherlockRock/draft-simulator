@@ -147,6 +147,50 @@ describe("teams CRUD routes", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it.each(["Team 1", " team 2 ", "TEAM 1"])(
+    "POST / refuses the placeholder name %j with 400 and writes nothing",
+    async (name) => {
+      const create = vi.spyOn(Team, "create");
+      const res = await request(buildApp()).post("/api/teams").send({ name });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("placeholders");
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["Team 1", " team 2 "])(
+    "PATCH /:id refuses the placeholder name %j with 400 and saves nothing",
+    async (name) => {
+      const save = vi.fn();
+      vi.spyOn(Team, "findByPk").mockResolvedValue(
+        pickup({ name: "Old", save }),
+      );
+
+      const res = await request(buildApp())
+        .patch("/api/teams/t1")
+        .send({ name });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("placeholders");
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
+
+  it("PATCH /:id with only a region is not affected by the placeholder check", async () => {
+    const save = vi.fn();
+    vi.spyOn(Team, "findByPk").mockResolvedValue(
+      pickup({ name: "Team 1", save }),
+    );
+
+    const res = await request(buildApp())
+      .patch("/api/teams/t1")
+      .send({ region: "euw1" });
+
+    expect(res.status).toBe(200);
+    expect(save).toHaveBeenCalled();
+  });
+
   it("POST / creates a trimmed manual pickup team owned by the user", async () => {
     const create = vi
       .spyOn(Team, "create")
@@ -222,6 +266,36 @@ describe("teams CRUD routes", () => {
     const res = await request(buildApp())
       .patch("/api/teams/t1")
       .send({ name: "New" });
+
+    expect(res.status).toBe(403);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // The placeholder 400 must not tell a stranger that an invisible team exists:
+  // access is decided first.
+  it("PATCH /:id with a placeholder name is still 404 for an invisible team", async () => {
+    vi.spyOn(Team, "findByPk").mockResolvedValue(
+      pickup({ owner_id: "someone-else", save: vi.fn() }),
+    );
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue(null);
+
+    const res = await request(buildApp())
+      .patch("/api/teams/t1")
+      .send({ name: "Team 1" });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("PATCH /:id with a placeholder name is still 403 for a read-only team", async () => {
+    const save = vi.fn();
+    vi.spyOn(Team, "findByPk").mockResolvedValue(
+      pickup({ owner_id: "someone-else", save }),
+    );
+    vi.spyOn(CanvasGroup, "findOne").mockResolvedValue({ id: "g-1" });
+
+    const res = await request(buildApp())
+      .patch("/api/teams/t1")
+      .send({ name: "Team 1" });
 
     expect(res.status).toBe(403);
     expect(save).not.toHaveBeenCalled();
