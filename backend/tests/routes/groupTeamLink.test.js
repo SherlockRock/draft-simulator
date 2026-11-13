@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const Team = require("../../models/Team");
+const { CanvasGroup } = require("../../models/Canvas.js");
 const {
   resolveTeamLinkUpdate,
   loadLinkableTeamIds,
@@ -72,6 +73,7 @@ describe("loadLinkableTeamIds", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([]);
   });
 
   it("makes one Team query for exactly the new ids, inside the transaction", async () => {
@@ -84,6 +86,7 @@ describe("loadLinkableTeamIds", () => {
       { team1_id: A, team2_id: B },
       { team1_id: null, team2_id: null },
       "u1",
+      "c-1",
       tx,
     );
 
@@ -103,6 +106,7 @@ describe("loadLinkableTeamIds", () => {
       { team1_id: A, team2_id: B },
       { team1_id: A, team2_id: null },
       "u1",
+      "c-1",
       tx,
     );
 
@@ -119,6 +123,7 @@ describe("loadLinkableTeamIds", () => {
       { team1_id: null, team2_id: A },
       { team1_id: A, team2_id: null },
       "u1",
+      "c-1",
       tx,
     );
 
@@ -130,7 +135,7 @@ describe("loadLinkableTeamIds", () => {
     vi.spyOn(Team, "findAll").mockResolvedValue([
       { id: C, source: "manual", owner_id: "someone-else" },
     ]);
-    const ids = await loadLinkableTeamIds({ team1_id: C }, {}, "u1", tx);
+    const ids = await loadLinkableTeamIds({ team1_id: C }, {}, "u1", "c-1", tx);
     expect(ids.size).toBe(0);
   });
 
@@ -140,9 +145,54 @@ describe("loadLinkableTeamIds", () => {
       { team1_id: null, team2_id: "not-a-uuid" },
       { team1_id: A },
       "u1",
+      "c-1",
       tx,
     );
     expect(findAll).not.toHaveBeenCalled();
     expect(ids.size).toBe(0);
+  });
+});
+
+describe("loadLinkableTeamIds on the same canvas (T3 Task 5)", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const tx = { id: "tx" };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("adds a refused id that is linked on this canvas, and only that id", async () => {
+    vi.spyOn(Team, "findAll").mockResolvedValue([
+      { id: A, source: "manual", owner_id: "someone-else" },
+      { id: B, source: "manual", owner_id: "someone-else" },
+    ]);
+    const findAll = vi
+      .spyOn(CanvasGroup, "findAll")
+      .mockResolvedValue([{ team1_id: A, team2_id: null }]);
+
+    const ids = await loadLinkableTeamIds(
+      { team1_id: A, team2_id: B },
+      {},
+      "u1",
+      "c-1",
+      tx,
+    );
+
+    expect(ids).toEqual(new Set([A]));
+    expect(findAll).toHaveBeenCalledTimes(1);
+    expect(findAll.mock.calls[0][0].where.canvas_id).toBe("c-1");
+  });
+
+  it("makes no canvas query when every id passes in the user's own right", async () => {
+    vi.spyOn(Team, "findAll").mockResolvedValue([
+      { id: A, source: "esclub", owner_id: null },
+    ]);
+    const findAll = vi.spyOn(CanvasGroup, "findAll");
+
+    const ids = await loadLinkableTeamIds({ team1_id: A }, {}, "u1", "c-1", tx);
+
+    expect(ids).toEqual(new Set([A]));
+    expect(findAll).not.toHaveBeenCalled();
   });
 });

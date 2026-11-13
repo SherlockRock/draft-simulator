@@ -74,6 +74,33 @@ async function canSeeTeam(team, userId, { transaction } = {}) {
   return linked !== null && linked !== undefined;
 }
 
+/**
+ * The ids among teamIds that are linked, in either slot, on some group of THIS
+ * canvas. Lets an editor of the canvas re-use a team already linked there (T3
+ * Task 5, Q2 A) without widening canLinkTeam. One query; the canvas_id
+ * condition is what keeps it from carrying a team to another canvas.
+ */
+async function teamIdsLinkedOnCanvas(canvasId, teamIds, { transaction } = {}) {
+  if (!canvasId || !teamIds || teamIds.length === 0) return new Set();
+  const wanted = new Set(teamIds);
+  const groups = await CanvasGroup.findAll({
+    attributes: ["team1_id", "team2_id"],
+    where: {
+      canvas_id: canvasId,
+      [Op.or]: [{ team1_id: teamIds }, { team2_id: teamIds }],
+    },
+    raw: true,
+    transaction,
+  });
+  const linked = new Set();
+  for (const group of groups) {
+    for (const id of [group.team1_id, group.team2_id]) {
+      if (wanted.has(id)) linked.add(id);
+    }
+  }
+  return linked;
+}
+
 /** Link onto a group: own right only (fix 4); never canvas-derived. */
 function canLinkTeam(team, userId) {
   return seesInOwnRight(team, userId);
@@ -139,6 +166,7 @@ module.exports = {
   visibleTeamsWhere,
   canSeeTeam,
   canLinkTeam,
+  teamIdsLinkedOnCanvas,
   canEditRoster,
   canArchiveTeam,
   canDeleteTeam,

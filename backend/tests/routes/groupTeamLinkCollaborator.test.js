@@ -228,3 +228,110 @@ describe("PUT group by a collaborator who owns no teams", () => {
     expect(Team.findAll).not.toHaveBeenCalled();
   });
 });
+
+// Teams T3 Task 5 (Rourke's Q2 A): a team already linked on a group of THIS
+// canvas may be linked onto another group, or the other slot, by any editor of
+// the canvas, even a teammate's pickup team the editor cannot link in their own
+// right. Anywhere else the own-right rule still holds.
+describe("PUT group: linking a team already linked on this canvas", () => {
+  const T_MATE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+  // Stands in for the CanvasGroups table: the link lookup is the only
+  // findAll with these attributes, and it honours canvas_id like the database.
+  const linkedRows = (rows) => {
+    CanvasGroup.findAll.mockImplementation(async (options) => {
+      if (!options?.attributes || options.attributes.join() !== "team1_id,team2_id") {
+        return [];
+      }
+      const canvasId = options.where.canvas_id;
+      return rows.filter((row) => canvasId === undefined || row.canvas_id === canvasId);
+    });
+  };
+  const matesTeam = () =>
+    Team.findAll.mockResolvedValue([
+      { id: T_MATE, source: "manual", owner_id: "teammate" },
+    ]);
+
+  it("links the teammate's team, linked on another group of the canvas, to this group", async () => {
+    matesTeam();
+    linkedRows([{ canvas_id: "c-1", team1_id: T_MATE, team2_id: null }]);
+
+    const res = await putGroup({ team2_id: T_MATE });
+
+    expect(res.status).toBe(200);
+    expect(group.update.mock.calls.at(-1)[0].team2_id).toBe(T_MATE);
+    expect(CanvasGroup.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ canvas_id: "c-1" }),
+        transaction,
+      }),
+    );
+  });
+
+  it("swaps the two slots of the same group", async () => {
+    group.team1_id = T_OWNER;
+    group.team2_id = T_MATE;
+    Team.findAll.mockResolvedValue([
+      { id: T_OWNER, source: "manual", owner_id: "teammate" },
+      { id: T_MATE, source: "manual", owner_id: "teammate" },
+    ]);
+    linkedRows([{ canvas_id: "c-1", team1_id: T_OWNER, team2_id: T_MATE }]);
+
+    const res = await putGroup({ team1_id: T_MATE, team2_id: T_OWNER });
+
+    expect(res.status).toBe(200);
+    const patch = group.update.mock.calls.at(-1)[0];
+    expect(patch.team1_id).toBe(T_MATE);
+    expect(patch.team2_id).toBe(T_OWNER);
+  });
+
+  it("refuses the same id when it is linked only on another canvas", async () => {
+    matesTeam();
+    linkedRows([{ canvas_id: "c-2", team1_id: T_MATE, team2_id: null }]);
+
+    const res = await putGroup({ team2_id: T_MATE });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("team2_id must reference a team you can link");
+    expect(group.update).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+  });
+
+  it("refuses a team linked nowhere on the canvas", async () => {
+    matesTeam();
+    linkedRows([]);
+
+    const res = await putGroup({ team2_id: T_MATE });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("looks the canvas links up only for ids the own-right rule refused", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_IMPORTED, source: "esclub", owner_id: null },
+    ]);
+    linkedRows([]);
+
+    const res = await putGroup({ team2_id: T_IMPORTED });
+
+    expect(res.status).toBe(200);
+    expect(CanvasGroup.findAll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ attributes: ["team1_id", "team2_id"] }),
+    );
+  });
+
+  it("still links the editor's own team and still unlinks with null", async () => {
+    Team.findAll.mockResolvedValue([
+      { id: T_MATE, source: "manual", owner_id: "u-editor" },
+    ]);
+    linkedRows([]);
+
+    const linked = await putGroup({ team2_id: T_MATE });
+    expect(linked.status).toBe(200);
+    expect(group.update.mock.calls.at(-1)[0].team2_id).toBe(T_MATE);
+
+    const unlinked = await putGroup({ team1_id: null });
+    expect(unlinked.status).toBe(200);
+    expect(group.update.mock.calls.at(-1)[0].team1_id).toBe(null);
+  });
+});

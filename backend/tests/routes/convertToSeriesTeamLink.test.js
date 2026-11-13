@@ -225,3 +225,51 @@ describe("POST convert-to-series team linking", () => {
     expect(res.body.group.Team1).toMatchObject({ id: T_BLUE, name: "MEOW" });
   });
 });
+
+// Teams T3 Task 5 (Q2 A): a team already linked on a group of this canvas may be
+// linked at conversion time by an editor who can't link it in their own right.
+describe("POST convert-to-series: a team already linked on this canvas", () => {
+  const T_MATE = "12121212-1212-4212-8212-121212121212";
+
+  const linkedRows = (rows) => {
+    CanvasGroup.findAll.mockImplementation(async (options) => {
+      if (!options?.attributes || options.attributes.join() !== "team1_id,team2_id") {
+        return [];
+      }
+      const canvasId = options.where.canvas_id;
+      return rows.filter((row) => canvasId === undefined || row.canvas_id === canvasId);
+    });
+  };
+
+  beforeEach(() => {
+    Team.findAll.mockResolvedValue([
+      { id: T_MATE, source: "manual", owner_id: "teammate" },
+    ]);
+  });
+
+  it("links the teammate's team that is linked on another group of this canvas", async () => {
+    linkedRows([{ canvas_id: "c-1", team1_id: T_MATE, team2_id: null }]);
+
+    const res = await convert({ team2_id: T_MATE });
+
+    expect(res.status).toBe(201);
+    expect(group.update.mock.calls.at(-1)[0].team2_id).toBe(T_MATE);
+    expect(CanvasGroup.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ canvas_id: "c-1" }),
+        transaction,
+      }),
+    );
+  });
+
+  it("refuses the same id when it is linked only on another canvas", async () => {
+    linkedRows([{ canvas_id: "c-2", team1_id: T_MATE, team2_id: null }]);
+
+    const res = await convert({ team2_id: T_MATE });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("team2_id must reference a team you can link");
+    expect(VersusDraft.create).not.toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+});

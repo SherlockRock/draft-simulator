@@ -19,7 +19,10 @@ const {
 const User = require("../models/User.js");
 const VersusDraft = require("../models/VersusDraft.js");
 const Team = require("../models/Team.js");
-const { canLinkTeam } = require("../services/teamAccess");
+const {
+  canLinkTeam,
+  teamIdsLinkedOnCanvas,
+} = require("../services/teamAccess");
 const { withoutPlaceholderTeamNames } = require("../utils/teamPlaceholders");
 const Pool = require("../models/Pool.js");
 const {
@@ -141,12 +144,20 @@ function resolveTeamLinkUpdate(body, linkableTeamIds, currentLinks = {}) {
 const TEAM_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// The ids in the body that name a team the user may link (own right only,
-// fix 4; never canvas-derived). One query, for exactly the new ids: an id equal
+// The ids in the body that name a team the user may link: in their own right
+// (fix 4), or already linked on a group of this same canvas (T3 Q2 A; the caller
+// has verified edit access to canvasId). One query, for exactly the new ids: an id equal
 // to the group's current id in the same slot passes through resolveTeamLinkUpdate
 // and is not looked up. Malformed ids are not sent to the UUID column (that
 // would be a database error, not a 400); they are simply not linkable.
-async function loadLinkableTeamIds(body, currentLinks, userId, transaction) {
+async function loadLinkableTeamIds(
+  body,
+  currentLinks,
+  userId,
+  canvasId,
+  transaction,
+) {
+  if (!userId) return new Set();
   const wanted = new Set();
   for (const key of ["team1_id", "team2_id"]) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
@@ -165,9 +176,16 @@ async function loadLinkableTeamIds(body, currentLinks, userId, transaction) {
     attributes: ["id", "source", "owner_id"],
     transaction,
   });
-  return new Set(
+  const linkable = new Set(
     teams.filter((team) => canLinkTeam(team, userId)).map((team) => team.id),
   );
+  const refused = teams
+    .map((team) => team.id)
+    .filter((id) => !linkable.has(id));
+  const onCanvas = await teamIdsLinkedOnCanvas(canvasId, refused, {
+    transaction,
+  });
+  return new Set([...linkable, ...onCanvas]);
 }
 
 const VALID_GAME_TYPES = new Set(["scrim", "official", "scratch"]);
@@ -1701,6 +1719,7 @@ router.post(
           req.body,
           currentLinks,
           req.user.id,
+          group.canvas_id,
           t,
         );
         const linkResult = resolveTeamLinkUpdate(
@@ -2243,6 +2262,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
         req.body,
         currentLinks,
         req.user.id,
+        group.canvas_id,
         t,
       );
       const linkResult = resolveTeamLinkUpdate(
