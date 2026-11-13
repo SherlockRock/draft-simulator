@@ -11,6 +11,7 @@ const {
 const Draft = require("../models/Draft.js");
 const Team = require("../models/Team.js");
 const TeamPlayer = require("../models/TeamPlayer.js");
+const Tournament = require("../models/Tournament.js");
 const Pool = require("../models/Pool.js");
 
 // Single source of truth for the canvas payload shape. Fourteen call sites
@@ -54,16 +55,25 @@ const DRAFT_ATTRIBUTES = [
 // payload shape, and the hand-built broadcasts that omitted it stripped
 // Team1/Team2 from every client store, which made the Scout button disappear
 // until reload.
+//
+// Each team also carries its Tournament (id, name, source only), so search
+// and picker labels can read `name · tournament`. Imported tournaments are
+// public; a pickup team has none (LEFT join, so it still loads).
+const teamTournamentInclude = () => ({
+  model: Tournament,
+  attributes: ["id", "name", "source"],
+});
+
 const TEAM_INCLUDE = [
   {
     model: Team,
     as: "Team1",
-    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }, teamTournamentInclude()],
   },
   {
     model: Team,
     as: "Team2",
-    include: [{ model: TeamPlayer, as: "TeamPlayers" }],
+    include: [{ model: TeamPlayer, as: "TeamPlayers" }, teamTournamentInclude()],
   },
 ];
 
