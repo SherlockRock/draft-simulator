@@ -94,8 +94,6 @@ import { CanvasSearchPanel } from "./components/CanvasSearchPanel";
 import {
     computeMatchupScopeHint,
     computeSearchResults,
-    getOpponentNameOptions,
-    getTeamNameOptions,
     sortDraftMatches,
     type DraftMatch,
     type ScopeHint,
@@ -103,6 +101,13 @@ import {
     type SearchResults,
     type SlotPhase
 } from "./utils/canvasSearch";
+import {
+    buildTeamKeyIndex,
+    getOpponentOptions,
+    getTeamOptions,
+    nextOpponentKey,
+    type SearchTeamKey
+} from "./utils/searchTeamKeys";
 import { buildSearchRowModel, type SearchRowModel } from "./utils/searchRowModel";
 import type { SearchScope } from "./utils/gameClassification";
 import {
@@ -1387,11 +1392,13 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     const [searchOpen, setSearchOpen] = createSignal(false);
     const [searchChampionId, setSearchChampionId] = createSignal<string | null>(null);
-    const [searchTeamName, setSearchTeamName] = createSignal<string | null>(null);
+    const [searchTeamKey, setSearchTeamKey] = createSignal<SearchTeamKey | null>(null);
     const [searchBucket, setSearchBucket] = createSignal<SearchBucket | null>(null);
     const [searchScope, setSearchScope] = createSignal<SearchScope>("all");
     const [searchFocusNonce, setSearchFocusNonce] = createSignal(0);
-    const [searchOpponentName, setSearchOpponentName] = createSignal<string | null>(null);
+    const [searchOpponentKey, setSearchOpponentKey] = createSignal<SearchTeamKey | null>(
+        null
+    );
     const [searchPinnedIds, setSearchPinnedIds] = createSignal<ReadonlySet<string>>(
         new Set<string>()
     );
@@ -1402,28 +1409,55 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         null
     );
 
+    // Built once from the WHOLE canvas (never the scope-filtered groups), so a
+    // team's key and label never change when the scope chip does.
+    const teamKeyIndex = createMemo(() => buildTeamKeyIndex(canvasGroups));
+    const searchTeamLabel = createMemo(() => {
+        const key = searchTeamKey();
+        return key === null ? null : (teamKeyIndex().labelByKey.get(key) ?? null);
+    });
+    const searchOpponentLabel = createMemo(() => {
+        const key = searchOpponentKey();
+        return key === null ? null : (teamKeyIndex().labelByKey.get(key) ?? null);
+    });
+    // A selected team can vanish from the canvas (its last group deleted or
+    // relinked, live from a collaborator). Clear the selection rather than
+    // search a team that no longer exists; both branches are handled here.
+    createEffect(() => {
+        const labels = teamKeyIndex().labelByKey;
+        const team = searchTeamKey();
+        const opponent = searchOpponentKey();
+        if (team !== null && !labels.has(team)) {
+            setSearchTeamKey(null);
+            setSearchOpponentKey(null);
+        } else if (opponent !== null && !labels.has(opponent)) {
+            setSearchOpponentKey(null);
+        }
+    });
+
     const searchResults = createMemo<SearchResults | null>(() => {
         if (!searchOpen()) return null;
         const championId = searchChampionId();
-        const teamName = searchTeamName();
-        if (championId === null && teamName === null) return null;
+        const teamKey = searchTeamKey();
+        if (championId === null && teamKey === null) return null;
         return computeSearchResults(
             canvasDrafts,
             canvasGroups,
             {
                 championId,
-                teamName,
-                opponentTeamName: searchOpponentName(),
+                teamKey,
+                opponentKey: searchOpponentKey(),
                 bucket: searchBucket(),
                 scope: searchScope()
             },
-            resolveChampionId
+            resolveChampionId,
+            teamKeyIndex()
         );
     });
     // Scope-aware: only offer teams the current scope would actually search,
     // so picking one can never hand back an empty record with no explanation.
     const searchTeamOptions = createMemo(() =>
-        getTeamNameOptions(canvasGroups, searchScope())
+        getTeamOptions(teamKeyIndex(), canvasGroups, searchScope())
     );
     const searchMatchByDraftId = createMemo(() => {
         const map = new Map<string, DraftMatch>();
@@ -1460,9 +1494,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     );
 
     const searchOpponentOptions = createMemo(() => {
-        const teamName = searchTeamName();
-        if (teamName === null) return [];
-        return getOpponentNameOptions(canvasGroups, searchScope(), teamName);
+        const teamKey = searchTeamKey();
+        if (teamKey === null) return [];
+        return getOpponentOptions(teamKeyIndex(), canvasGroups, searchScope(), teamKey);
     });
 
     // Pinned rows read the live store: an edited pin updates in place, a deleted
@@ -1517,20 +1551,21 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const searchScopeHints = createMemo<ScopeHint[]>(() => {
         const results = searchResults();
         if (results === null || results.matches.length > 0) return [];
-        const teamName = searchTeamName();
-        const opponentTeamName = searchOpponentName();
-        if (teamName === null || opponentTeamName === null) return [];
+        const teamKey = searchTeamKey();
+        const opponentKey = searchOpponentKey();
+        if (teamKey === null || opponentKey === null) return [];
         return computeMatchupScopeHint(
             canvasDrafts,
             canvasGroups,
             {
                 championId: searchChampionId(),
-                teamName,
-                opponentTeamName,
+                teamKey,
+                opponentKey,
                 bucket: searchBucket(),
                 scope: searchScope()
             },
-            resolveChampionId
+            resolveChampionId,
+            teamKeyIndex()
         );
     });
 
@@ -1578,26 +1613,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const setSearchQueryChampion = (championId: string | null) => {
         setSearchChampionId(championId);
     };
-    const setSearchQueryTeam = (teamName: string | null) => {
-        setSearchTeamName(teamName);
+    const setSearchQueryTeam = (teamKey: SearchTeamKey | null) => {
+        setSearchTeamKey(teamKey);
         setSearchBucket(null);
         // Scope is deliberately NOT reset here. It used to be, to avoid sticky
         // hidden state back when the scope row only appeared under a team
         // filter. Now scope decides which teams the dropdown offers, so
         // resetting it would drop the scope the instant you picked one of the
         // teams only that scope could surface.
-        const opponent = searchOpponentName();
-        // Invariant: opponent ⇒ team, and opponent ≠ team (case-insensitive).
-        if (
-            teamName === null ||
-            (opponent !== null &&
-                teamName.trim().toLowerCase() === opponent.trim().toLowerCase())
-        ) {
-            setSearchOpponentName(null);
-        }
+        // Invariant: opponent ⇒ team, and opponent ≠ team (same key).
+        setSearchOpponentKey(nextOpponentKey(teamKey, searchOpponentKey()));
     };
-    const setSearchQueryOpponent = (teamName: string | null) => {
-        setSearchOpponentName(teamName);
+    const setSearchQueryOpponent = (teamKey: SearchTeamKey | null) => {
+        setSearchOpponentKey(teamKey);
     };
     const setSearchQueryScope = (scope: SearchScope) => {
         setSearchScope(scope);
@@ -7990,9 +8018,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     <CanvasSearchPanel
                         championId={searchChampionId}
                         onChampionChange={setSearchQueryChampion}
-                        teamName={searchTeamName}
+                        teamKey={searchTeamKey}
+                        teamLabel={searchTeamLabel}
                         onTeamChange={setSearchQueryTeam}
-                        opponentTeamName={searchOpponentName}
+                        opponentKey={searchOpponentKey}
+                        opponentLabel={searchOpponentLabel}
                         onOpponentChange={setSearchQueryOpponent}
                         teamOptions={searchTeamOptions}
                         opponentOptions={searchOpponentOptions}
