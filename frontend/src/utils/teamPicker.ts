@@ -59,8 +59,11 @@ export function pickerLabels(teams: readonly TeamListRow[]): Map<string, string>
     // never take a name another team already owns.
     const clashes: TeamListRow[] = [];
     for (const bucket of byLabel.values()) {
-        const sorted = [...bucket].sort((a, b) =>
-            a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+        // Your own team keeps the bare label; then id order, so it is stable.
+        const sorted = [...bucket].sort(
+            (a, b) =>
+                Number(b.canEditRoster) - Number(a.canEditRoster) ||
+                (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
         );
         const [first, ...rest] = sorted;
         const label = teamOptionLabel(first);
@@ -104,19 +107,35 @@ export function pickerRows(
     const trimmed = query.trim();
     const needle = normalize(query);
     const labels = pickerLabels(teams);
+    const archivedOwnedById = new Map(options.archivedOwned.map((t) => [t.id, t]));
     const rows: PickerRow[] = [];
+    const offered = new Set<string>();
 
     for (const team of teams) {
         if (!normalize(team.name).includes(needle)) continue;
-        rows.push({ kind: "team", team, label: labels.get(team.id) ?? team.name });
+        offered.add(team.id);
+        const label = labels.get(team.id) ?? team.name;
+        // Linked on this canvas but archived (it rides in the canvas payload with
+        // archived_at set). Your own: offer the restore, so picking it never links
+        // a team that stays archived. Anyone else's: say so.
+        const archivedMine = team.archived_at
+            ? archivedOwnedById.get(team.id)
+            : undefined;
+        if (archivedMine) {
+            rows.push({ kind: "restore", team: archivedMine, label });
+        } else if (team.archived_at) {
+            rows.push({ kind: "team", team, label: `${label} (archived)` });
+        } else {
+            rows.push({ kind: "team", team, label });
+        }
     }
 
     if (needle.length > 0) {
-        // A team already in the list was just restored (the archived list has
-        // not refetched yet): offer it once, as a team.
-        const listed = new Set(teams.map((team) => team.id));
+        // Exact name only. A team already offered above is skipped: either it is
+        // the archived canvas-linked one (already a restore row), or it was just
+        // restored and the archived list has not refetched yet.
         for (const team of options.archivedOwned) {
-            if (normalize(team.name) === needle && !listed.has(team.id)) {
+            if (normalize(team.name) === needle && !offered.has(team.id)) {
                 rows.push({ kind: "restore", team, label: teamOptionLabel(team) });
             }
         }

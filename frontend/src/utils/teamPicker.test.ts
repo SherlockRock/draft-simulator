@@ -260,6 +260,63 @@ describe("pickerRows", () => {
     });
 });
 
+describe("archived teams linked on the canvas (Opus M3)", () => {
+    const archivedAt = "2026-11-01T00:00:00.000Z";
+
+    it("offers your own archived, canvas-linked team as a restore row, not a plain pick", () => {
+        const teams = buildPickerTeams(
+            [],
+            [
+                group(
+                    "g1",
+                    payloadTeam("old", "DOG", { owner_id: "me", archived_at: archivedAt })
+                )
+            ]
+        );
+        const rows = pickerRows("do", teams, { archivedOwned: [managed("old", "DOG")] });
+        expect(kinds(rows)).toEqual(["restore", "create"]);
+        const restore = rows[0];
+        if (restore.kind !== "restore") throw new Error("expected restore");
+        expect(restore.team.id).toBe("old");
+    });
+
+    it("offers it once when typed in full", () => {
+        const teams = buildPickerTeams(
+            [],
+            [
+                group(
+                    "g1",
+                    payloadTeam("old", "DOG", { owner_id: "me", archived_at: archivedAt })
+                )
+            ]
+        );
+        const rows = pickerRows("DOG", teams, { archivedOwned: [managed("old", "DOG")] });
+        expect(kinds(rows)).toEqual(["restore", "create"]);
+    });
+
+    it("marks someone else's archived canvas-linked team", () => {
+        const teams = buildPickerTeams(
+            [],
+            [group("g1", payloadTeam("m", "DOG", { archived_at: archivedAt }))]
+        );
+        const rows = pickerRows("", teams, { archivedOwned: [] });
+        const row = rows[0];
+        if (row.kind !== "team") throw new Error("expected team");
+        expect(row.label).toBe("DOG (archived)");
+    });
+});
+
+describe("pickerLabels prefers your own team (Opus M5)", () => {
+    it("gives your own team the bare label ahead of a teammate's with a lower id", () => {
+        const labels = pickerLabels([
+            listRow("b-mine", "DOG"),
+            { ...listRow("a-mate", "DOG", { owner_id: "mate" }), canEditRoster: false }
+        ]);
+        expect(labels.get("b-mine")).toBe("DOG");
+        expect(labels.get("a-mate")).toBe("DOG · 2");
+    });
+});
+
 describe("archivedOwnedTeams", () => {
     it("keeps archived pickup teams the user can restore", () => {
         const rows = [
