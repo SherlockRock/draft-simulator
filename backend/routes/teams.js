@@ -12,8 +12,11 @@ const {
   visibleTeamsWhere,
   canSeeTeam,
   canEditRoster,
+  canArchiveTeam,
+  canDeleteTeam,
   assertTeamInvariants,
 } = require("../services/teamAccess");
+const teamUsage = require("../services/teamUsage");
 
 const { isValidRegion } = require("../utils/teamRegions");
 
@@ -151,6 +154,171 @@ router.get("/", protect, async (req, res) => {
     res.json(teams.map((team) => serializeTeam(team, userId)));
   } catch (error) {
     sendError(res, error, "Error fetching teams:", "Failed to fetch teams");
+  }
+});
+
+// The Teams page (D1, D2). Scope: visibleTeamsWhere AND (my own teams of any
+// tournament, archived or not; OR the teams of every tournament I have a
+// UserTournaments row for, archived or not). Nothing here is wider than what
+// the user sees in their own right today. Declared before any /:id route.
+router.get("/manage", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const memberships = await UserTournament.findAll({
+      where: { user_id: userId },
+      include: [
+        {
+          model: Tournament,
+          attributes: ["id", "name", "source", "region"],
+          required: true,
+        },
+      ],
+      order: [[Tournament, "name", "ASC"]],
+    });
+    const tournamentIds = memberships.map((row) => row.tournament_id);
+    const scope = [{ owner_id: userId }];
+    if (tournamentIds.length > 0) {
+      scope.push({ tournament_id: { [Op.in]: tournamentIds } });
+    }
+    const teams = await Team.findAll({
+      where: { [Op.and]: [visibleTeamsWhere(userId), { [Op.or]: scope }] },
+      include: [PLAYERS_INCLUDE, TOURNAMENT_INCLUDE],
+      order: [["name", "ASC"], PLAYERS_ORDER],
+    });
+    // Ids come only from the rows above, which are already visible to the user.
+    const useCounts = await teamUsage.teamUseCounts(
+      teams.map((team) => team.id),
+      userId,
+    );
+    res.json({
+      tournaments: memberships.map((row) => ({
+        id: row.Tournament.id,
+        name: row.Tournament.name,
+        source: row.Tournament.source,
+        region: row.Tournament.region,
+        archived_at: row.archived_at ?? null,
+      })),
+      teams: teams.map((team) => ({
+        ...serializeTeam(team, userId),
+        useCounts: useCounts[team.id] ?? {
+          official: 0,
+          scrim: 0,
+          scratch: 0,
+          total: 0,
+        },
+        canArchive: canArchiveTeam(team, userId),
+        canDelete: canDeleteTeam(team, userId),
+      })),
+    });
+  } catch (error) {
+    sendError(res, error, "Error fetching teams:", "Failed to fetch teams");
+  }
+});
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BULK_ACTIONS = new Set(["archive", "restore", "delete"]);
+const MAX_BULK_IDS = 200;
+
+// Returns { ok: true, action, ids } (ids de-duplicated, order kept) or
+// { ok: false, error }. Pure — no DB. Malformed ids never reach the UUID column.
+function validateBulkBody(body) {
+  const action = body?.action;
+  const ids = body?.ids;
+  if (typeof action !== "string" || !BULK_ACTIONS.has(action)) {
+    return { ok: false, error: "action must be archive, restore or delete" };
+  }
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_BULK_IDS) {
+    return {
+      ok: false,
+      error: `ids must be an array of 1 to ${MAX_BULK_IDS} team ids`,
+    };
+  }
+  if (!ids.every((id) => typeof id === "string" && UUID_PATTERN.test(id))) {
+    return { ok: false, error: "ids must be team id strings" };
+  }
+  return { ok: true, action, ids: [...new Set(ids)] };
+}
+
+// Archive, restore or delete pickup teams, all or nothing (D5). Any id that is
+// missing or not visible -> 404 for the whole batch (nothing about which);
+// any visible id the user may not archive/delete -> 403; only then one
+// transaction. Declared before any /:id route. Delete relies on the database
+// (TeamPlayers ON DELETE CASCADE, CanvasGroups team ids ON DELETE SET NULL),
+// exactly as DELETE /:id does.
+router.post("/bulk", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const parsed = validateBulkBody(req.body);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    const { action, ids } = parsed;
+
+    const teams = await Team.findAll({ where: { id: ids } });
+    if (teams.length !== ids.length) {
+      return res.status(404).json({ error: "Team not found" });
+    }
+    for (const team of teams) {
+      if (!(await canSeeTeam(team, userId))) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+    }
+    const allowed = action === "delete" ? canDeleteTeam : canArchiveTeam;
+    if (!teams.every((team) => allowed(team, userId))) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      if (action === "delete") {
+        await Team.destroy({ where: { id: ids }, transaction });
+      } else if (action === "archive") {
+        // Don't re-stamp teams that are already archived.
+        await Team.update(
+          { archived_at: new Date() },
+          { where: { id: ids, archived_at: null }, transaction },
+        );
+      } else {
+        await Team.update(
+          { archived_at: null },
+          { where: { id: ids }, transaction },
+        );
+      }
+    });
+    res.json({ action, ids });
+  } catch (error) {
+    sendError(res, error, "Error in bulk team action:", "Failed to update teams");
+  }
+});
+
+// Archive or restore a league for the caller only (D6): sets archived_at on
+// the caller's own UserTournaments row. Never creates a row, never touches
+// Tournaments, and 404s when the caller has no row (so it never says whether a
+// tournament exists).
+router.put("/tournaments/:id/archive", protect, async (req, res) => {
+  try {
+    const archived = req.body?.archived;
+    if (typeof archived !== "boolean") {
+      return res.status(400).json({ error: "archived must be a boolean" });
+    }
+    const tournamentId = req.params.id;
+    if (!UUID_PATTERN.test(tournamentId)) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    const archivedAt = archived ? new Date() : null;
+    const [affected] = await UserTournament.update(
+      { archived_at: archivedAt },
+      { where: { user_id: req.user.id, tournament_id: tournamentId } },
+    );
+    if (affected === 0) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    res.json({ tournament_id: tournamentId, archived_at: archivedAt });
+  } catch (error) {
+    sendError(
+      res,
+      error,
+      "Error archiving tournament:",
+      "Failed to archive tournament",
+    );
   }
 });
 

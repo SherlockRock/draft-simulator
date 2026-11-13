@@ -84,6 +84,29 @@ function canEditRoster(team, userId) {
   return Boolean(userId) && team.source === "manual" && team.owner_id === userId;
 }
 
+// Archive and delete (T2 D4): only the signed-in owner of a pickup team, i.e. a
+// manual team with no tournament. Imported teams, other users' teams and
+// manual-tournament teams (governed by their tournament) are refused.
+function isOwnedPickupTeam(team, userId) {
+  const hasTournament = team.tournament_id !== null && team.tournament_id !== undefined;
+  return (
+    Boolean(userId) &&
+    team.source === "manual" &&
+    team.owner_id === userId &&
+    !hasTournament
+  );
+}
+
+/** Archive a team: the owner of a pickup team only. */
+function canArchiveTeam(team, userId) {
+  return isOwnedPickupTeam(team, userId);
+}
+
+/** Delete a team: the owner of a pickup team only. */
+function canDeleteTeam(team, userId) {
+  return isOwnedPickupTeam(team, userId);
+}
+
 /**
  * Cross-row rules checked before any Team write (D3). `tournament` is the
  * Tournament the team points at (null/undefined for a pickup team).
@@ -117,5 +140,7 @@ module.exports = {
   canSeeTeam,
   canLinkTeam,
   canEditRoster,
+  canArchiveTeam,
+  canDeleteTeam,
   assertTeamInvariants,
 };
