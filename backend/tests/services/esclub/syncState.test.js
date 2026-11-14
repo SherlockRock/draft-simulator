@@ -8,6 +8,7 @@ const { injectReplacements } = require("sequelize/lib/utils/sql");
 const {
   EsclubBudgetExhausted,
   EsclubRequestCapReached,
+  EsclubSyncAbandoned,
 } = require("../../../services/esclub/errors");
 const S = require("../../../services/esclub/syncState");
 
@@ -77,13 +78,16 @@ function makeDb({ usage = null, syncs = [] } = {}) {
       );
       for (const x of out) {
         x.status = "failed";
-        x.finished_at = r.now;
+        x.finished_at = x.heartbeat_at;
         x.error_class = "Abandoned";
       }
       return out.map((x) => ({ id: x.id }));
     }
     if (/^SELECT \* FROM "EsclubSyncs" WHERE status = 'running'/.test(s)) {
       return running() ? [running()] : [];
+    }
+    if (/^SELECT status FROM "EsclubSyncs" WHERE id =/.test(s)) {
+      return db.syncs.filter((x) => x.id === r.id).map((x) => ({ status: x.status }));
     }
     if (/^SELECT \* FROM "EsclubSyncs" WHERE id =/.test(s)) {
       return db.syncs.filter((x) => x.id === r.id);
@@ -142,7 +146,7 @@ function makeDb({ usage = null, syncs = [] } = {}) {
     }
     if (/^UPDATE "EsclubSyncs" SET request_count = request_count \+ 1/.test(s)) {
       const x = db.syncs.find((y) => y.id === r.id);
-      if (!x || x.request_count >= r.cap) return [];
+      if (!x || x.status !== "running" || x.request_count >= r.cap) return [];
       x.request_count += 1;
       x.heartbeat_at = r.now;
       return [{ request_count: x.request_count }];
@@ -323,7 +327,7 @@ describe("stale lock", () => {
     const s = l.sql.replace(/\s+/g, " ");
     expect(s).toMatch(/error_class = 'Abandoned'/);
     expect(s).toMatch(/error_message = 'no heartbeat for 2 minutes'/);
-    expect(s).toMatch(/finished_at = '2026-11-14 12:00:00\.000 \+00:00'/);
+    expect(s).toMatch(/finished_at = heartbeat_at/);
     expect(s).toMatch(/WHERE status = 'running' AND heartbeat_at <= '2026-11-14 11:58:00\.000 \+00:00'/);
     expect(s).toMatch(/RETURNING id/);
   });
@@ -643,7 +647,7 @@ describe("countRequest", () => {
     const r = running();
     await S.countRequest(r.id, { budget: 2000, cap: 400, now: T0 });
     const s = db.log[0].sql.replace(/\s+/g, " ");
-    expect(s).toMatch(/^UPDATE "EsclubSyncs" SET request_count = request_count \+ 1, heartbeat_at = '2026-11-14 12:00:00\.000 \+00:00', "updatedAt" = '2026-11-14 12:00:00\.000 \+00:00' WHERE id = 's1' AND request_count < 400 RETURNING request_count/);
+    expect(s).toMatch(/^UPDATE "EsclubSyncs" SET request_count = request_count \+ 1, heartbeat_at = '2026-11-14 12:00:00\.000 \+00:00', "updatedAt" = '2026-11-14 12:00:00\.000 \+00:00' WHERE id = 's1' AND status = 'running' AND request_count < 400 RETURNING request_count/);
   });
 
   it("the budget upsert SQL", async () => {
@@ -652,6 +656,28 @@ describe("countRequest", () => {
     const s = db.log[1].sql.replace(/\s+/g, " ");
     expect(s).toMatch(/^INSERT INTO "EsclubDailyUsage" \(day, request_count, "createdAt", "updatedAt"\) VALUES \('2026-11-14', 1, '2026-11-14 12:00:00\.000 \+00:00', '2026-11-14 12:00:00\.000 \+00:00'\)/);
     expect(s).toMatch(/ON CONFLICT \(day\) DO UPDATE SET request_count = "EsclubDailyUsage"\.request_count \+ 1, "updatedAt" = '2026-11-14 12:00:00\.000 \+00:00' WHERE "EsclubDailyUsage"\.request_count < 2000 RETURNING request_count/);
+  });
+});
+
+describe("Task 5 review fixes", () => {
+  it("countRequest refuses a sync that is no longer running (taken over as stale) and spends no budget", async () => {
+    const r = db.add({ status: "failed", finished_at: T0, heartbeat_at: at(-3 * MIN), request_count: 5 });
+    db.usage = 7;
+    await expect(S.countRequest(r.id, { budget: 2000, cap: 400, now: T0 })).rejects.toBeInstanceOf(EsclubSyncAbandoned);
+    expect(db.usage).toBe(7);
+    expect(r.request_count).toBe(5);
+    const s = db.log[0].sql.replace(/\s+/g, " ");
+    expect(s).toMatch(/WHERE id = 's1' AND status = 'running' AND request_count < 400/);
+  });
+  it("a stale sweep dates the abandoned row at its last heartbeat, not at the sweep", async () => {
+    const r = db.add({ status: "running", finished_at: null, heartbeat_at: at(-3 * MIN), tournament_id: OTHER_TOUR });
+    await S.markStale(T0);
+    expect(r.finished_at).toEqual(at(-3 * MIN));
+    const s = sqlOf(/^UPDATE "EsclubSyncs" SET status = 'failed'.*Abandoned/).sql.replace(/\s+/g, " ");
+    expect(s).toMatch(/finished_at = heartbeat_at/);
+  });
+  it("an api press without a user is refused (per-user limits need one)", async () => {
+    await expect(S.beginSync({ kind: "league", tournamentId: OTHER_TOUR, userId: null, via: "api", now: T0, env: { ESCLUB_SYNC_ENABLED: "true" } })).rejects.toThrow(/userId/);
   });
 });
 

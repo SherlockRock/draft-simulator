@@ -30,6 +30,8 @@ class EsclubDraftMismatch extends EsclubError {}
 class EsclubBudgetExhausted extends EsclubError {}
 /** One sync reached its per-sync request cap; the request was not sent. */
 class EsclubRequestCapReached extends EsclubError {}
+/** The sync is no longer running (taken over as stale); it must send nothing more. */
+class EsclubSyncAbandoned extends EsclubError {}
 
 module.exports = {
   EsclubError,
@@ -42,4 +44,5 @@ module.exports = {
   EsclubDraftMismatch,
   EsclubBudgetExhausted,
   EsclubRequestCapReached,
+  EsclubSyncAbandoned,
 };

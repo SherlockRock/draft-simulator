@@ -11,7 +11,11 @@
 const crypto = require("node:crypto");
 const { QueryTypes, UniqueConstraintError } = require("sequelize");
 const sequelize = require("../../config/database");
-const { EsclubBudgetExhausted, EsclubRequestCapReached } = require("./errors");
+const {
+  EsclubBudgetExhausted,
+  EsclubRequestCapReached,
+  EsclubSyncAbandoned,
+} = require("./errors");
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -73,7 +77,7 @@ function utcDay(now) {
 async function markStale(now) {
   const rows = await select(
     `UPDATE "EsclubSyncs"
-        SET status = 'failed', finished_at = :now, error_class = 'Abandoned',
+        SET status = 'failed', finished_at = heartbeat_at, error_class = 'Abandoned',
             error_message = 'no heartbeat for 2 minutes', "updatedAt" = :now
       WHERE status = 'running' AND heartbeat_at <= :cutoff
       RETURNING id`,
@@ -198,6 +202,11 @@ async function beginSync({
   now,
   env = process.env,
 }) {
+  // Per-user limits key on requested_by; an api press without a user would
+  // match none of them.
+  if (via === "api" && !userId) {
+    throw new Error("beginSync: an api press needs a userId");
+  }
   const { enabled, budget } = limitsFromEnv(env);
   if (!enabled) return { off: "disabled" };
 
@@ -267,12 +276,21 @@ async function countRequest(syncId, { budget, cap, now }) {
       `UPDATE "EsclubSyncs"
           SET request_count = request_count + 1, heartbeat_at = :now,
               "updatedAt" = :now
-        WHERE id = :id AND request_count < :cap
+        WHERE id = :id AND status = 'running' AND request_count < :cap
         RETURNING request_count`,
       { id: syncId, now, cap },
       transaction,
     );
     if (capped.length === 0) {
+      const rows = await select(
+        `SELECT status FROM "EsclubSyncs" WHERE id = :id`,
+        { id: syncId },
+        transaction,
+      );
+      if (rows[0]?.status !== "running") {
+        // Taken over as stale (or gone): another sync may be running now.
+        throw new EsclubSyncAbandoned(`sync ${syncId} is no longer running`);
+      }
       throw new EsclubRequestCapReached(`sync reached its cap of ${cap}`);
     }
     const day = await select(
