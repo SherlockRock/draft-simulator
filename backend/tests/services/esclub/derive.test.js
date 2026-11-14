@@ -228,6 +228,14 @@ describe("deriveRoster rules", () => {
     ]);
     expect(ids(r)).toEqual(["null:Nameb", "null:Namea"]);
   });
+  it("one player key seen twice in one game counts one game (Task 4 review)", () => {
+    // a appears twice in the earlier game, b once in the later one: 1 game each, so b (latest) leads
+    const r = D.deriveRoster([
+      entry(game({ players: [P("a", null), P("a", null)] })),
+      entry(game({ playedAt: "2026-01-02T00:00:00.000Z", players: [P("b", null)] })),
+    ]);
+    expect(ids(r)).toEqual(["null:Nameb", "null:Namea"]);
+  });
   it("reads only the team's side: teamNumber against blueSideTeam", () => {
     const g = game({ blue: 2, players: [P("a", "top", { side: "red" }), P("b", "top", { side: "blue" })] });
     expect(ids(D.deriveRoster([entry(g, 1)]))).toEqual(["top:Namea"]);
@@ -344,6 +352,11 @@ describe("gameIsComplete and seriesCompleteness", () => {
     expect(D.seriesCompleteness({ ...full(), failed: [{}] })).toBe(false);
     expect(D.seriesCompleteness(full({}, [g(), g({ winner: null })]))).toBe(false);
     expect(D.seriesCompleteness(full({}, []))).toBe(false);
+  });
+  it("a majority reached with a third game still incomplete is not complete (Task 4 review)", () => {
+    const games = [g(), g(), g({ winner: null })];
+    expect(D.seriesCompleteness(full({}, games))).toBe(false);
+    expect(D.seriesCompleteness(full({}, [g(), g(), g({ participants: {} })]))).toBe(false);
   });
   it("returns a boolean", () => {
     expect(D.seriesCompleteness(full())).toBe(true);
