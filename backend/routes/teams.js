@@ -19,6 +19,10 @@ const {
 const teamUsage = require("../services/teamUsage");
 
 const { isValidRegion } = require("../utils/teamRegions");
+const { isPlaceholderTeamName } = require("../utils/teamPlaceholders");
+
+const PLACEHOLDER_NAME_ERROR =
+  '"Team 1" and "Team 2" are placeholders, not team names';
 
 const VALID_ROLES = new Set(["top", "jungle", "mid", "adc", "support"]);
 const MAX_ROSTER = 10;
@@ -330,6 +334,9 @@ router.post("/", protect, async (req, res) => {
         .status(400)
         .json({ error: "name must be a non-empty string up to 120 chars" });
     }
+    if (isPlaceholderTeamName(name)) {
+      return res.status(400).json({ error: PLACEHOLDER_NAME_ERROR });
+    }
     const values = {
       owner_id: req.user.id,
       name: name.trim(),
@@ -366,6 +373,9 @@ router.patch("/:id", protect, async (req, res) => {
         return res
           .status(400)
           .json({ error: "name must be a non-empty string up to 120 chars" });
+      }
+      if (isPlaceholderTeamName(name)) {
+        return res.status(400).json({ error: PLACEHOLDER_NAME_ERROR });
       }
       result.team.name = name.trim();
     }

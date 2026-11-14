@@ -16,6 +16,11 @@ import { SearchResultRow } from "./SearchResultRow";
 import { championById, champions } from "../utils/constants";
 import type { ScopeHint, SearchBucket, SearchResults } from "../utils/canvasSearch";
 import { SCOPE_VALUES, type SearchScope } from "../utils/gameClassification";
+import {
+    optionKeyForLabel,
+    type SearchTeamKey,
+    type TeamOption
+} from "../utils/searchTeamKeys";
 import type { SearchRowModel } from "../utils/searchRowModel";
 import {
     SEARCH_PANEL_MIN_WIDTH,
@@ -51,12 +56,15 @@ const SCOPE_LABELS: Record<SearchScope, string> = {
 type CanvasSearchPanelProps = {
     championId: Accessor<string | null>;
     onChampionChange: (championId: string | null) => void;
-    teamName: Accessor<string | null>;
-    onTeamChange: (teamName: string | null) => void;
-    opponentTeamName: Accessor<string | null>;
-    onOpponentChange: (teamName: string | null) => void;
-    teamOptions: Accessor<string[]>;
-    opponentOptions: Accessor<string[]>;
+    teamKey: Accessor<SearchTeamKey | null>;
+    /** The selected team's label from the key index; null when none is selected. */
+    teamLabel: Accessor<string | null>;
+    onTeamChange: (teamKey: SearchTeamKey | null) => void;
+    opponentKey: Accessor<SearchTeamKey | null>;
+    opponentLabel: Accessor<string | null>;
+    onOpponentChange: (teamKey: SearchTeamKey | null) => void;
+    teamOptions: Accessor<TeamOption[]>;
+    opponentOptions: Accessor<TeamOption[]>;
     activeBucket: Accessor<SearchBucket | null>;
     onBucketChange: (bucket: SearchBucket | null) => void;
     scope: Accessor<SearchScope>;
@@ -196,16 +204,25 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
         return champions.find((champion) => champion.id === id)?.name ?? "";
     };
     const [championText, setChampionText] = createSignal(initialChampionName());
-    const [teamText, setTeamText] = createSignal(untrack(() => props.teamName() ?? ""));
+    const [teamText, setTeamText] = createSignal(untrack(() => props.teamLabel() ?? ""));
     const [opponentText, setOpponentText] = createSignal(
-        untrack(() => props.opponentTeamName() ?? "")
+        untrack(() => props.opponentLabel() ?? "")
     );
     // A team change can clear the opponent from OUTSIDE this field (Canvas enforces
     // opponent ⇒ team, opponent ≠ team); resync the text only on that path so
     // typing is never clobbered mid-edit (blur/commit ordering gotcha).
     createEffect(() => {
-        props.teamName();
-        setOpponentText(untrack(() => props.opponentTeamName()) ?? "");
+        props.teamKey();
+        setOpponentText(untrack(() => props.opponentLabel()) ?? "");
+    });
+    // A label can change under a selected key (a same-named team gets linked and
+    // the label gains " · tournament"); keep the shown text on the label. Runs
+    // only when the label itself changes, so typing is not clobbered.
+    createEffect(() => {
+        setTeamText(props.teamLabel() ?? "");
+    });
+    createEffect(() => {
+        setOpponentText(props.opponentLabel() ?? "");
     });
     const handleOpponentText = (value: string) => {
         setOpponentText(value);
@@ -356,11 +373,15 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                     <div class="w-44">
                         <SearchableSelect
                             placeholder="Team (optional)"
-                            currentlySelected={props.teamName() ?? ""}
-                            sortOptions={props.teamOptions()}
+                            currentlySelected={props.teamLabel() ?? ""}
+                            sortOptions={props.teamOptions().map((o) => o.label)}
                             selectText={teamText()}
                             setSelectText={handleTeamText}
-                            onValidSelect={(name) => props.onTeamChange(name)}
+                            onValidSelect={(label) =>
+                                props.onTeamChange(
+                                    optionKeyForLabel(props.teamOptions(), label)
+                                )
+                            }
                             theme="purple"
                             textInput={true}
                         />
@@ -368,18 +389,20 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                     <div class="w-44">
                         <SearchableSelect
                             placeholder="Opponent…"
-                            currentlySelected={props.opponentTeamName() ?? ""}
-                            sortOptions={props.opponentOptions()}
+                            currentlySelected={props.opponentLabel() ?? ""}
+                            sortOptions={props.opponentOptions().map((o) => o.label)}
                             selectText={opponentText()}
                             setSelectText={handleOpponentText}
-                            onValidSelect={(name) => props.onOpponentChange(name)}
+                            onValidSelect={(label) =>
+                                props.onOpponentChange(
+                                    optionKeyForLabel(props.opponentOptions(), label)
+                                )
+                            }
                             theme="purple"
                             textInput={true}
-                            disabled={props.teamName() === null}
+                            disabled={props.teamKey() === null}
                             title={
-                                props.teamName() === null
-                                    ? "Pick a team first"
-                                    : undefined
+                                props.teamKey() === null ? "Pick a team first" : undefined
                             }
                         />
                     </div>
@@ -536,7 +559,7 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                 </Show>
                 <Show when={matchCount() === 0}>
                     <Show
-                        when={props.opponentTeamName() !== null}
+                        when={props.opponentKey() !== null}
                         fallback={
                             <div class="py-8 text-center text-sm text-darius-text-secondary">
                                 No matches on this canvas.
@@ -549,11 +572,11 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                                 fallback={
                                     <>
                                         <span class="font-semibold text-darius-text-primary">
-                                            {props.teamName()}
+                                            {props.teamLabel()}
                                         </span>
                                         {" and "}
                                         <span class="font-semibold text-darius-text-primary">
-                                            {props.opponentTeamName()}
+                                            {props.opponentLabel()}
                                         </span>
                                         {" have no games on this canvas."}
                                     </>
@@ -567,11 +590,11 @@ export const CanvasSearchPanel = (props: CanvasSearchPanelProps) => {
                                         </span>
                                         {" games between "}
                                         <span class="font-semibold text-darius-text-primary">
-                                            {props.teamName()}
+                                            {props.teamLabel()}
                                         </span>
                                         {" and "}
                                         <span class="font-semibold text-darius-text-primary">
-                                            {props.opponentTeamName()}
+                                            {props.opponentLabel()}
                                         </span>
                                         {" on this canvas."}
                                     </>

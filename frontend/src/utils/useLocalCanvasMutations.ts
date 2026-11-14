@@ -26,6 +26,7 @@ import { applyPoolChampionOp, EMPTY_ROLE_POOL_MAP } from "@draft-sim/shared-type
 import { getManualSeriesGameDefaults } from "./manualSeriesDefaults";
 import { childAnnotationsOf, childGroupsOf } from "./canvasTree";
 import { parentageRejection } from "./groupParentage";
+import { withoutPlaceholderTeamNames } from "./teamPlaceholders";
 import {
     GROUP_BORDER_WIDTH,
     SERIES_GAME_CONTROLS_HEIGHT,
@@ -611,17 +612,22 @@ export const localConvertGroupToSeries = (data: {
         const isInitialConversion = group.type === "custom";
         group.name = data.name || group.name;
         group.type = "series";
-        group.metadata = mergeLocalGroupMetadata(group.metadata, {
-            // undefined leaves whatever the group already had; null clears.
-            ...(data.gameType !== undefined ? { gameType: data.gameType } : {}),
-            blueTeamName: data.blueTeamName,
-            redTeamName: data.redTeamName,
-            length: data.length,
-            seriesType: data.draftMode,
-            origin: "manual",
-            disabledChampions: data.disabledChampions,
-            draftMode: data.draftMode
-        });
+        // The dialog seeds "Team 1" / "Team 2"; those are never stored (the
+        // server's PUT strips them the same way), including any left over in the
+        // previous metadata.
+        group.metadata = withoutPlaceholderTeamNames(
+            mergeLocalGroupMetadata(group.metadata, {
+                // undefined leaves whatever the group already had; null clears.
+                ...(data.gameType !== undefined ? { gameType: data.gameType } : {}),
+                blueTeamName: data.blueTeamName,
+                redTeamName: data.redTeamName,
+                length: data.length,
+                seriesType: data.draftMode,
+                origin: "manual",
+                disabledChampions: data.disabledChampions,
+                draftMode: data.draftMode
+            })
+        );
 
         const groupDrafts = canvas.drafts
             .filter((d) => d.group_id === data.groupId)

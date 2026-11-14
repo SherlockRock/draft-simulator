@@ -14,8 +14,11 @@ const {
   canArchiveTeam,
   canDeleteTeam,
   assertTeamInvariants,
+  teamIdsLinkedOnCanvas,
   TeamInvariantError,
 } = require("../../services/teamAccess");
+const Team = require("../../models/Team");
+const { loadLinkableTeamIds } = require("../../routes/canvas");
 
 const pickup = (overrides = {}) => ({
   id: "team-1",
@@ -33,6 +36,14 @@ const imported = (overrides = {}) => ({
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+// setupAssociations throws when run twice; several SQL tests need it.
+let associated = false;
+const ensureAssociations = () => {
+  if (associated) return;
+  setupAssociations();
+  associated = true;
+};
 
 describe("visibleTeamsWhere", () => {
   it("matches imported teams or the user's own", () => {
@@ -100,7 +111,7 @@ describe("canSeeTeam", () => {
   describe("generated SQL", () => {
     it("is one inner-join query, with LIMIT 1 at the outer level", async () => {
       expect(sequelize.getDialect()).toBe("postgres");
-      setupAssociations();
+      ensureAssociations();
       const query = vi.spyOn(sequelize, "query").mockResolvedValue(null);
       const authenticate = vi.spyOn(sequelize, "authenticate");
 
@@ -140,6 +151,45 @@ describe("canLinkTeam", () => {
   it.each([null, undefined])("refuses %j, even for an imported team", (u) => {
     expect(canLinkTeam(imported(), u)).toBe(false);
     expect(canLinkTeam(pickup({ owner_id: null }), u)).toBe(false);
+  });
+});
+
+describe("teamIdsLinkedOnCanvas", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const C = "33333333-3333-4333-8333-333333333333";
+
+  it("returns an empty Set without a query for no ids or no canvas", async () => {
+    const spy = vi.spyOn(CanvasGroup, "findAll");
+    expect(await teamIdsLinkedOnCanvas("c-1", [])).toEqual(new Set());
+    expect(await teamIdsLinkedOnCanvas(null, [A])).toEqual(new Set());
+    expect(await teamIdsLinkedOnCanvas(undefined, [A])).toEqual(new Set());
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("returns only the asked ids that sit in either slot of a group on the canvas", async () => {
+    const spy = vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([
+      { team1_id: A, team2_id: C },
+      { team1_id: null, team2_id: B },
+    ]);
+    const tx = { id: "tx" };
+    const ids = await teamIdsLinkedOnCanvas("c-1", [A, B], { transaction: tx });
+    expect(ids).toEqual(new Set([A, B]));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].transaction).toBe(tx);
+  });
+
+  it("generates one query pinned to the canvas and to both slots", async () => {
+    ensureAssociations();
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue([]);
+    expect(await teamIdsLinkedOnCanvas("canvas-9", [A, B])).toEqual(new Set());
+    expect(query).toHaveBeenCalledTimes(1);
+    const sql = query.mock.calls[0][0];
+    expect(sql).toMatch(/FROM "CanvasGroups" AS "CanvasGroup"/);
+    expect(sql).toMatch(/"CanvasGroup"\."canvas_id" = 'canvas-9'/);
+    expect(sql).toContain(`"CanvasGroup"."team1_id" IN ('${A}', '${B}')`);
+    expect(sql).toContain(`"CanvasGroup"."team2_id" IN ('${A}', '${B}')`);
+    expect(sql).not.toMatch(/JOIN/);
   });
 });
 
@@ -281,7 +331,7 @@ describe("visibility matrix", () => {
     "canvas member": MEMBER,
     anonymous: null,
   };
-  const CELLS = ["list", "read", "link", "link-elsewhere", "roster read", "roster edit", "archive", "delete"];
+  const CELLS = ["list", "read", "link", "link-elsewhere", "link-on-canvas", "roster read", "roster edit", "archive", "delete"];
 
   const TEAMS = {
     "pickup (owned)": {
@@ -310,38 +360,42 @@ describe("visibility matrix", () => {
     },
   };
 
-  // [list, read, link, link-elsewhere, roster read, roster edit, archive, delete]
+  // [list, read, link, link-elsewhere, link-on-canvas, roster read, roster edit, archive, delete]
+  // link-on-canvas (T3 Task 5, Q2 A): loadLinkableTeamIds on the canvas the
+  // actor edits. Only the "canvas member" edits a canvas where the team is
+  // linked on a group, so there it is a yes for every team kind; for the other
+  // actors it equals the own-right rule.
   const T = true;
   const F = false;
   const EXPECTED = {
     // T2 D4: only the owner of a pickup team may archive or delete it.
     "pickup (owned)": {
-      owner: [T, T, T, T, T, T, T, T],
-      "other signed-in user": [F, F, F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F, F, F],
-      anonymous: [F, F, F, F, F, F, F, F],
+      owner: [T, T, T, T, T, T, T, T, T],
+      "other signed-in user": [F, F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F, F],
     },
     // The actor "owner" does not own this team, so owner = no rights.
     "pickup (someone else's)": {
-      owner: [F, F, F, F, F, F, F, F],
-      "other signed-in user": [F, F, F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F, F, F],
-      anonymous: [F, F, F, F, F, F, F, F],
+      owner: [F, F, F, F, F, F, F, F, F],
+      "other signed-in user": [F, F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F, F],
     },
     // Any signed-in user sees and links it; nobody edits, archives or deletes it.
     imported: {
-      owner: [T, T, T, T, T, F, F, F],
-      "other signed-in user": [T, T, T, T, T, F, F, F],
-      "canvas member": [T, T, T, T, T, F, F, F],
-      anonymous: [F, F, F, F, F, F, F, F],
+      owner: [T, T, T, T, T, T, F, F, F],
+      "other signed-in user": [T, T, T, T, T, T, F, F, F],
+      "canvas member": [T, T, T, T, T, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F, F],
     },
     // D4/Q4: owner-only, like a pickup team, but its tournament governs
     // archive and delete, so not even the owner may.
     "manual-tournament team": {
-      owner: [T, T, T, T, T, T, F, F],
-      "other signed-in user": [F, F, F, F, F, F, F, F],
-      "canvas member": [F, T, F, F, T, F, F, F],
-      anonymous: [F, F, F, F, F, F, F, F],
+      owner: [T, T, T, T, T, T, T, F, F],
+      "other signed-in user": [F, F, F, F, F, F, F, F, F],
+      "canvas member": [F, T, F, F, T, T, F, F, F],
+      anonymous: [F, F, F, F, F, F, F, F, F],
     },
   };
 
@@ -379,18 +433,18 @@ describe("visibility matrix", () => {
     }
   }
 
-  it("covers every cell: 4 kinds × 4 actors × 8 cells = 128", () => {
+  it("covers every cell: 4 kinds × 4 actors × 9 cells = 144", () => {
     expect(Object.keys(TEAMS)).toHaveLength(4);
     expect(Object.keys(ACTORS)).toHaveLength(4);
-    expect(CELLS).toHaveLength(8);
+    expect(CELLS).toHaveLength(9);
     for (const kind of Object.keys(TEAMS)) {
       expect(Object.keys(EXPECTED[kind]).sort()).toEqual(Object.keys(ACTORS).sort());
       for (const actor of Object.keys(ACTORS)) {
         expect(EXPECTED[kind][actor]).toHaveLength(CELLS.length);
       }
     }
-    expect(cases).toHaveLength(128);
-    expect(new Set(cases.map((c) => c.name)).size).toBe(128);
+    expect(cases).toHaveLength(144);
+    expect(new Set(cases.map((c) => c.name)).size).toBe(144);
   });
 
   it.each(cases)("$name", async ({ cell, team, userId, expected }) => {
@@ -403,6 +457,19 @@ describe("visibility matrix", () => {
       // never for anonymous, owners or esclub teams.
       const ownRight = userId !== null && (team.source === "esclub" || team.owner_id === userId);
       expect(spy).toHaveBeenCalledTimes(userId === null || ownRight ? 0 : 1);
+    } else if (cell === "link-on-canvas") {
+      // The route has already checked canvas edit access; the function sees the
+      // canvas id only. Only "canvas-member" has the team linked on a group.
+      const row = { ...team, id: "44444444-4444-4444-8444-444444444444" };
+      vi.spyOn(Team, "findAll").mockResolvedValue([row]);
+      vi.spyOn(CanvasGroup, "findAll").mockImplementation(async (options) =>
+        options.where.canvas_id === "canvas-member"
+          ? [{ team1_id: row.id, team2_id: null }]
+          : [],
+      );
+      const canvasId = userId === MEMBER ? "canvas-member" : `canvas-${userId}`;
+      const ids = await loadLinkableTeamIds({ team1_id: row.id }, {}, userId, canvasId, null);
+      expect(ids.has(row.id)).toBe(expected);
     } else if (cell === "link" || cell === "link-elsewhere") {
       const spy = mockCanvasLookup();
       expect(canLinkTeam(team, userId)).toBe(expected);

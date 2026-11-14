@@ -6,34 +6,65 @@ import {
     classifySlot,
     computeMatchupScopeHint,
     computeSearchResults,
-    getOpponentNameOptions,
-    getTeamNameOptions,
     isDraftInProgress,
-    resolveGroupTeamNames,
     sortDraftMatches,
     teamSideInDraft,
     type DraftMatch,
     type SearchQuery
 } from "./canvasSearch";
+import { buildTeamKeyIndex, getOpponentOptions, getTeamOptions } from "./searchTeamKeys";
 
 const identity = (value: string) => value;
 
+/** The key an unlinked free-text name gets. */
+const nameKey = (name: string): string => `name:${name.trim().toLowerCase()}`;
+
+/** Search over `groups`, building the whole-canvas key index the way Canvas does. */
+const search = (
+    drafts: readonly CanvasDraft[],
+    groups: readonly CanvasGroup[],
+    query: SearchQuery,
+    resolvePick: (pickValue: string) => string
+) => computeSearchResults(drafts, groups, query, resolvePick, buildTeamKeyIndex(groups));
+
+const searchHint = (
+    drafts: readonly CanvasDraft[],
+    groups: readonly CanvasGroup[],
+    query: SearchQuery,
+    resolvePick: (pickValue: string) => string
+) =>
+    computeMatchupScopeHint(
+        drafts,
+        groups,
+        query,
+        resolvePick,
+        buildTeamKeyIndex(groups)
+    );
+
+const sideOf = (draft: CanvasDraft, group: CanvasGroup | undefined, key: string) =>
+    teamSideInDraft(draft, group, key, buildTeamKeyIndex(group ? [group] : []));
+
+const optionLabels = (
+    groups: readonly CanvasGroup[],
+    scope: SearchQuery["scope"] = "all"
+) => getTeamOptions(buildTeamKeyIndex(groups), groups, scope).map((o) => o.label);
+
 const championOnly = (championId: string): SearchQuery => ({
     championId,
-    teamName: null,
-    opponentTeamName: null,
+    teamKey: null,
+    opponentKey: null,
     bucket: null,
     scope: "all"
 });
 
 const matchup = (
-    teamName: string,
-    opponentTeamName: string,
+    team: string,
+    opponent: string,
     overrides: Partial<SearchQuery> = {}
 ): SearchQuery => ({
     championId: null,
-    teamName,
-    opponentTeamName,
+    teamKey: nameKey(team),
+    opponentKey: nameKey(opponent),
     bucket: null,
     scope: "all",
     ...overrides
@@ -131,7 +162,7 @@ describe("computeSearchResults — champion-only", () => {
             makeDraft("d2", fullPicks({ 11: "Jinx" })),
             makeDraft("d3", fullPicks())
         ];
-        const results = computeSearchResults(drafts, [], championOnly("Jinx"), identity);
+        const results = search(drafts, [], championOnly("Jinx"), identity);
 
         expect(results.buckets).toBeNull();
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1", "d2"]);
@@ -147,12 +178,7 @@ describe("computeSearchResults — champion-only", () => {
     it("resolves legacy pick values through the injected resolver", () => {
         const legacyResolver = (value: string) => (value === "222" ? "Jinx" : value);
         const drafts = [makeDraft("d1", fullPicks({ 13: "222" }))];
-        const results = computeSearchResults(
-            drafts,
-            [],
-            championOnly("Jinx"),
-            legacyResolver
-        );
+        const results = search(drafts, [], championOnly("Jinx"), legacyResolver);
         expect(results.matches).toHaveLength(1);
         expect(results.matches[0].slots[0].index).toBe(13);
     });
@@ -160,12 +186,7 @@ describe("computeSearchResults — champion-only", () => {
     it("never matches empty slots even if the resolver would map them", () => {
         const sloppyResolver = () => "Jinx";
         const drafts = [makeDraft("d1", emptyPicks())];
-        const results = computeSearchResults(
-            drafts,
-            [],
-            championOnly("Jinx"),
-            sloppyResolver
-        );
+        const results = search(drafts, [], championOnly("Jinx"), sloppyResolver);
         expect(results.matches).toHaveLength(0);
     });
 
@@ -173,12 +194,7 @@ describe("computeSearchResults — champion-only", () => {
         const drafts = [
             makeDraft("d1", fullPicks({ 10: "Jinx", 14: "" }), { group_id: "g1" })
         ];
-        const results = computeSearchResults(
-            drafts,
-            [makeGroup("g1")],
-            championOnly("Jinx"),
-            identity
-        );
+        const results = search(drafts, [makeGroup("g1")], championOnly("Jinx"), identity);
         expect(results.matches[0].inProgress).toBe(true);
         expect(results.matches[0].groupId).toBe("g1");
         expect(results.matches[0].outcome).toBeNull();
@@ -190,25 +206,27 @@ describe("teamSideInDraft", () => {
 
     it("maps team1/team2 through blueSideTeam (default team1 = blue)", () => {
         const game1 = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(game1, group, "T1")).toBe("blue");
-        expect(teamSideInDraft(game1, group, "GenG")).toBe("red");
+        expect(sideOf(game1, group, nameKey("T1"))).toBe("blue");
+        expect(sideOf(game1, group, nameKey("GenG"))).toBe("red");
 
         const game2 = makeDraft("d2", fullPicks(), { group_id: "g1", blueSideTeam: 2 });
-        expect(teamSideInDraft(game2, group, "T1")).toBe("red");
-        expect(teamSideInDraft(game2, group, "GenG")).toBe("blue");
+        expect(sideOf(game2, group, nameKey("T1"))).toBe("red");
+        expect(sideOf(game2, group, nameKey("GenG"))).toBe("blue");
     });
 
-    it("matches case-insensitively with trimming", () => {
+    it("keys unlinked names case-insensitively with trimming", () => {
+        const padded = makeGroup("g1", { blueTeamName: " T1 ", redTeamName: "GENG" });
         const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(game, group, "t1")).toBe("blue");
-        expect(teamSideInDraft(game, group, "  geng  ")).toBe("red");
+        expect(sideOf(game, padded, nameKey("t1"))).toBe("blue");
+        expect(sideOf(game, padded, nameKey("  geng  "))).toBe("red");
+        expect(nameKey("  geng  ")).toBe("name:geng");
     });
 
     it("returns null for missing group or unknown team", () => {
         const game = makeDraft("d1", fullPicks());
-        expect(teamSideInDraft(game, undefined, "T1")).toBeNull();
-        expect(teamSideInDraft(game, group, "DRX")).toBeNull();
-        expect(teamSideInDraft(game, makeGroup("g2"), "T1")).toBeNull();
+        expect(sideOf(game, undefined, nameKey("T1"))).toBeNull();
+        expect(sideOf(game, group, nameKey("DRX"))).toBeNull();
+        expect(sideOf(game, makeGroup("g2"), nameKey("T1"))).toBeNull();
     });
 });
 
@@ -221,44 +239,63 @@ describe("bucketFor", () => {
     });
 });
 
-describe("getTeamNameOptions", () => {
+describe("getTeamOptions", () => {
     it("dedupes case-insensitively, keeps first casing, sorts, skips blanks", () => {
         const groups = [
             makeGroup("g1", { blueTeamName: "T1", redTeamName: "GenG" }),
             makeGroup("g2", { blueTeamName: "geng", redTeamName: "  " }),
             makeGroup("g3", {})
         ];
-        expect(getTeamNameOptions(groups)).toEqual(["GenG", "T1"]);
+        expect(optionLabels(groups)).toEqual(["GenG", "T1"]);
+        expect(
+            getTeamOptions(buildTeamKeyIndex(groups), groups, "all").map((o) => o.key)
+        ).toEqual(["name:geng", "name:t1"]);
     });
 });
 
-describe("resolveGroupTeamNames", () => {
-    it("prefers the linked entity name over the metadata string", () => {
+describe("buildTeamKeyIndex — slot keys", () => {
+    it("keys a linked slot by id (entity wins over the metadata string)", () => {
         const group = makeGroup(
             "g1",
             { blueTeamName: "Old T1", redTeamName: "Old T2" },
             { Team1: makeTeam("t1", "T1 Esports"), Team2: null }
         );
-        expect(resolveGroupTeamNames(group)).toEqual({
-            team1: "T1 Esports",
-            team2: "Old T2"
+        const index = buildTeamKeyIndex([group]);
+        expect(index.keysByGroup.get("g1")).toEqual({
+            team1: "id:t1",
+            team2: "name:old t2"
         });
+        expect(index.labelByKey.get("id:t1")).toBe("T1 Esports");
+        expect(index.labelByKey.get("name:old t2")).toBe("Old T2");
+    });
+
+    it("keys by team1_id when the Team entity is absent from the payload", () => {
+        const group: CanvasGroup = {
+            ...makeGroup("g1", { blueTeamName: "Gen.G" }),
+            team1_id: "t9"
+        };
+        const index = buildTeamKeyIndex([group]);
+        expect(index.keysByGroup.get("g1")?.team1).toBe("id:t9");
+        expect(index.labelByKey.get("id:t9")).toBe("Gen.G");
     });
 
     it("falls back to metadata strings when unlinked", () => {
         const group = makeGroup("g1", { blueTeamName: "Gen.G", redTeamName: "DK" });
-        expect(resolveGroupTeamNames(group)).toEqual({ team1: "Gen.G", team2: "DK" });
+        expect(buildTeamKeyIndex([group]).keysByGroup.get("g1")).toEqual({
+            team1: "name:gen.g",
+            team2: "name:dk"
+        });
     });
 
-    it("returns null for missing names on both sides", () => {
-        expect(resolveGroupTeamNames(makeGroup("g1"))).toEqual({
+    it("gives null for missing names on both sides", () => {
+        expect(buildTeamKeyIndex([makeGroup("g1")]).keysByGroup.get("g1")).toEqual({
             team1: null,
             team2: null
         });
     });
 });
 
-describe("getTeamNameOptions — entity-backed", () => {
+describe("getTeamOptions — entity-backed", () => {
     it("surfaces the linked entity name instead of the stale metadata string", () => {
         const groups = [
             makeGroup(
@@ -267,7 +304,7 @@ describe("getTeamNameOptions — entity-backed", () => {
                 { Team1: makeTeam("t1", "T1 Esports") }
             )
         ];
-        expect(getTeamNameOptions(groups)).toEqual(["DK", "T1 Esports"]);
+        expect(optionLabels(groups)).toEqual(["DK", "T1 Esports"]);
     });
 });
 
@@ -279,9 +316,9 @@ describe("teamSideInDraft — entity-backed", () => {
             { Team1: makeTeam("t1", "T1 Esports") }
         );
         const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(game, group, "T1 Esports")).toBe("blue");
+        expect(sideOf(game, group, "id:t1")).toBe("blue");
         // the stale metadata name no longer matches once linked
-        expect(teamSideInDraft(game, group, "Old Name")).toBeNull();
+        expect(sideOf(game, group, nameKey("Old Name"))).toBeNull();
     });
 });
 
@@ -294,12 +331,12 @@ describe("computeSearchResults — team-only (champion optional)", () => {
         )
     ];
     const teamOnly = (
-        teamName: string,
+        teamKey: string,
         scope: SearchQuery["scope"] = "all"
     ): SearchQuery => ({
         championId: null,
-        teamName,
-        opponentTeamName: null,
+        teamKey,
+        opponentKey: null,
         bucket: null,
         scope
     });
@@ -319,12 +356,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
             // team not in this ungrouped draft → excluded
             makeDraft("d3", fullPicks())
         ];
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            teamOnly("T1 Esports"),
-            identity
-        );
+        const results = search(drafts, groups, teamOnly("id:t1"), identity);
 
         expect(results.buckets).toBeNull();
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1", "d2"]);
@@ -345,12 +377,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(
-            drafts,
-            stringGroups,
-            teamOnly("geng"),
-            identity
-        );
+        const results = search(drafts, stringGroups, teamOnly(nameKey("geng")), identity);
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
     });
 
@@ -362,7 +389,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(drafts, groups, teamOnly("DRX"), identity);
+        const results = search(drafts, groups, teamOnly(nameKey("DRX")), identity);
         expect(results.matches).toEqual([]);
         expect(results.teamRecord).toEqual({
             games: 0,
@@ -399,12 +426,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
             // in progress
             makeDraft("d5", fullPicks({ 14: "" }), { group_id: "g1", completed: false })
         ];
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            teamOnly("T1 Esports"),
-            identity
-        );
+        const results = search(drafts, groups, teamOnly("id:t1"), identity);
 
         expect(results.buckets).toBeNull();
         expect(results.teamRecord).toEqual({
@@ -427,7 +449,7 @@ describe("computeSearchResults — team-only (champion optional)", () => {
                 winner: "blue"
             })
         ];
-        const championOnlyResults = computeSearchResults(
+        const championOnlyResults = search(
             drafts,
             groups,
             championOnly("Jinx"),
@@ -435,13 +457,13 @@ describe("computeSearchResults — team-only (champion optional)", () => {
         );
         expect(championOnlyResults.teamRecord).toBeNull();
 
-        const championPlusTeam = computeSearchResults(
+        const championPlusTeam = search(
             drafts,
             groups,
             {
                 championId: "Jinx",
-                teamName: "T1 Esports",
-                opponentTeamName: null,
+                teamKey: "id:t1",
+                opponentKey: null,
                 bucket: null,
                 scope: "all"
             },
@@ -459,8 +481,8 @@ describe("computeSearchResults — team filter", () => {
         scope: SearchQuery["scope"] = "all"
     ): SearchQuery => ({
         championId: "Jinx",
-        teamName: "T1",
-        opponentTeamName: null,
+        teamKey: nameKey("T1"),
+        opponentKey: null,
         bucket,
         scope
     });
@@ -480,7 +502,7 @@ describe("computeSearchResults — team filter", () => {
             }),
             makeDraft("d3", fullPicks({ 10: "Jinx" }))
         ];
-        const results = computeSearchResults(drafts, groups, query(), identity);
+        const results = search(drafts, groups, query(), identity);
 
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1", "d2"]);
         expect(results.matches[0].slots[0].bucket).toBe("pickedBy");
@@ -515,7 +537,7 @@ describe("computeSearchResults — team filter", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(drafts, groups, query(), identity);
+        const results = search(drafts, groups, query(), identity);
         const buckets = results.buckets;
         expect(buckets).not.toBeNull();
         if (buckets === null) return;
@@ -551,7 +573,7 @@ describe("computeSearchResults — team filter", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(drafts, groups, query("pickedBy"), identity);
+        const results = search(drafts, groups, query("pickedBy"), identity);
 
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
         const buckets = results.buckets;
@@ -571,24 +593,27 @@ describe("team identity is gated on game classification, not group type", () => 
     );
 
     it("resolves no team names for an untagged custom group", () => {
-        expect(resolveGroupTeamNames(untaggedCustom)).toEqual({
+        expect(buildTeamKeyIndex([untaggedCustom]).keysByGroup.get("g1")).toEqual({
             team1: null,
             team2: null
         });
     });
 
     it("offers no team filter options from an untagged custom group", () => {
-        expect(getTeamNameOptions([untaggedCustom])).toEqual([]);
+        expect(optionLabels([untaggedCustom])).toEqual([]);
     });
 
     it("matches no side for a draft in an untagged custom group", () => {
         const draft = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(draft, untaggedCustom, "T1")).toBeNull();
+        expect(sideOf(draft, untaggedCustom, nameKey("T1"))).toBeNull();
     });
 
     it("ignores a linked Team entity on an untagged custom group", () => {
         const linked = makeGroup("g2", {}, { Team1: makeTeam("t1", "T1") }, "custom");
-        expect(resolveGroupTeamNames(linked)).toEqual({ team1: null, team2: null });
+        expect(buildTeamKeyIndex([linked]).keysByGroup.get("g2")).toEqual({
+            team1: null,
+            team2: null
+        });
     });
 
     it("resolves names for a custom group tagged scrim", () => {
@@ -598,10 +623,13 @@ describe("team identity is gated on game classification, not group type", () => 
             {},
             "custom"
         );
-        expect(resolveGroupTeamNames(tagged)).toEqual({ team1: "T1", team2: "GenG" });
-        expect(getTeamNameOptions([tagged])).toEqual(["GenG", "T1"]);
+        expect(buildTeamKeyIndex([tagged]).keysByGroup.get("g4")).toEqual({
+            team1: "name:t1",
+            team2: "name:geng"
+        });
+        expect(optionLabels([tagged])).toEqual(["GenG", "T1"]);
         const draft = makeDraft("d1", fullPicks(), { group_id: "g4" });
-        expect(teamSideInDraft(draft, tagged, "T1")).toBe("blue");
+        expect(sideOf(draft, tagged, nameKey("T1"))).toBe("blue");
     });
 
     it("resolves names for a scratch group but keeps it out of the default scope", () => {
@@ -612,16 +640,19 @@ describe("team identity is gated on game classification, not group type", () => 
             redTeamName: "GenG",
             gameType: "scratch"
         });
-        expect(resolveGroupTeamNames(scratch)).toEqual({ team1: "T1", team2: "GenG" });
-        expect(getTeamNameOptions([scratch], "all")).toEqual([]);
-        expect(getTeamNameOptions([scratch], "scratch")).toEqual(["GenG", "T1"]);
+        expect(buildTeamKeyIndex([scratch]).keysByGroup.get("g5")).toEqual({
+            team1: "name:t1",
+            team2: "name:geng"
+        });
+        expect(optionLabels([scratch], "all")).toEqual([]);
+        expect(optionLabels([scratch], "scratch")).toEqual(["GenG", "T1"]);
     });
 
     it("still resolves names for untagged series groups", () => {
         const series = makeGroup("g3", { blueTeamName: "T1", redTeamName: "GenG" });
-        expect(resolveGroupTeamNames(series)).toEqual({
-            team1: "T1",
-            team2: "GenG"
+        expect(buildTeamKeyIndex([series]).keysByGroup.get("g3")).toEqual({
+            team1: "name:t1",
+            team2: "name:geng"
         });
     });
 });
@@ -641,12 +672,7 @@ describe("champion-only search spans the whole canvas regardless of classificati
     ];
 
     it("returns loose, custom-group and series drafts alike under 'all'", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            championOnly("Jinx"),
-            identity
-        );
+        const results = search(drafts, groups, championOnly("Jinx"), identity);
         expect(results.matches.map((m) => m.draftId)).toEqual([
             "loose",
             "inCustom",
@@ -671,25 +697,23 @@ describe("champion-only search honours a NAMED scope", () => {
     ];
     const query = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: "Jinx",
-        teamName: null,
-        opponentTeamName: null,
+        teamKey: null,
+        opponentKey: null,
         bucket: null,
         scope
     });
 
     it("'scratch' returns only the scratch group's draft", () => {
-        const results = computeSearchResults(drafts, groups, query("scratch"), identity);
+        const results = search(drafts, groups, query("scratch"), identity);
         expect(results.matches.map((m) => m.draftId)).toEqual(["inScratch"]);
     });
 
     it("'scrim' and 'official' each return only their own", () => {
         expect(
-            computeSearchResults(drafts, groups, query("scrim"), identity).matches.map(
-                (m) => m.draftId
-            )
+            search(drafts, groups, query("scrim"), identity).matches.map((m) => m.draftId)
         ).toEqual(["inScrim"]);
         expect(
-            computeSearchResults(drafts, groups, query("official"), identity).matches.map(
+            search(drafts, groups, query("official"), identity).matches.map(
                 (m) => m.draftId
             )
         ).toEqual(["inOfficial"]);
@@ -697,12 +721,9 @@ describe("champion-only search honours a NAMED scope", () => {
 
     it("a named scope drops the loose card, which has no classification at all", () => {
         for (const scope of ["scratch", "scrim", "official"] as const) {
-            const ids = computeSearchResults(
-                drafts,
-                groups,
-                query(scope),
-                identity
-            ).matches.map((m) => m.draftId);
+            const ids = search(drafts, groups, query(scope), identity).matches.map(
+                (m) => m.draftId
+            );
             expect(ids).not.toContain("loose");
         }
     });
@@ -712,15 +733,13 @@ describe("champion-only search honours a NAMED scope", () => {
         // Reusing the aggregation predicate here would drop the loose card and
         // every untagged custom group — most of a real canvas.
         expect(
-            computeSearchResults(drafts, groups, query("all"), identity).matches.map(
-                (m) => m.draftId
-            )
+            search(drafts, groups, query("all"), identity).matches.map((m) => m.draftId)
         ).toEqual(["loose", "inScratch", "inScrim", "inOfficial"]);
     });
 
     it("leaves buckets and teamRecord null regardless of scope", () => {
         for (const scope of SCOPE_VALUES) {
-            const results = computeSearchResults(drafts, groups, query(scope), identity);
+            const results = search(drafts, groups, query(scope), identity);
             expect(results.buckets).toBeNull();
             expect(results.teamRecord).toBeNull();
         }
@@ -752,21 +771,21 @@ describe("scope filter", () => {
 
     const teamOnly = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: null,
-        teamName: "T1",
-        opponentTeamName: null,
+        teamKey: nameKey("T1"),
+        opponentKey: null,
         bucket: null,
         scope
     });
     const championPlusTeam = (scope: SearchQuery["scope"]): SearchQuery => ({
         championId: "Jinx",
-        teamName: "T1",
-        opponentTeamName: null,
+        teamKey: nameKey("T1"),
+        opponentKey: null,
         bucket: null,
         scope
     });
 
     it("'all' gives the combined record", () => {
-        const results = computeSearchResults(drafts, groups, teamOnly("all"), identity);
+        const results = search(drafts, groups, teamOnly("all"), identity);
         expect(results.teamRecord).toEqual({
             games: 2,
             wins: 1,
@@ -777,12 +796,7 @@ describe("scope filter", () => {
     });
 
     it("'official' and 'scrim' narrow the record to their subsets", () => {
-        const official = computeSearchResults(
-            drafts,
-            groups,
-            teamOnly("official"),
-            identity
-        );
+        const official = search(drafts, groups, teamOnly("official"), identity);
         expect(official.matches.map((m) => m.draftId)).toEqual(["d-off"]);
         expect(official.teamRecord).toEqual({
             games: 1,
@@ -792,7 +806,7 @@ describe("scope filter", () => {
             inProgress: 0
         });
 
-        const scrim = computeSearchResults(drafts, groups, teamOnly("scrim"), identity);
+        const scrim = search(drafts, groups, teamOnly("scrim"), identity);
         expect(scrim.matches.map((m) => m.draftId)).toEqual(["d-scr"]);
         expect(scrim.teamRecord).toEqual({
             games: 1,
@@ -804,30 +818,15 @@ describe("scope filter", () => {
     });
 
     it("narrows the champion+team bucket summaries the same way", () => {
-        const all = computeSearchResults(
-            drafts,
-            groups,
-            championPlusTeam("all"),
-            identity
-        );
+        const all = search(drafts, groups, championPlusTeam("all"), identity);
         expect(all.buckets?.pickedBy.games).toBe(2);
 
-        const official = computeSearchResults(
-            drafts,
-            groups,
-            championPlusTeam("official"),
-            identity
-        );
+        const official = search(drafts, groups, championPlusTeam("official"), identity);
         expect(official.matches.map((m) => m.draftId)).toEqual(["d-off"]);
         expect(official.buckets?.pickedBy.games).toBe(1);
         expect(official.buckets?.pickedBy.wins).toBe(1);
 
-        const scrim = computeSearchResults(
-            drafts,
-            groups,
-            championPlusTeam("scrim"),
-            identity
-        );
+        const scrim = search(drafts, groups, championPlusTeam("scrim"), identity);
         expect(scrim.matches.map((m) => m.draftId)).toEqual(["d-scr"]);
         expect(scrim.buckets?.pickedBy.games).toBe(1);
         expect(scrim.buckets?.pickedBy.losses).toBe(1);
@@ -851,7 +850,7 @@ describe("scope filter", () => {
             ...drafts
         ];
 
-        const scratchOnly = computeSearchResults(
+        const scratchOnly = search(
             scratchDrafts,
             scratchGroups,
             teamOnly("scratch"),
@@ -861,12 +860,7 @@ describe("scope filter", () => {
         expect(scratchOnly.teamRecord?.games).toBe(1);
 
         // and the scratch draft never leaks into the default scope
-        const all = computeSearchResults(
-            scratchDrafts,
-            scratchGroups,
-            teamOnly("all"),
-            identity
-        );
+        const all = search(scratchDrafts, scratchGroups, teamOnly("all"), identity);
         expect(all.matches.map((m) => m.draftId)).toEqual(["d-off", "d-scr"]);
         expect(all.teamRecord?.games).toBe(2);
     });
@@ -882,28 +876,21 @@ describe("scope filter", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(
-            legacyDrafts,
-            legacy,
-            teamOnly("all"),
-            identity
-        );
+        const results = search(legacyDrafts, legacy, teamOnly("all"), identity);
         expect(results.teamRecord?.games).toBe(1);
         expect(results.teamRecord?.wins).toBe(1);
 
         // and it filters as a scrim, not as an official match
         expect(
-            computeSearchResults(legacyDrafts, legacy, teamOnly("scrim"), identity)
-                .teamRecord?.games
+            search(legacyDrafts, legacy, teamOnly("scrim"), identity).teamRecord?.games
         ).toBe(1);
         expect(
-            computeSearchResults(legacyDrafts, legacy, teamOnly("official"), identity)
-                .teamRecord?.games
+            search(legacyDrafts, legacy, teamOnly("official"), identity).teamRecord?.games
         ).toBe(0);
     });
 });
 
-describe("computeSearchResults — matchup (opponentTeamName)", () => {
+describe("computeSearchResults — matchup (opponentKey)", () => {
     const scrimTeams = (blue: string, red: string): CanvasGroup["metadata"] => ({
         blueTeamName: blue,
         redTeamName: red,
@@ -932,22 +919,12 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     ];
 
     it("team-only matchup narrows to head-to-head games only", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            matchup("TSM", "C9"),
-            identity
-        );
+        const results = search(drafts, groups, matchup("TSM", "C9"), identity);
         expect(results.matches.map((m) => m.draftId).sort()).toEqual(["d1", "d2"]);
     });
 
-    it("keeps outcome and teamRecord from teamName's perspective", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            matchup("TSM", "C9"),
-            identity
-        );
+    it("keeps outcome and teamRecord from the team key perspective", () => {
+        const results = search(drafts, groups, matchup("TSM", "C9"), identity);
         const byId = new Map(results.matches.map((m) => [m.draftId, m]));
         expect(byId.get("d1")?.outcome).toBe("win");
         expect(byId.get("d2")?.outcome).toBe("loss");
@@ -955,12 +932,7 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     });
 
     it("carries teamSide, including the swapped-sides game", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            matchup("TSM", "C9"),
-            identity
-        );
+        const results = search(drafts, groups, matchup("TSM", "C9"), identity);
         const byId = new Map(results.matches.map((m) => [m.draftId, m]));
         expect(byId.get("d1")?.teamSide).toBe("blue");
         expect(byId.get("d2")?.teamSide).toBe("red");
@@ -968,7 +940,7 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
 
     it("champion + matchup filters slots and buckets to head-to-head games", () => {
         const query = matchup("TSM", "C9", { championId: "Jinx" });
-        const results = computeSearchResults(drafts, groups, query, identity);
+        const results = search(drafts, groups, query, identity);
         // Jinx appears in d1 (head-to-head) and d3 (TSM vs TL) — only d1 counts.
         expect(results.matches.map((m) => m.draftId)).toEqual(["d1"]);
         expect(results.buckets?.pickedBy.games).toBe(1);
@@ -986,7 +958,7 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
             ...makeDraft("do", fullPicks(), { group_id: "g-o", winner: "blue" }),
             team2Name: "C9"
         };
-        const results = computeSearchResults(
+        const results = search(
             [withOverride],
             overrideGroups,
             matchup("TSM", "C9"),
@@ -995,36 +967,31 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
         expect(results.matches).toEqual([]);
         // Sanity: the primary filter alone DOES see the game.
         expect(
-            computeSearchResults(
+            search(
                 [withOverride],
                 overrideGroups,
-                { ...matchup("TSM", "C9"), opponentTeamName: null },
+                { ...matchup("TSM", "C9"), opponentKey: null },
                 identity
             ).matches.map((m) => m.draftId)
         ).toEqual(["do"]);
     });
 
     it("opponent identical to team can never match", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            matchup("TSM", "TSM"),
-            identity
-        );
+        const results = search(drafts, groups, matchup("TSM", "TSM"), identity);
         expect(results.matches).toEqual([]);
     });
 
     it("is ignored without a team filter (championId-only query)", () => {
         const query: SearchQuery = {
             ...championOnly("Jinx"),
-            opponentTeamName: "C9"
+            opponentKey: nameKey("C9")
         };
-        const results = computeSearchResults(drafts, groups, query, identity);
+        const results = search(drafts, groups, query, identity);
         expect(results.matches.map((m) => m.draftId).sort()).toEqual(["d1", "d3"]);
     });
 
     it("respects scope: an official-scoped matchup over scrim games is empty", () => {
-        const results = computeSearchResults(
+        const results = search(
             drafts,
             groups,
             matchup("TSM", "C9", { scope: "official" }),
@@ -1034,17 +1001,12 @@ describe("computeSearchResults — matchup (opponentTeamName)", () => {
     });
 
     it("champion-only matches carry teamSide null", () => {
-        const results = computeSearchResults(
-            drafts,
-            groups,
-            championOnly("Jinx"),
-            identity
-        );
+        const results = search(drafts, groups, championOnly("Jinx"), identity);
         expect(results.matches.every((m) => m.teamSide === null)).toBe(true);
     });
 });
 
-describe("getOpponentNameOptions", () => {
+describe("getOpponentOptions", () => {
     it("is the scope-aware team list minus the selected team, case-insensitively", () => {
         const groups = [
             makeGroup("g-ab", {
@@ -1058,7 +1020,14 @@ describe("getOpponentNameOptions", () => {
                 gameType: "scrim"
             })
         ];
-        expect(getOpponentNameOptions(groups, "all", "tsm")).toEqual(["C9", "TL"]);
+        expect(
+            getOpponentOptions(
+                buildTeamKeyIndex(groups),
+                groups,
+                "all",
+                nameKey("tsm")
+            ).map((o) => o.label)
+        ).toEqual(["C9", "TL"]);
     });
 });
 
@@ -1154,7 +1123,7 @@ describe("computeMatchupScopeHint", () => {
 
     it("reports games under other named scopes when the primary scope hides them", () => {
         expect(
-            computeMatchupScopeHint(
+            searchHint(
                 drafts,
                 groups,
                 matchup("TSM", "C9", { scope: "official" }),
@@ -1168,19 +1137,12 @@ describe("computeMatchupScopeHint", () => {
 
     it("under scope all (the counted rule) only scratch can hide games", () => {
         expect(
-            computeMatchupScopeHint(
-                drafts.slice(2),
-                groups,
-                matchup("TSM", "C9"),
-                identity
-            )
+            searchHint(drafts.slice(2), groups, matchup("TSM", "C9"), identity)
         ).toEqual([{ scope: "scratch", games: 1 }]);
     });
 
     it("returns nothing for non-matchup queries", () => {
-        expect(
-            computeMatchupScopeHint(drafts, groups, championOnly("Jinx"), identity)
-        ).toEqual([]);
+        expect(searchHint(drafts, groups, championOnly("Jinx"), identity)).toEqual([]);
     });
 
     it("keeps the champion filter: hint counts describe the same population as the sentence", () => {
@@ -1189,7 +1151,7 @@ describe("computeMatchupScopeHint", () => {
             makeDraft("plain", fullPicks(), { group_id: "g-scrim" })
         ];
         expect(
-            computeMatchupScopeHint(
+            searchHint(
                 withJinx,
                 groups,
                 matchup("TSM", "C9", { scope: "official", championId: "Jinx" }),
@@ -1200,20 +1162,20 @@ describe("computeMatchupScopeHint", () => {
 });
 
 describe("placeholder team names never count", () => {
-    it("getTeamNameOptions omits Team 1 / Team 2 placeholders in any casing or padding", () => {
+    it("getTeamOptions omits Team 1 / Team 2 placeholders in any casing or padding", () => {
         const groups = [
             makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "Team 2" }),
             makeGroup("g2", { blueTeamName: " team 1 ", redTeamName: "DOG" }),
             makeGroup("g3", { blueTeamName: "MEOW", redTeamName: "TEAM 2" })
         ];
-        expect(getTeamNameOptions(groups)).toEqual(["DOG", "MEOW"]);
+        expect(optionLabels(groups)).toEqual(["DOG", "MEOW"]);
     });
 
     it("teamSideInDraft is null for a placeholder metadata name", () => {
         const group = makeGroup("g1", { blueTeamName: "Team 1", redTeamName: "Team 2" });
         const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(game, group, "Team 1")).toBeNull();
-        expect(teamSideInDraft(game, group, "Team 2")).toBeNull();
+        expect(sideOf(game, group, nameKey("Team 1"))).toBeNull();
+        expect(sideOf(game, group, nameKey("Team 2"))).toBeNull();
     });
 
     it("a team search for Team 1 counts no games", () => {
@@ -1225,13 +1187,13 @@ describe("placeholder team names never count", () => {
                 winner: "blue"
             })
         ];
-        const results = computeSearchResults(
+        const results = search(
             drafts,
             groups,
             {
                 championId: null,
-                teamName: "Team 1",
-                opponentTeamName: null,
+                teamKey: nameKey("Team 1"),
+                opponentKey: null,
                 bucket: null,
                 scope: "all"
             },
@@ -1246,8 +1208,8 @@ describe("placeholder team names never count", () => {
             { blueTeamName: "Team 1" },
             { Team1: makeTeam("t1", "Team 1") }
         );
-        expect(resolveGroupTeamNames(group).team1).toBe("Team 1");
+        expect(buildTeamKeyIndex([group]).keysByGroup.get("g1")?.team1).toBe("id:t1");
         const game = makeDraft("d1", fullPicks(), { group_id: "g1" });
-        expect(teamSideInDraft(game, group, "Team 1")).toBe("blue");
+        expect(sideOf(game, group, "id:t1")).toBe("blue");
     });
 });
