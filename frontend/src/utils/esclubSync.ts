@@ -20,6 +20,7 @@ export function parseEsclubUrl(text: string): { kind: "serie"; id: string } | nu
 
 export type EsclubActionResult =
     | { status: 200 | 202; body: EsclubActionResponse }
+    | { status: 401 }
     | {
           status: 409 | 429;
           body: EsclubRetryAfterResponse;
@@ -69,6 +70,8 @@ function retryMinutes(
 
 export function esclubActionMessage(result: EsclubActionResult, now: number): string {
     switch (result.status) {
+        case 401:
+            return "Please sign in again, then press Add league or Refresh league again.";
         case 400:
             return result.body.code === "INVALID_URL"
                 ? `Paste an esclub series link, like ${ACCEPTED_LINK_EXAMPLE}.`
@@ -84,9 +87,9 @@ export function esclubActionMessage(result: EsclubActionResult, now: number): st
         default: {
             const body = result.body;
             if ("sync" in body)
-                return "League sync started. Teams will appear when it finishes.";
-            if ("joined" in body)
-                return "Joined the running league sync. Teams will update when it finishes.";
+                return result.status === 202
+                    ? "League sync started. Teams will appear when it finishes."
+                    : "Joined the running league sync. Teams will update when it finishes.";
             if ("known" in body)
                 return "League added to your Teams page. It was already synced.";
             const minutes = Math.max(
@@ -101,7 +104,6 @@ export function esclubActionMessage(result: EsclubActionResult, now: number): st
 export function esclubActionSync(result: EsclubActionResult): EsclubSyncView | null {
     if (result.status !== 200 && result.status !== 202) return null;
     if ("sync" in result.body) return result.body.sync;
-    if ("joined" in result.body) return result.body.joined;
     return null;
 }
 

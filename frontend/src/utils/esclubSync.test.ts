@@ -1,10 +1,16 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createComponent, untrack, type JSX } from "solid-js";
+import { render } from "solid-js/web";
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
+import TeamsPage from "../pages/TeamsPage";
 import type { EsclubSyncView, EsclubTournamentView } from "@draft-sim/shared-types";
 import {
     addEsclubLeague,
     fetchEsclubSync,
     fetchEsclubTournament,
-    refreshEsclubLeague
+    refreshEsclubLeague,
+    refreshEsclubSeries
 } from "./actions";
 import {
     ACCEPTED_LINK_EXAMPLE,
@@ -17,8 +23,21 @@ import {
 } from "./esclubSync";
 
 vi.mock("./analytics", () => ({ track: vi.fn() }));
+vi.mock("../userProvider", () => ({
+    useUser: () => () => [() => ({ id: "user-1" })]
+}));
+vi.mock("../components/AuthGuard", () => ({
+    AuthGuard: (props: { children: JSX.Element }) => untrack(() => props.children)
+}));
+vi.mock("@solidjs/meta", () => ({ Title: () => null }));
+const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("solid-toast", () => ({ default: notifications }));
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+});
 
 const NOW = Date.parse("2026-11-14T12:00:00Z");
 const ID = "12345678-1234-1234-1234-123456789abc";
@@ -163,7 +182,7 @@ describe("add league outcome messages", () => {
             message: "League sync started. Teams will appear when it finishes."
         },
         {
-            result: { status: 200, body: { joined: sync } },
+            result: { status: 200, body: { sync } },
             message: "Joined the running league sync. Teams will update when it finishes."
         },
         {
@@ -232,7 +251,7 @@ describe("add league outcome messages", () => {
 
     it("tracks started and joined syncs for polling", () => {
         expect(esclubActionSync({ status: 202, body: { sync } })).toEqual(sync);
-        expect(esclubActionSync({ status: 200, body: { joined: sync } })).toEqual(sync);
+        expect(esclubActionSync({ status: 200, body: { sync } })).toEqual(sync);
     });
 
     it("does not poll refused presses or known leagues", () => {
@@ -243,6 +262,119 @@ describe("add league outcome messages", () => {
 });
 
 describe("sync polling", () => {
+    it.each(["succeeded", "failed"])(
+        "does not rediscover a %s sync when tournament refetches fail with 503",
+        async (terminalStatus) => {
+            vi.useFakeTimers();
+            vi.setSystemTime(NOW);
+            const statusReads: number[] = [];
+            let tournamentReads = 0;
+            let teamsReads = 0;
+            vi.stubGlobal(
+                "fetch",
+                vi.fn((url: string) => {
+                    if (url === "/api/teams/manage") {
+                        teamsReads += 1;
+                        return Promise.resolve(
+                            new Response(
+                                JSON.stringify({
+                                    teams: [],
+                                    tournaments: [
+                                        {
+                                            id: "league-1",
+                                            name: "League",
+                                            source: "esclub",
+                                            region: "na1",
+                                            archived_at: null
+                                        }
+                                    ]
+                                })
+                            )
+                        );
+                    }
+                    if (url === "/api/esclub/tournaments/league-1") {
+                        tournamentReads += 1;
+                        return Promise.resolve(
+                            tournamentReads === 1
+                                ? new Response(JSON.stringify(view({ running: sync })))
+                                : new Response("Unavailable", { status: 503 })
+                        );
+                    }
+                    if (url === "/api/esclub/syncs/sync-1") {
+                        statusReads.push(Date.now());
+                        // Bound the diagnostic if a regression creates a loop.
+                        // A pending response holds the runaway watcher in flight.
+                        if (statusReads.length > 4)
+                            return new Promise<Response>(() => undefined);
+                        return Promise.resolve(
+                            new Response(
+                                JSON.stringify({
+                                    sync: {
+                                        ...sync,
+                                        status:
+                                            statusReads.length === 1
+                                                ? "running"
+                                                : terminalStatus
+                                    }
+                                })
+                            )
+                        );
+                    }
+                    throw new Error(`Unexpected fetch: ${url}`);
+                })
+            );
+            const client = new QueryClient({
+                defaultOptions: { queries: { retry: false } }
+            });
+            const root = document.createElement("div");
+            document.body.append(root);
+            const dispose = render(
+                () =>
+                    createComponent(QueryClientProvider, {
+                        client,
+                        get children() {
+                            return createComponent(TeamsPage, {});
+                        }
+                    }),
+                root
+            );
+
+            try {
+                await vi.advanceTimersByTimeAsync(100);
+                expect(statusReads).toEqual([NOW]);
+                await vi.advanceTimersByTimeAsync(2899);
+                expect(statusReads).toHaveLength(1);
+                await vi.advanceTimersByTimeAsync(101);
+                // Completion invalidates each read once. Failed tournament reads
+                // retain the cached running row, which must never re-arm polling.
+                expect(statusReads).toEqual([NOW, NOW + 3000]);
+                expect(tournamentReads).toBe(2);
+                expect(teamsReads).toBe(2);
+                expect(
+                    notifications.success.mock.calls.length +
+                        notifications.error.mock.calls.length
+                ).toBe(1);
+                await vi.advanceTimersByTimeAsync(30_000);
+                expect(statusReads).toHaveLength(2);
+                expect(tournamentReads).toBe(2);
+                expect(teamsReads).toBe(2);
+                // A later cache write must also respect the remembered terminal id.
+                client.setQueryData(
+                    ["esclubTournament", "league-1"],
+                    view({ running: sync })
+                );
+                await vi.advanceTimersByTimeAsync(3100);
+                expect(statusReads).toHaveLength(2);
+                expect(tournamentReads).toBe(2);
+                expect(teamsReads).toBe(2);
+            } finally {
+                dispose();
+                client.clear();
+                root.remove();
+            }
+        }
+    );
+
     it("polls every 3 seconds before the first response and while running", () => {
         expect(esclubSyncPollInterval(undefined, false)).toBe(3000);
         expect(esclubSyncPollInterval("running", false)).toBe(3000);
@@ -260,6 +392,41 @@ describe("sync polling", () => {
 });
 
 describe("esclub actions", () => {
+    it.each([
+        { name: "add", run: () => addEsclubLeague({ url: LINK, region: "na1" }) },
+        { name: "league refresh", run: () => refreshEsclubLeague("league-1") },
+        { name: "series refresh", run: () => refreshEsclubSeries("series-1") }
+    ])(
+        "does not replay $name after a 401 even if token refresh succeeds",
+        async ({ run }) => {
+            let posts = 0;
+            const fetch = vi.fn((url: string, options?: RequestInit) => {
+                if (url === "/api/auth/refresh-token") {
+                    return Promise.resolve(new Response("{}", { status: 200 }));
+                }
+                if (options?.method === "POST") {
+                    posts += 1;
+                    return Promise.resolve(
+                        posts === 1
+                            ? new Response("Sign in", { status: 401 })
+                            : new Response(JSON.stringify({ sync }), { status: 202 })
+                    );
+                }
+                throw new Error(`Unexpected fetch: ${url}`);
+            });
+            vi.stubGlobal("fetch", fetch);
+
+            const result = await run();
+
+            expect(posts).toBe(1);
+            expect(result).toEqual({ status: 401 });
+            expect(esclubActionMessage(result, NOW)).toBe(
+                "Please sign in again, then press Add league or Refresh league again."
+            );
+            expect(esclubActionSync(result)).toBeNull();
+        }
+    );
+
     it("posts an add once with credentials and preserves 202", async () => {
         const fetch = vi
             .fn()
@@ -296,8 +463,8 @@ describe("esclub actions", () => {
         );
     });
 
-    const cases: EsclubActionResult[] = [
-        { status: 200, body: { joined: sync } },
+    const cases: Exclude<EsclubActionResult, { status: 401 }>[] = [
+        { status: 200, body: { sync } },
         {
             status: 200,
             body: { known: { tournamentId: "league-1", stageId: "stage-1" } }

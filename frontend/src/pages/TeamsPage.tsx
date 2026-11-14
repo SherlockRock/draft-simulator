@@ -95,6 +95,9 @@ const TeamsPage: Component = () => {
 
     const [addLeagueOpen, setAddLeagueOpen] = createSignal(false);
     const [syncs, setSyncs] = createSignal<EsclubSyncView[]>([]);
+    // A failed refetch can leave an old running row cached. A sync id is
+    // terminal forever once observed, even if that row is rediscovered later.
+    const terminalSyncIds = new Set<string>();
     const syncIds = createMemo(() => syncs().map((sync) => sync.id));
     const [now, setNow] = createSignal(Date.now());
     onMount(() => {
@@ -103,6 +106,7 @@ const TeamsPage: Component = () => {
     });
 
     const trackSync = (sync: EsclubSyncView) => {
+        if (sync.status !== "running" || terminalSyncIds.has(sync.id)) return;
         setSyncs((previous) =>
             previous.some((item) => item.id === sync.id) ? previous : [...previous, sync]
         );
@@ -126,6 +130,8 @@ const TeamsPage: Component = () => {
             queryFn: () => fetchEsclubSync(props.id),
             enabled: Boolean(user()),
             retry: false,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
             refetchInterval: (query) =>
                 esclubSyncPollInterval(
                     query.state.data?.sync.status,
@@ -136,6 +142,8 @@ const TeamsPage: Component = () => {
         createEffect(() => {
             const sync = statusQuery.data?.sync;
             if (!sync || sync.status === "running" || statusQuery.isFetching) return;
+            if (terminalSyncIds.has(sync.id)) return;
+            terminalSyncIds.add(sync.id);
             setNow(Date.now());
             setSyncs((previous) => previous.filter((item) => item.id !== sync.id));
             void invalidateTeams(queryClient);
@@ -174,7 +182,7 @@ const TeamsPage: Component = () => {
 
         createEffect(() => {
             // A cached running row may already have finished. Wait for fresh data.
-            if (tournamentQuery.isFetching) return;
+            if (tournamentQuery.isFetching || !tournamentQuery.isSuccess) return;
             const running = tournamentQuery.data?.sync.running;
             if (running) trackSync(running);
         });
@@ -196,10 +204,18 @@ const TeamsPage: Component = () => {
             const data = tournamentQuery.data;
             if (!data) return { label: "Refresh league", disabled: true };
             const running = syncs().find((sync) => sync.tournamentId === props.id);
+            const cachedRunning = data.sync.running;
             return esclubRefreshButton(
                 {
                     ...data,
-                    sync: { ...data.sync, running: running ?? data.sync.running }
+                    sync: {
+                        ...data.sync,
+                        running:
+                            running ??
+                            (cachedRunning && !terminalSyncIds.has(cachedRunning.id)
+                                ? cachedRunning
+                                : null)
+                    }
                 },
                 now()
             );

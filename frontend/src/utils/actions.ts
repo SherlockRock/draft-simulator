@@ -6,7 +6,6 @@ import {
     apiPut,
     apiDelete,
     apiPatch,
-    fetchWithRefresh,
     markAuthExpired
 } from "./apiClient";
 import { track } from "./analytics";
@@ -956,19 +955,21 @@ export const setTournamentArchived = async (id: string, archived: boolean) =>
         TournamentArchiveResponseSchema
     );
 
-// apiPost discards error bodies and response headers. These actions retain the
-// D4 outcomes while using apiClient's credential and auth-refresh handling.
+// Retain D4 bodies and headers, but send each costly POST only once. In
+// particular, fetchWithRefresh would replay a POST after a successful refresh.
 async function postEsclubAction(
     path: string,
     body: { url: string; region: string } | Record<string, never>
 ): Promise<EsclubActionResult> {
-    const response = await fetchWithRefresh(`${BASE_URL}${path}`, {
+    const response = await fetch(`${BASE_URL}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(body)
     });
     switch (response.status) {
+        case 401:
+            return { status: 401 };
         case 200:
         case 202:
             return {
@@ -1002,6 +1003,9 @@ export const addEsclubLeague = (data: { url: string; region: string }) =>
 
 export const refreshEsclubLeague = (id: string) =>
     postEsclubAction(`/esclub/tournaments/${encodeURIComponent(id)}/refresh`, {});
+
+export const refreshEsclubSeries = (id: string) =>
+    postEsclubAction(`/esclub/series/${encodeURIComponent(id)}/refresh`, {});
 
 export const fetchEsclubTournament = (id: string) =>
     apiGet(`/esclub/tournaments/${encodeURIComponent(id)}`, EsclubTournamentViewSchema);
