@@ -22,6 +22,14 @@ const sequelize = require("../../config/database");
 const setupAssociations = require("../../models/associations");
 const canvasMutations = require("../../services/canvasMutations");
 
+// The associations may be declared only once per module registry.
+let associated = false;
+function associateOnce() {
+  if (associated) return;
+  setupAssociations();
+  associated = true;
+}
+
 /**
  * S3 Task 6 (plan D9, D10, Answer Q3 A): an imported series — its VersusDraft
  * has a `league_series_id` — is read-only where esclub is the source: the
@@ -202,14 +210,15 @@ describe("PUT group on an imported series: refusals", () => {
     expectRefusedBeforeAnyWrite();
   });
 
-  it.each([
-    ["blueTeamName", { blueTeamName: "Renamed" }],
-    ["redTeamName", { redTeamName: "Renamed" }],
-  ])("refuses a different %s", async (_label, metadata) => {
-    const res = await putGroup(dialogSave({ metadata }));
+  it("still refuses a length change when the names in the body differ too", async () => {
+    const res = await putGroup(
+      dialogSave({ metadata: { blueTeamName: "Renamed", length: 5 } }),
+    );
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe(TEAMS_REFUSAL);
+    expect(res.body.error).toBe(
+      "The length of an imported series is set by esclub",
+    );
     expectRefusedBeforeAnyWrite();
   });
 
@@ -272,6 +281,53 @@ describe("PUT group on an imported series: what stays editable", () => {
     expect(Draft.create).not.toHaveBeenCalled();
     // The VersusDraft is read once, not again by the manual-series branch.
     expect(VersusDraft.findByPk).toHaveBeenCalledTimes(1);
+  });
+
+  // The dialog seeds the names from the linked Team rows (Team1.name), which
+  // S2 renames on every league sync; the group only catches up on a refresh.
+  // On an imported series the names are server-owned: the body's are ignored.
+  it("saves a gameType change when esclub renamed a team since the last refresh", async () => {
+    group.metadata.blueTeamName = "Old Alpha";
+    versusDraft.blueTeamName = "Old Alpha";
+
+    const res = await putGroup(
+      dialogSave({
+        metadata: {
+          blueTeamName: "New Alpha",
+          redTeamName: "New Beta",
+          gameType: "scrim",
+        },
+      }),
+    );
+
+    expect(res.body.error).toBeUndefined();
+    expect(res.status).toBe(200);
+    const patch = group.update.mock.calls.at(-1)[0];
+    expect(patch.metadata.gameType).toBe("scrim");
+    expect(patch.metadata.blueTeamName).toBe("Old Alpha");
+    expect(patch.metadata.redTeamName).toBe("Beta");
+    for (const [values] of versusDraft.update.mock.calls) {
+      expect(values).not.toHaveProperty("blueTeamName");
+      expect(values).not.toHaveProperty("redTeamName");
+    }
+  });
+
+  it.each([
+    ["different names", { blueTeamName: "Renamed", redTeamName: "Other" }],
+    ["cleared names", { blueTeamName: null, redTeamName: null }],
+    ["blank names", { blueTeamName: "", redTeamName: "  " }],
+  ])("ignores %s sent alone", async (_label, metadata) => {
+    const res = await putGroup({ metadata });
+
+    expect(res.body.error).toBeUndefined();
+    expect(res.status).toBe(200);
+    const patch = group.update.mock.calls.at(-1)[0];
+    expect(patch.metadata.blueTeamName).toBe("Alpha");
+    expect(patch.metadata.redTeamName).toBe("Beta");
+    for (const [values] of versusDraft.update.mock.calls) {
+      expect(values).not.toHaveProperty("blueTeamName");
+      expect(values).not.toHaveProperty("redTeamName");
+    }
   });
 
   it("saves a rename", async () => {
@@ -480,9 +536,133 @@ describe("PUT draft on an imported game (Answer Q3 A)", () => {
   });
 });
 
+// A card dragged out of an imported group (D12) can land in a custom group.
+// Converting that group would re-point its Draft to a new manual series, reset
+// its sides and unlock the card, so the conversion is refused outright.
+describe("POST convert-to-series of a custom group holding an imported game", () => {
+  let cards;
+
+  const card = (id, versusDraftId) => ({
+    id: `cd-${id}`,
+    update: vi.fn().mockResolvedValue(undefined),
+    toJSON: () => ({ id: `cd-${id}` }),
+    Draft: {
+      id,
+      owner_id: "u-editor",
+      versus_draft_id: versusDraftId,
+      update: vi.fn().mockResolvedValue(undefined),
+      toJSON: () => ({ id }),
+    },
+  });
+
+  beforeEach(() => {
+    group.type = "custom";
+    group.versus_draft_id = null;
+    group.team1_id = null;
+    group.team2_id = null;
+    cards = [card("d-own", null), card("d-imported", "vd-1")];
+    CanvasDraft.findAll.mockResolvedValue(cards);
+    vi.spyOn(CanvasGroup, "count").mockResolvedValue(0);
+    vi.spyOn(CanvasAnnotation, "count").mockResolvedValue(0);
+    vi.spyOn(VersusDraft, "count").mockResolvedValue(1);
+    vi.spyOn(Draft, "create").mockImplementation(async (values) => ({
+      id: `d-${values.seriesIndex}`,
+      ...values,
+      toJSON: () => values,
+    }));
+    vi.spyOn(VersusDraft, "create").mockResolvedValue({
+      id: "vd-new",
+      blueTeamName: "Team 1",
+      redTeamName: "Team 2",
+      length: 3,
+      type: "standard",
+      competitive: false,
+      disabledChampions: [],
+    });
+  });
+
+  const convert = () =>
+    request(buildApp())
+      .post("/api/canvas/c-1/group/g-1/convert-to-series")
+      .send({ name: "Custom Series", length: 3, type: "standard" });
+
+  it("refuses with 400 before any write", async () => {
+    const res = await convert();
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/imported from esclub/);
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+    expect(VersusDraft.create).not.toHaveBeenCalled();
+    expect(Draft.create).not.toHaveBeenCalled();
+    expect(CanvasDraft.create).not.toHaveBeenCalled();
+    expect(group.update).not.toHaveBeenCalled();
+    for (const c of cards) {
+      expect(c.update).not.toHaveBeenCalled();
+      expect(c.Draft.update).not.toHaveBeenCalled();
+    }
+    expect(socketService.emitToRoom).not.toHaveBeenCalled();
+  });
+
+  it("asks only about the series ids the group's games point at", async () => {
+    await convert();
+
+    expect(VersusDraft.count).toHaveBeenCalledTimes(1);
+    const options = VersusDraft.count.mock.calls[0][0];
+    expect(options.where.id).toEqual(["vd-1"]);
+    expect(options.transaction).toBe(transaction);
+  });
+
+  it("refuses a game sitting beyond the new length too", async () => {
+    cards = [card("d-own", null), card("d-own-2", null), card("d-imported", "vd-1")];
+    CanvasDraft.findAll.mockResolvedValue(cards);
+
+    const res = await convert().send({ length: 1 });
+
+    expect(res.status).toBe(400);
+    expect(VersusDraft.create).not.toHaveBeenCalled();
+  });
+
+  it("converts when the series the games point at are manual", async () => {
+    VersusDraft.count.mockResolvedValue(0);
+
+    const res = await convert();
+
+    expect(res.body.error).toBeUndefined();
+    expect(res.status).toBe(201);
+    expect(VersusDraft.create).toHaveBeenCalled();
+  });
+
+  it("makes no extra query when no game belongs to a series", async () => {
+    cards = [card("d-own", null)];
+    CanvasDraft.findAll.mockResolvedValue(cards);
+
+    const res = await convert();
+
+    expect(res.status).toBe(201);
+    expect(VersusDraft.count).not.toHaveBeenCalled();
+  });
+});
+
+describe("generated SQL of the imported-series count", () => {
+  it("counts the given VersusDrafts with league_series_id set", async () => {
+    associateOnce();
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue([{ count: 0 }]);
+    const { countImportedSeries } = require("../../routes/canvas");
+
+    await countImportedSeries(["vd-1", "vd-2"], transaction);
+
+    expect(query).toHaveBeenCalledTimes(1);
+    const sql = query.mock.calls[0][0];
+    expect(sql).toBe(
+      'SELECT count(*) AS "count" FROM "VersusDrafts" AS "VersusDraft" WHERE "VersusDraft"."id" IN (\'vd-1\', \'vd-2\') AND "VersusDraft"."league_series_id" IS NOT NULL;',
+    );
+  });
+});
+
 describe("generated SQL of the imported-draft lookup", () => {
   it("is one query joining the draft's VersusDraft with league_series_id set", async () => {
-    setupAssociations();
+    associateOnce();
     const query = vi.spyOn(sequelize, "query").mockResolvedValue(null);
     const { isDraftImported } = require("../../routes/canvas");
 

@@ -529,10 +529,13 @@ async function isDraftImported(draftId) {
 
 /**
  * Why a group settings save may not touch an imported series (S3 D9), or
- * null when it may. esclub sets the teams, their names, the length and the
- * draft type; the settings dialog sends them all back unchanged, so a value
- * equal to the stored one passes. Name, game type, disabled champions and
- * layout stay editable.
+ * null when it may. esclub sets the teams, the length and the draft type; the
+ * settings dialog sends them all back unchanged, so a value equal to the
+ * stored one passes. The team names are not checked here: the dialog sends
+ * the linked teams' current names, which S2 renames on every sync before a
+ * refresh catches the group up, so the group PUT ignores them instead (see
+ * withoutImportedTeamNames). Name, game type, disabled champions and layout
+ * stay editable.
  *
  * @param {object} body - the request body
  * @param {object} group - the stored CanvasGroup
@@ -548,17 +551,6 @@ function importedSeriesRefusal(body, group, versusDraft) {
 
   const metadata =
     body.metadata && typeof body.metadata === "object" ? body.metadata : {};
-  const storedNames = {
-    // A name withoutPlaceholderTeamNames kept out of the metadata is still
-    // on the VersusDraft, and the dialog sends that one back.
-    blueTeamName: group.metadata?.blueTeamName ?? versusDraft.blueTeamName,
-    redTeamName: group.metadata?.redTeamName ?? versusDraft.redTeamName,
-  };
-  for (const key of ["blueTeamName", "redTeamName"]) {
-    if (metadata[key] !== undefined && metadata[key] !== storedNames[key]) {
-      return "Teams of an imported series are set by esclub";
-    }
-  }
 
   if (
     metadata.length !== undefined &&
@@ -574,6 +566,40 @@ function importedSeriesRefusal(body, group, versusDraft) {
   }
 
   return null;
+}
+
+/**
+ * The group-settings metadata with the team names left out. On an imported
+ * series the names are server-owned (only a league refresh writes them), so
+ * whatever names the body carries are ignored, never written and never
+ * refused.
+ *
+ * @param {object} metadata - the request body's metadata
+ * @returns {object} a copy without blueTeamName and redTeamName
+ */
+function withoutImportedTeamNames(metadata) {
+  const rest = { ...metadata };
+  delete rest.blueTeamName;
+  delete rest.redTeamName;
+  return rest;
+}
+
+/**
+ * How many of the given VersusDrafts are imported series (league_series_id
+ * set). One COUNT query.
+ *
+ * @param {string[]} versusDraftIds
+ * @param {object} transaction
+ * @returns {Promise<number>}
+ */
+async function countImportedSeries(versusDraftIds, transaction) {
+  return VersusDraft.count({
+    where: {
+      id: versusDraftIds,
+      league_series_id: { [Op.ne]: null },
+    },
+    transaction,
+  });
 }
 
 router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
@@ -1810,6 +1836,40 @@ router.post(
           .json({ error: "Can't convert a group that contains notes" });
       }
 
+      const groupCanvasDrafts = await CanvasDraft.findAll({
+        where: { canvas_id: canvasId, group_id: groupId },
+        include: [{ model: Draft }],
+        order: [
+          ["positionX", "ASC"],
+          ["positionY", "ASC"],
+          ["createdAt", "ASC"],
+        ],
+        transaction: t,
+      });
+
+      // A game dragged out of an imported series (D12) can sit in a custom
+      // group. Converting would re-point it to the new manual series (or, past
+      // the new length, detach it), reset its sides and unlock its card, so
+      // refuse the whole conversion before anything is written. Only asked
+      // when some game belongs to a series at all.
+      const seriesIds = [
+        ...new Set(
+          groupCanvasDrafts
+            .map((canvasDraft) => canvasDraft.Draft?.versus_draft_id)
+            .filter(Boolean),
+        ),
+      ];
+      if (
+        seriesIds.length > 0 &&
+        (await countImportedSeries(seriesIds, t)) > 0
+      ) {
+        await t.rollback();
+        return res.status(400).json({
+          error:
+            "This group holds a game imported from esclub; move it out before converting",
+        });
+      }
+
       // Team links picked in the Group Settings dialog arrive with the very
       // request that creates the series, so they must persist here — the group
       // is not yet a series and cannot be linked by the PUT-group path.
@@ -1849,17 +1909,6 @@ router.post(
         },
         { transaction: t },
       );
-
-      const groupCanvasDrafts = await CanvasDraft.findAll({
-        where: { canvas_id: canvasId, group_id: groupId },
-        include: [{ model: Draft }],
-        order: [
-          ["positionX", "ASC"],
-          ["positionY", "ASC"],
-          ["createdAt", "ASC"],
-        ],
-        transaction: t,
-      });
 
       const convertedCanvasDrafts = [];
       const existingToConvert = groupCanvasDrafts.slice(0, data.length);
@@ -2324,7 +2373,9 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
   let t;
   try {
     const { canvasId, groupId } = req.params;
-    const { name, positionX, positionY, width, height, metadata } = req.body;
+    const { name, positionX, positionY, width, height } = req.body;
+    // Reassigned below on an imported series, which drops the team names.
+    let { metadata } = req.body;
 
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
     t = await Canvas.sequelize.transaction();
@@ -2358,6 +2409,10 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
           await t.rollback();
           return res.status(400).json({ error: refusal });
         }
+        // The team names are server-owned here: ignore the body's (the
+        // dialog sends the linked teams' current names) so neither the group
+        // metadata nor the VersusDraft below takes them.
+        if (hasMetadata) metadata = withoutImportedTeamNames(metadata);
       }
     }
 
@@ -3544,3 +3599,4 @@ module.exports = router;
 module.exports.resolveTeamLinkUpdate = resolveTeamLinkUpdate;
 module.exports.loadLinkableTeamIds = loadLinkableTeamIds;
 module.exports.isDraftImported = isDraftImported;
+module.exports.countImportedSeries = countImportedSeries;
