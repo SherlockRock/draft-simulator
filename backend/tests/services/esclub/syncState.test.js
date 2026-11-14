@@ -354,6 +354,12 @@ describe("joining and busy", () => {
     expect(await begin({ kind: "serie", seriesId: "x" })).toEqual({ joined: r });
   });
 
+  it("an add press (no tournament yet) never joins a running add: busy", async () => {
+    running({ kind: "add", tournament_id: null });
+    expect(await begin({ kind: "add", tournamentId: null })).toEqual({ busy: { retryAfter: 60 } });
+    expect(inserts()).toHaveLength(0);
+  });
+
   it("serie press joins a running league sync of the same tournament", async () => {
     const r = running({ kind: "league" });
     expect(await begin({ kind: "serie", seriesId: "x" })).toEqual({ joined: r });

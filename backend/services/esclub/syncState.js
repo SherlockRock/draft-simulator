@@ -96,7 +96,10 @@ async function readRunning() {
 
 /** What a press does when a sync is running: join it or be told it is busy. */
 function answerForRunning(running, { kind, tournamentId, seriesId }) {
+  // A press with no tournament yet (an add) is never "the same": it must not
+  // join a running add, whose row has no tournament either.
   const same =
+    tournamentId != null &&
     running.tournament_id === tournamentId &&
     (running.kind === "league" ||
       running.kind === "add" ||
