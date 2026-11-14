@@ -1,0 +1,43 @@
+{
+  "request": "fetch-members-by-serie",
+  "context": {
+    "id_serie": "11f18dd3-3fd7-6e6c-9281-a4e63dbef157"
+  },
+  "synthetic": "hand-made for S2 tests, not a recorded reply",
+  "reply": {
+    "members": [
+      {
+        "id_parent": "11f16c2e-c478-f50c-bf60-8369c88ac727",
+        "type_parent": "TeamRoster",
+        "id_user": "fake-user-91",
+        "type_member": "Owner",
+        "time_start": 1720000000,
+        "time_end": null
+      },
+      {
+        "id_parent": "11f16c2e-c478-f50c-bf60-8369c88ac727",
+        "type_parent": "TeamRoster",
+        "id_user": "fake-user-92",
+        "type_member": "Starter",
+        "time_start": 1720000000,
+        "time_end": null
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "type_parent": "TeamRoster",
+        "id_user": "fake-user-93",
+        "type_member": "Starter",
+        "time_start": 1720000000,
+        "time_end": null
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "type_parent": "TeamRoster",
+        "id_user": "fake-user-94",
+        "type_member": "Owner",
+        "time_start": 1720000000,
+        "time_end": null
+      }
+    ]
+  }
+}
