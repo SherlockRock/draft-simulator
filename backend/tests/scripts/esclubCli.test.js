@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRequire } from "node:module";
+import { createRequire, Module } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { parseArgs, runCli, createServices } = require("../../scripts/esclub");
@@ -169,12 +169,35 @@ describe("esclub CLI commands", () => {
     expect(await f.run(["purge", ID])).toBe(1);
     expect(f.output.error.mock.calls.flat().join(" ")).not.toContain("private payload");
   });
-  it("guards default database access outside the build database", async () => {
+  it.each([{ flags: [] }, { flags: ["--yes"] }])("reports a stage conflict clearly without deleting ($flags)", async ({ flags }) => {
+    const f = fixture();
+    f.services.previewPurge.mockRejectedValue(Object.assign(new Error("private payload"), { name: "EsclubPurgeStageConflict" }));
+    expect(await f.run(["purge", ID, ...flags])).toBe(1);
+    expect(f.output.error.mock.calls.flat().join(" ")).toMatch(/another tournament.*series.*stages/i);
+    expect(f.output.error.mock.calls.flat().join(" ")).not.toContain("private payload");
+    expect(f.services.purgeTournament).not.toHaveBeenCalled();
+  });
+  it.each(["draft_simulator", undefined])("uses backend-configured services with DB_NAME=%j and closes its pool", async (databaseName) => {
     const output = { log: vi.fn(), error: vi.fn() };
-    const query = vi.spyOn(sequelize, "query");
-    expect(await runCli(["status"], { env: { DB_NAME: "draft_simulator" }, output })).toBe(1);
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue([]);
+    const close = vi.spyOn(sequelize, "close").mockResolvedValue();
+    const load = vi.spyOn(Module.prototype, "require");
+    expect(await runCli(["status"], { env: { DB_NAME: databaseName }, output, now: () => NOW })).toBe(0);
+    expect(load).toHaveBeenCalledWith("../config/database");
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.contexts.every((context) => context === sequelize)).toBe(true);
+    expect(JSON.parse(output.log.mock.calls[0][0])).toMatchObject({ day: "2026-11-14", used: 0, running: null, tournaments: [] });
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(output.error).not.toHaveBeenCalled();
+  });
+  it("does not load default services for invalid arguments", async () => {
+    const load = vi.spyOn(Module.prototype, "require");
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue([]);
+    const close = vi.spyOn(sequelize, "close").mockResolvedValue();
+    expect(await runCli(["purge", "not-a-uuid"], { output: { log: vi.fn(), error: vi.fn() } })).toBe(2);
+    expect(load).not.toHaveBeenCalled();
     expect(query).not.toHaveBeenCalled();
-    expect(output.error.mock.calls.flat().join(" ")).toContain("firstpick_s2_build");
+    expect(close).not.toHaveBeenCalled();
   });
 });
 

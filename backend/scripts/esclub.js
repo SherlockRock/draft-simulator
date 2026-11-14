@@ -119,8 +119,8 @@ function printAnswer(answer, output) {
  * Execute a command with injected environment, services, clock and output.
  * Sync commands use via="cli"/userId=null to skip user limits and cooldowns,
  * and run synchronously through the engine's switch, lock, budget and cap.
- * Without injected services the build's database guard applies before loading
- * the database. Only the executable's own pool is closed here.
+ * Default services load lazily from the backend's configured database.
+ * Only the executable's own pool is closed here.
  * @param {string[]} args command arguments
  * @param {object} [options]
  * @param {Record<string, string | undefined>} [options.env]
@@ -138,10 +138,6 @@ async function runCli(args, { env = process.env, services, output = console, now
     return 2;
   }
   const ownServices = !services;
-  if (ownServices && env.DB_NAME !== "firstpick_s2_build") {
-    output.error("Database guard: DB_NAME must be firstpick_s2_build");
-    return 1;
-  }
   try {
     services ??= createServices();
     const limits = services.limitsFromEnv(env);
@@ -197,8 +193,11 @@ async function runCli(args, { env = process.env, services, output = console, now
     const sync = await services.getSync(began.sync.id);
     return printAnswer({ sync: sync ?? began.sync, result }, output);
   } catch (error) {
-    // Error messages can contain transport payloads or DB values. Class only.
-    output.error(`esclub command failed (${error.name ?? "Error"})`);
+    // Never print raw errors: use a fixed explanation for the stage conflict,
+    // otherwise just the class, since messages may contain private DB values.
+    output.error(error.name === "EsclubPurgeStageConflict"
+      ? "Cannot purge: another tournament has series referencing this tournament's stages. No rows deleted."
+      : `esclub command failed (${error.name ?? "Error"})`);
     return 1;
   } finally {
     if (ownServices && services) await services.close();

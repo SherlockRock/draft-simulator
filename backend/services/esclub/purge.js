@@ -39,6 +39,20 @@ async function preview(tournamentId, transaction) {
   );
   const row = rows[0];
   if (!row) throw notFound();
+  // The stage and tournament FKs are independent: a stage cascade can reach
+  // series (and games) belonging to another tournament, including manual ones.
+  const conflicts = await select(
+    `SELECT s.id FROM "LeagueSeries" s
+       JOIN "LeagueStages" st ON st.id = s.stage_id
+     WHERE st.tournament_id = :tournamentId AND s.tournament_id <> :tournamentId LIMIT 1`,
+    tournamentId,
+    transaction,
+  );
+  if (conflicts.length) {
+    const error = new Error("Cannot purge: another tournament has series referencing this tournament's stages");
+    error.name = "EsclubPurgeStageConflict";
+    throw error;
+  }
   return {
     tournament: { id: row.id, name: row.name },
     counts: {
@@ -58,6 +72,7 @@ async function preview(tournamentId, transaction) {
  * only ids, the tournament name and counts; does not open a transaction.
  * @param {string} tournamentId the local tournament UUID
  * @returns {Promise<{ tournament: { id: string, name: string }, counts: object }>}
+ * @throws {Error} another tournament's series references a target stage
  */
 async function previewPurge(tournamentId) {
   checkId(tournamentId);
@@ -75,6 +90,7 @@ async function previewPurge(tournamentId) {
  * is not yet known, refuses the purge; other tournaments' data is untouched.
  * @param {string} tournamentId the local tournament UUID
  * @returns {Promise<{ tournament: { id: string, name: string }, counts: object }>}
+ * @throws {Error} another tournament's series references a target stage
  */
 async function purgeTournament(tournamentId) {
   checkId(tournamentId);
@@ -98,6 +114,13 @@ async function purgeTournament(tournamentId) {
       transaction,
     );
     if (!target.length) throw notFound();
+    // Block new FK references to these stages until commit. The tournament
+    // lock above also prevents new stages being inserted for this tournament.
+    await select(
+      `SELECT id FROM "LeagueStages" WHERE tournament_id = :tournamentId FOR UPDATE`,
+      tournamentId,
+      transaction,
+    );
     const planned = await preview(tournamentId, transaction);
     const deletes = [
       `DELETE FROM "LeagueGames" WHERE series_id IN
