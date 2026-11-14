@@ -74,6 +74,13 @@ const VersusDraft = sequelize.define("VersusDraft", {
     type: DataTypes.UUID,
     allowNull: true,
   },
+  // Set when the series was sent from the esclub league mirror (S3 D1);
+  // NULL for manual series and after a purge (ON DELETE SET NULL).
+  league_series_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: { model: "LeagueSeries", key: "id" },
+  },
 });
 
 module.exports = VersusDraft;
