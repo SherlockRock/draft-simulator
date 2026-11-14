@@ -149,6 +149,30 @@ describe("seriesPickerRows", () => {
         });
     });
 
+    it("disables a series with an unknown status, unchecked", () => {
+        const [row] = seriesPickerRows(
+            [series({ id: "s1", status: "weird" })],
+            new Set()
+        );
+        expect(row).toMatchObject({
+            checked: false,
+            disabled: true,
+            note: "unknown status"
+        });
+    });
+
+    it("says already on this canvas before upcoming", () => {
+        const [row] = seriesPickerRows(
+            [series({ id: "s1", status: "upcoming", complete: false, gameCount: 0 })],
+            new Set(["s1"])
+        );
+        expect(row).toMatchObject({
+            checked: false,
+            disabled: true,
+            note: "already on this canvas"
+        });
+    });
+
     it("shows a missing team as TBD in the label", () => {
         const [row] = seriesPickerRows(
             [
@@ -420,6 +444,18 @@ describe("refreshToast", () => {
             )
         ).toBe("Couldn't update the series · esclub refresh available in 1 min");
     });
+
+    it("still reports the apply when the esclub refresh could not run", () => {
+        expect(refreshToast({ kind: "error" }, applied(1, 0), NOW)).toBe(
+            "Couldn't reach esclub refresh · 1 new game"
+        );
+        expect(refreshToast({ kind: "error" }, applied(0, 0), NOW)).toBe(
+            "Couldn't reach esclub refresh · Up to date"
+        );
+        expect(refreshToast({ kind: "error" }, null, NOW)).toBe(
+            "Couldn't reach esclub refresh · Couldn't update the series"
+        );
+    });
 });
 
 const sendResult = (
@@ -471,6 +507,11 @@ describe("sendResultToast", () => {
                 sendResult(0, 0, [{ leagueSeriesId: "x", reason: "not-found" }])
             )
         ).toBe("1 skipped: not found");
+        expect(
+            sendResultToast(
+                sendResult(0, 0, [{ leagueSeriesId: "x", reason: "unsupported-length" }])
+            )
+        ).toBe("1 skipped: unsupported series length");
     });
 
     it("handles existing-only and empty results", () => {

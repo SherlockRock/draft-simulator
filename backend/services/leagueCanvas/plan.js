@@ -16,6 +16,8 @@ const {
 const DEFAULT_ROW_STEP = 1250;
 const MIN_ROW_STEP = 200;
 const MAX_ROW_STEP = 2000;
+const MIN_SERIES_LENGTH = 1;
+const MAX_SERIES_LENGTH = 7;
 
 function byNumber(a, b) {
   return a.number - b.number;
@@ -52,6 +54,23 @@ function draftRow(game, { seriesName, senderId, now }) {
   };
 }
 
+// Both team ids set, and the Team1 / Team2 rows are those same teams.
+function hasBothTeams(series) {
+  return (
+    Boolean(series.team1_id) &&
+    Boolean(series.team2_id) &&
+    Boolean(series.Team1) &&
+    Boolean(series.Team2) &&
+    series.Team1.id === series.team1_id &&
+    series.Team2.id === series.team2_id
+  );
+}
+
+// VersusDraft.length validates 1..7.
+function isSupportedLength(bestOf) {
+  return Number.isInteger(bestOf) && bestOf >= MIN_SERIES_LENGTH && bestOf <= MAX_SERIES_LENGTH;
+}
+
 function cardRow(seriesIndex, { x, y }) {
   return { seriesIndex, positionX: x, positionY: y, is_locked: true, source_type: "versus" };
 }
@@ -60,16 +79,18 @@ function cardRow(seriesIndex, { x, y }) {
  * Plan the send of one mirrored series to a canvas (D2, D3). Team 1 of the
  * series is team 1 everywhere (fix 7); sides stay per game. The group comes
  * without canvas id or position, which the caller adds.
+ * Refusals, in this order: "no-teams" (a team id missing, or its `Team1` /
+ * `Team2` row missing or of another id), "upcoming", "unsupported-length"
+ * (`best_of` not an integer in 1..7, VersusDraft.length's range), "no-games".
  * @param {object} series a LeagueSeries row (plain) with `Team1` / `Team2` `{id, name}`
  * @param {object[]} games its LeagueGame rows (plain), any order
  * @param {{ senderId: string, now?: Date }} options
- * @returns {{ versusDraft: object, drafts: object[], group: object, cards: object[] } | { refused: "no-teams" | "no-games" | "upcoming" }}
+ * @returns {{ versusDraft: object, drafts: object[], group: object, cards: object[] } | { refused: "no-teams" | "upcoming" | "unsupported-length" | "no-games" }}
  */
 function planSend(series, games, { senderId, now = new Date() }) {
-  if (!series.team1_id || !series.team2_id || !series.Team1 || !series.Team2) {
-    return { refused: "no-teams" };
-  }
+  if (!hasBothTeams(series)) return { refused: "no-teams" };
   if (series.status === "upcoming") return { refused: "upcoming" };
+  if (!isSupportedLength(series.best_of)) return { refused: "unsupported-length" };
   if (!Array.isArray(games) || games.length === 0) return { refused: "no-games" };
 
   const blueTeamName = series.Team1.name;

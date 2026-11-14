@@ -116,7 +116,11 @@ const FORBIDDEN_KEYS = new Set(["participants", "playerKey", "gameName", "tagLin
 function walk(value, visit, path = "$") {
   if (value instanceof Date) return;
   if (Array.isArray(value)) {
-    value.forEach((v, i) => walk(v, visit, `${path}[${i}]`));
+    // Elements are visited too, so a plain string in an array is checked.
+    value.forEach((v, i) => {
+      visit(String(i), v, `${path}[${i}]`);
+      walk(v, visit, `${path}[${i}]`);
+    });
     return;
   }
   if (value && typeof value === "object") {
@@ -141,7 +145,7 @@ function playerValues(games) {
   return out;
 }
 
-function assertNoPlayerData(output, games) {
+function playerDataHits(output, games) {
   const values = playerValues(games);
   expect(values.size).toBeGreaterThan(0);
   const hits = [];
@@ -151,8 +155,41 @@ function assertNoPlayerData(output, games) {
       for (const s of values) if (v.includes(s)) hits.push(`value ${path}=${v}`);
     }
   });
-  expect(hits).toEqual([]);
+  return hits;
 }
+
+function assertNoPlayerData(output, games) {
+  expect(playerDataHits(output, games)).toEqual([]);
+}
+
+describe("privacy walk (test helper)", () => {
+  const games = [
+    {
+      participants: {
+        Ahri: { playerKey: "secret-key-1", gameName: "Player01", tagLine: "T01" },
+      },
+    },
+  ];
+
+  it("finds a Riot ID as a plain string inside an array", () => {
+    const hits = playerDataHits({ drafts: [{ picks: ["Ahri", "Player01#T01"] }] }, games);
+    // One hit per matching value: the Riot ID, its game name and its tag line.
+    expect(hits).toEqual(Array(3).fill("value $.drafts[0].picks[1]=Player01#T01"));
+  });
+
+  it("finds player values in nested arrays, objects in arrays, and under object keys", () => {
+    const hits = playerDataHits(
+      { a: [["x", "secret-key-1"]], b: [{ who: "Player01" }], c: { d: "T01" }, participants: {} },
+      games,
+    );
+    expect(hits).toEqual([
+      "value $.a[0][1]=secret-key-1",
+      "value $.b[0].who=Player01",
+      "value $.c.d=T01",
+      "key $.participants",
+    ]);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // planSend
@@ -306,6 +343,48 @@ describe("planSend", () => {
     const b = { ...groupSeries(), team1_id: null, Team1: null };
     expect(planSend(a, groupGames(), { senderId: SENDER, now: NOW })).toEqual({ refused: "no-teams" });
     expect(planSend(b, groupGames(), { senderId: SENDER, now: NOW })).toEqual({ refused: "no-teams" });
+  });
+
+  it("refuses no-teams when a team row is missing or does not match its id", () => {
+    const base = groupSeries();
+    const other = "aaaaaaaa-0000-4000-8000-000000000003";
+    const cases = [
+      { ...base, Team1: null },
+      { ...base, Team2: undefined },
+      { ...base, team1_id: null },
+      { ...base, Team1: { ...base.Team1, id: other } },
+      { ...base, Team2: { ...base.Team2, id: other } },
+      { ...base, Team1: { name: base.Team1.name } },
+      // the two teams swapped between ids and rows
+      { ...base, Team1: base.Team2, Team2: base.Team1 },
+    ];
+    for (const s of cases) {
+      expect(planSend(s, groupGames(), { senderId: SENDER, now: NOW })).toEqual({ refused: "no-teams" });
+    }
+  });
+
+  it("a team-less upcoming series is refused as no-teams", () => {
+    const s = { ...groupSeries(), status: "upcoming", team2_id: null, Team2: null };
+    expect(planSend(s, [], { senderId: SENDER, now: NOW })).toEqual({ refused: "no-teams" });
+  });
+
+  it("refuses a best_of outside VersusDraft.length's 1..7 as unsupported-length", () => {
+    for (const best_of of [0, 8, 2.5, null, undefined, -1, "3", NaN]) {
+      const s = { ...groupSeries(), best_of };
+      expect(planSend(s, groupGames(), { senderId: SENDER, now: NOW })).toEqual({ refused: "unsupported-length" });
+    }
+    for (const best_of of [1, 7]) {
+      const plan = planSend({ ...groupSeries(), best_of }, groupGames(), { senderId: SENDER, now: NOW });
+      expect(plan.refused).toBeUndefined();
+      expect(plan.versusDraft.length).toBe(best_of);
+    }
+  });
+
+  it("checks the length after no-teams and upcoming, before no-games", () => {
+    const bad = { ...groupSeries(), best_of: 0 };
+    expect(planSend({ ...bad, Team1: null }, groupGames(), { senderId: SENDER, now: NOW })).toEqual({ refused: "no-teams" });
+    expect(planSend({ ...bad, status: "upcoming" }, [], { senderId: SENDER, now: NOW })).toEqual({ refused: "upcoming" });
+    expect(planSend({ ...bad, status: "in_progress" }, [], { senderId: SENDER, now: NOW })).toEqual({ refused: "unsupported-length" });
   });
 
   it("refuses an upcoming series", () => {
@@ -470,6 +549,39 @@ describe("planRefresh", () => {
     ]);
     const noTime = planRefresh(existing, [{ ...done, played_at: null }], opts());
     expect(noTime.updates[0].changes.completedAt).toBe(NOW);
+  });
+
+  it("catches a card up to the final picks of a complete mirror game (cards follow the mirror whenever they differ)", () => {
+    // The card was written while the game was still open; the write that
+    // completed the game in the mirror also changed its picks. S2 never
+    // rewrites a complete game, so the card catches up once and then stays.
+    const open = syntheticGame(0, { winner: null, complete: false, picks: syntheticPicks("EARLY") });
+    const existing = existingFrom(planSend(groupSeries(), [open], { senderId: SENDER, now: NOW }).drafts);
+    const done = syntheticGame(0, { complete: true, picks: syntheticPicks("FINAL") });
+    const r = planRefresh(existing, [done], opts());
+    expect(r.updates).toEqual([
+      {
+        id: existing[0].id,
+        changes: { picks: syntheticPicks("FINAL"), winner: "blue", completed: true, completedAt: done.played_at },
+        picksChanged: true,
+      },
+    ]);
+    // Same winner already on the card: the picks alone still follow.
+    const settled = existingFrom(planSend(groupSeries(), [{ ...done, picks: syntheticPicks("EARLY") }], { senderId: SENDER, now: NOW }).drafts);
+    expect(planRefresh(settled, [done], opts()).updates).toEqual([
+      { id: settled[0].id, changes: { picks: syntheticPicks("FINAL") }, picksChanged: true },
+    ]);
+  });
+
+  it("completes a card that has the mirror's winner but completed false", () => {
+    const g = syntheticGame(0);
+    const existing = existingFrom(planSend(groupSeries(), [g], { senderId: SENDER, now: NOW }).drafts);
+    existing[0].completed = false;
+    expect(existing[0].winner).toBe("blue");
+    const r = planRefresh(existing, [g], opts());
+    expect(r.updates).toEqual([
+      { id: existing[0].id, changes: { winner: "blue", completed: true, completedAt: g.played_at } },
+    ]);
   });
 
   it("sets a different winner from the mirror (Q3 A: the mirror wins)", () => {

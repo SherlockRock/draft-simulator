@@ -1,20 +1,21 @@
-import type { EsclubSeriesItem, EsclubSyncView } from "@draft-sim/shared-types";
+import type {
+    EsclubSeriesItem,
+    EsclubSyncView,
+    LeagueImport
+} from "@draft-sim/shared-types";
 import type { EsclubActionResult } from "./esclubSync";
 
-export type LeagueSeriesStatus = "upcoming" | "in_progress" | "finished";
+export type LeagueSeriesStatus = LeagueImport["status"];
 
 /** What an imported canvas group carries as `group.LeagueImport` (plan D8). */
-export type LeagueImportView = {
-    leagueSeriesId: string;
-    tournamentId: string;
-    stageName: string | null;
-    startsAt: string | null;
-    status: LeagueSeriesStatus;
-    complete: boolean;
-    esclubUrl: string;
-};
+export type LeagueImportView = LeagueImport;
 
-export type LeagueSendSkipReason = "no-teams" | "no-games" | "upcoming" | "not-found";
+export type LeagueSendSkipReason =
+    | "no-teams"
+    | "no-games"
+    | "upcoming"
+    | "unsupported-length"
+    | "not-found";
 
 /** Response of `POST /api/canvas/:canvasId/import/league-series` (plan D5). */
 export type LeagueSendResult = {
@@ -35,10 +36,13 @@ export type LeagueRefreshResult = {
  * - `skipped-complete`: the series is complete in the mirror, esclub not called;
  * - `synced`: a sync was started or joined and polled (its last view);
  * - `cooldown`: 200 `{cooldown}`;
- * - `refused`: any non-2xx answer (401, 409, 429, 503, 400).
+ * - `refused`: a typed non-2xx answer (401, 409, 429, 503, 400);
+ * - `error`: the call threw (404, 500, network) or answered something
+ *   unusable (e.g. a 2xx body with neither `sync` nor `cooldown`).
  */
 export type LeagueRefreshEsclubOutcome =
     | { kind: "skipped-complete" }
+    | { kind: "error" }
     | { kind: "synced"; sync: EsclubSyncView }
     | { kind: "cooldown"; availableAt: string }
     | { kind: "refused"; result: Exclude<EsclubActionResult, { status: 200 | 202 }> };
@@ -104,13 +108,16 @@ function pickerState(
         return { checked: false, disabled: true, note: "already on this canvas" };
     if (series.status === "upcoming")
         return { checked: false, disabled: true, note: "upcoming" };
+    // The read schema's status is any string: offer only the ones we know.
+    if (series.status !== "finished" && series.status !== "in_progress")
+        return { checked: false, disabled: true, note: "unknown status" };
     if (!series.team1 || !series.team2)
         return { checked: false, disabled: true, note: "teams not known yet" };
     if (series.gameCount <= 0)
         return { checked: false, disabled: true, note: "no games yet" };
     if (series.status === "in_progress")
         return { checked: false, disabled: false, note: "in progress" };
-    return { checked: series.status === "finished", disabled: false, note: null };
+    return { checked: true, disabled: false, note: null };
 }
 
 /**
@@ -180,6 +187,9 @@ function esclubNote(outcome: LeagueRefreshEsclubOutcome, now: number): string | 
     switch (outcome.kind) {
         case "skipped-complete":
             return "series finished";
+        case "error":
+            // Said first by refreshToast, not as a trailing note.
+            return null;
         case "synced":
             if (outcome.sync.status === "failed") return "esclub refresh failed";
             if (outcome.sync.status === "running") return "esclub refresh still running";
@@ -224,7 +234,8 @@ function appliedSummary(result: LeagueRefreshResult): string {
 /**
  * One toast for a "Refresh from league" press (D7): what the mirror apply
  * changed (`null` when that call failed), then what esclub said, if worth
- * saying. A signed-out press with no apply result just asks to sign in.
+ * saying. A signed-out press with no apply result just asks to sign in; a
+ * step 1 that couldn't run leads with that, then the apply result.
  */
 export function refreshToast(
     esclubOutcome: LeagueRefreshEsclubOutcome,
@@ -240,6 +251,7 @@ export function refreshToast(
     )
         return note;
     const head = applyResult ? appliedSummary(applyResult) : "Couldn't update the series";
+    if (esclubOutcome.kind === "error") return `Couldn't reach esclub refresh · ${head}`;
     return note ? `${head} · ${note}` : head;
 }
 
@@ -247,6 +259,7 @@ const SKIP_REASONS: Record<LeagueSendSkipReason, string> = {
     "no-teams": "teams not known yet",
     "no-games": "no games yet",
     upcoming: "upcoming",
+    "unsupported-length": "unsupported series length",
     "not-found": "not found"
 };
 
