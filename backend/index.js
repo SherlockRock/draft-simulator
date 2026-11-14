@@ -19,6 +19,7 @@ const userRoutes = require("./routes/users");
 const shareRoutes = require("./routes/shares");
 const authRoutes = require("./routes/auth");
 const canvasRoutes = require("./routes/canvas");
+const canvasLeagueRoutes = require("./routes/canvasLeague");
 const activityRoutes = require("./routes/activity");
 const versusRoutes = require("./routes/versus");
 const navigatorRoutes = require("./routes/navigator");
@@ -112,6 +113,7 @@ async function main() {
   app.use("/api/users", userRoutes);
   app.use("/api/shares", shareRoutes);
   app.use("/api/canvas", canvasRoutes);
+  app.use("/api/canvas", canvasLeagueRoutes);
   app.use("/api/activity", activityRoutes);
   app.use("/api/versus-drafts", versusRoutes);
   app.use("/api/navigator", navigatorRoutes);
