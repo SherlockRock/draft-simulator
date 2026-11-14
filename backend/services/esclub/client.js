@@ -154,6 +154,8 @@ class EsclubClient {
     // onRequest may throw or reject (a budget, a failing log): await it before any
     // pending entry or timer exists, so a failure leaves nothing behind and sends nothing.
     if (this.onRequest) await this.onRequest(name, this.count + 1);
+    // The client may have failed while onRequest was pending: send nothing then.
+    if (this.failure) throw this.failure;
     this.count += 1;
     const id = this.nextId++;
     const reply = new Promise((resolve, reject) => {

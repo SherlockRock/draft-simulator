@@ -121,6 +121,13 @@ describe("esclub member fixtures (S2)", () => {
     expect(rosters[0]).toBe(choice0?.id_team_roster_source);
   });
 
+  it("member records carry only the six recorded keys", () => {
+    for (const rel of ["group-bo3/members.json", "bracket-bo3/members.json"]) {
+      for (const m of load(rel).reply.members) {
+        expect(Object.keys(m).sort()).toEqual(["id_parent", "id_user", "time_end", "time_start", "type_member", "type_parent"]);
+      }
+    }
+  });
 
   it("the bracket's members file is marked synthetic", () => {
     expect(typeof load("bracket-bo3/members.json").synthetic).toBe("string");

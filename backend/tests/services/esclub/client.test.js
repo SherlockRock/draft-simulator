@@ -542,6 +542,20 @@ describe("an async onRequest", () => {
     expect(ws.frames().at(-1).payload.request).toBe("slow");
   });
 
+  it("a client that fails while onRequest is pending sends nothing after it (Task 1 review)", async () => {
+    const { client, ws } = await connected();
+    let release;
+    client.onRequest = () => new Promise((resolve) => { release = resolve; });
+    const sent = ws.sent.length;
+    const p = client.request("late", {});
+    await flush();
+    await flush();
+    client._fail(new EsclubUnavailable("socket error while the budget was checked"));
+    release();
+    await expect(p).rejects.toBeInstanceOf(EsclubUnavailable);
+    expect(ws.sent).toHaveLength(sent);
+    expect(client.pending.size).toBe(0);
+  });
 
   it("the handshake awaits onRequest and counts 1", async () => {
     const calls = [];

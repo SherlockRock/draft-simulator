@@ -148,7 +148,7 @@ if (one) {
     process.exit(2);
   }
   mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, JSON.stringify({ request: raw.request, context, reply: walk(reply, null) }, null, 2) + "\n");
+  writeFileSync(outFile, JSON.stringify({ request: raw.request, context: walk(context, null), reply: walk(reply, null) }, null, 2) + "\n");
   console.log(`wrote ${outFile}; ${users.size} member user ids replaced`);
   process.exit(0);
 }
