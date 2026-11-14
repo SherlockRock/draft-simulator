@@ -194,6 +194,7 @@ function expectClean(res) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(syncState, "markStale").mockResolvedValue(0);
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
     req.user = { id: "u1" };

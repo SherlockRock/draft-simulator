@@ -360,6 +360,7 @@ router.get(
   protect,
   handle(async (req, res) => {
     if (!isUuid(req.params.id)) return notFound(res);
+    await syncState.markStale(new Date());
     const row = await syncState.getSync(req.params.id);
     if (!row) return notFound(res);
     return res.json({ sync: syncView(row) });
@@ -378,6 +379,7 @@ router.get(
     if (!tournament || tournament.source !== "esclub") return notFound(res);
 
     const now = new Date();
+    await syncState.markStale(now);
     const stages = await LeagueStage.findAll({
       where: { tournament_id: id },
       attributes: ["id", "name", "last_synced_at"],

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRequire, Module } from "node:module";
+import { spawnSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const { parseArgs, runCli, createServices } = require("../../scripts/esclub");
@@ -198,6 +199,51 @@ describe("esclub CLI commands", () => {
     expect(load).not.toHaveBeenCalled();
     expect(query).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe("CLI model bootstrap", () => {
+  it("initializes real refresh associations once in a fresh process without connecting or querying", () => {
+    const result = spawnSync(process.execPath, ["-e", `
+      const assert = require("node:assert/strict");
+      const sequelize = require(${JSON.stringify(require.resolve("../../config/database"))});
+      sequelize.connectionManager.getConnection = async () => {
+        throw new Error("Database connections forbidden in CLI bootstrap test");
+      };
+      const statements = [];
+      sequelize.query = async (sql) => { statements.push(sql); return null; };
+      const { createServices } = require(${JSON.stringify(require.resolve("../../scripts/esclub"))});
+      const LeagueSeries = require(${JSON.stringify(require.resolve("../../models/LeagueSeries"))});
+      assert.deepEqual(Object.keys(LeagueSeries.associations), []);
+      createServices();
+      const associations = { ...LeagueSeries.associations };
+      for (const [alias, model, foreignKey] of [
+        ["Stage", "LeagueStage", "stage_id"],
+        ["Tournament", "Tournament", "tournament_id"],
+        ["Team1", "Team", "team1_id"],
+        ["Team2", "Team", "team2_id"],
+        ["Games", "LeagueGame", "series_id"],
+      ]) {
+        assert.ok(associations[alias], "Missing LeagueSeries association: " + alias);
+        assert.equal(associations[alias].target, sequelize.models[model]);
+        assert.equal(associations[alias].foreignKey, foreignKey);
+      }
+      createServices();
+      for (const [alias, association] of Object.entries(associations)) {
+        assert.equal(LeagueSeries.associations[alias], association);
+      }
+      assert.deepEqual(statements, []);
+      const { loadSeriesForRefresh } = require(${JSON.stringify(require.resolve("../../services/esclub/mirrorStore"))});
+      loadSeriesForRefresh(${JSON.stringify(SERIES)}).then((row) => {
+        assert.equal(row, null);
+        assert.equal(statements.length, 1);
+        for (const alias of ["Stage", "Tournament", "Team1", "Team2"]) {
+          assert.ok(statements[0].includes('AS "' + alias + '"'), "Missing refresh join: " + alias);
+        }
+      }).catch((error) => { console.error(error); process.exitCode = 1; });
+    `], { encoding: "utf8", timeout: 10000 });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
   });
 });
 

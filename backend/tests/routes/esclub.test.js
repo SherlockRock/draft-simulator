@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
 import express from "express";
 import request from "supertest";
@@ -13,6 +13,7 @@ const LeagueSeries = require("../../models/LeagueSeries");
 const LeagueGame = require("../../models/LeagueGame");
 const EsclubSync = require("../../models/EsclubSync");
 const syncState = require("../../services/esclub/syncState");
+const markStale = syncState.markStale;
 const syncEngine = require("../../services/esclub/sync");
 const addLeagueService = require("../../services/esclub/addLeague");
 
@@ -119,6 +120,7 @@ let runSync;
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(syncState, "markStale").mockResolvedValue(0);
   vi.spyOn(auth, "protect").mockImplementation((req, _res, next) => {
     req.user = { id: "u1" };
     next();
@@ -129,6 +131,8 @@ beforeEach(() => {
   vi.spyOn(syncEngine, "syncTournament").mockResolvedValue(undefined);
   vi.spyOn(syncEngine, "syncSerie").mockResolvedValue(undefined);
 });
+
+afterEach(() => vi.useRealTimers());
 
 const esclubTournament = (over = {}) => ({
   id: TID,
@@ -161,6 +165,7 @@ describe("auth", () => {
     expect(spy).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();
     expect(beginSync).not.toHaveBeenCalled();
+    expect(syncState.markStale).not.toHaveBeenCalled();
   });
 });
 
@@ -182,6 +187,7 @@ describe("id validation comes before any query", () => {
       vi.spyOn(LeagueStage, "findAll"),
       vi.spyOn(EsclubSync, "findOne"),
       vi.spyOn(syncState, "getSync"),
+      syncState.markStale,
     ];
     const res = await request(buildApp())[method](url).send({});
     expect(res.status).toBe(404);
@@ -448,6 +454,54 @@ describe("POST /series/:id/refresh", () => {
     beginSync.mockResolvedValue(outcome);
     const res = await post();
     expect(res.status).toBe(status);
+    expect(runSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("stale sync cleanup on read routes", () => {
+  it.each(["syncs", "tournaments"])("GET /%s/:id awaits stale cleanup before reading", async (resource) => {
+    const now = new Date("2026-11-14T12:00:00Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const row = syncRow({ heartbeat_at: new Date(now.getTime() - 121000) });
+    syncState.markStale.mockImplementation(markStale);
+    const query = vi.spyOn(sequelize, "query").mockImplementation(async (_sql, options) => {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (row.status === "running" && row.heartbeat_at <= options.replacements.cutoff) {
+        row.status = "failed";
+        row.finished_at = row.heartbeat_at;
+        row.error_class = "Abandoned";
+        return [{ id: row.id }];
+      }
+      return [];
+    });
+    const read = resource === "syncs"
+      ? vi.spyOn(syncState, "getSync").mockImplementation(async () => ({ ...row }))
+      : vi.spyOn(EsclubSync, "findOne").mockImplementation(async () => row.status === "running" ? { ...row } : null);
+    vi.spyOn(Tournament, "findByPk").mockResolvedValue(esclubTournament());
+    vi.spyOn(LeagueStage, "findAll").mockResolvedValue([]);
+    vi.spyOn(syncState, "nextAvailableAt").mockResolvedValue(null);
+    vi.spyOn(syncState, "usageToday").mockResolvedValue({ used: 0, budget: 2000 });
+
+    const id = resource === "syncs" ? YID : TID;
+    const res = await request(buildApp()).get(`/api/esclub/${resource}/${id}`);
+
+    expect(res.status).toBe(200);
+    if (resource === "syncs") {
+      expect(res.body.sync.status).toBe("failed");
+      expect(res.body.sync.errorClass).toBe("Abandoned");
+      expect(res.body.sync.finishedAt).toBe(row.heartbeat_at.toISOString());
+    } else {
+      expect(res.body.sync.running).toBeNull();
+    }
+    expect(syncState.markStale).toHaveBeenCalledExactlyOnceWith(now);
+    expect(query).toHaveBeenCalledTimes(1);
+    const [sql, options] = query.mock.calls[0];
+    expect(sql).toContain('UPDATE "EsclubSyncs"');
+    expect(sql).toContain("status = 'failed', finished_at = heartbeat_at");
+    expect(sql).toContain("WHERE status = 'running' AND heartbeat_at <= :cutoff");
+    expect(options.replacements).toEqual({ now, cutoff: new Date(now.getTime() - 120000) });
+    expect(syncState.markStale.mock.invocationCallOrder[0]).toBeLessThan(read.mock.invocationCallOrder[0]);
     expect(runSync).not.toHaveBeenCalled();
   });
 });

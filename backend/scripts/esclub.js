@@ -37,6 +37,10 @@ function parseArgs(args) {
 function createServices() {
   const { QueryTypes } = require("sequelize");
   const sequelize = require("../config/database");
+  const LeagueSeries = require("../models/LeagueSeries");
+  if (!LeagueSeries.associations.Stage) {
+    require("../models/associations")(sequelize);
+  }
   const select = (sql, replacements = {}) => sequelize.query(sql, { type: QueryTypes.SELECT, replacements });
   return {
     ...require("../services/esclub/syncState"),
