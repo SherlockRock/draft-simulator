@@ -75,7 +75,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { assertChampionRows } from "./champion-positions/invariants.mjs";
 import {
-  POSITIONS_THRESHOLD, RECENCY_RULE, PLAYABLE_MIN_PICK_RATE, PLAYABLE_MIN_PICKS, THIN_PATCH_GAMES,
+  POSITIONS_THRESHOLD, RECENCY_RULE, PLAYABLE_MIN_PICK_RATE, PLAYABLE_MIN_PICKS, PLAYABLE_MIN_OWN_SHARE, THIN_PATCH_GAMES,
   ratesFromCorpus, ratesFromUgg, refreshPositions, diffPositions,
   buildProvenance, formatPositionsSource, evaluateGate, carryForward, formatDiff, comparePatches,
 } from "./champion-positions/derive.mjs";
@@ -173,7 +173,7 @@ function main() {
     console.log(`fallback (${fallbackEntries.length}): ${fallbackEntries.map(([id, by]) => `${id} -> ${by}`).join(", ")}`);
     // The playable floor (champion-role-shares § 4.1): the rate and what it is in picks on the
     // deciding patch; each champion is held to its OWN deciding patch's train games.
-    console.log(`playable rule: listed roles + roles with >= ${PLAYABLE_MIN_PICK_RATE * 10000} picks per 10k train games of the champion's deciding patch (${(PLAYABLE_MIN_PICK_RATE * decidingGames).toFixed(1)} picks on ${decidingPatch}), never fewer than ${PLAYABLE_MIN_PICKS}`);
+    console.log(`playable rule: listed roles + roles with >= ${PLAYABLE_MIN_PICK_RATE * 10000} picks per 10k train games of the champion's deciding patch (${(PLAYABLE_MIN_PICK_RATE * decidingGames).toFixed(1)} picks on ${decidingPatch}), never fewer than ${PLAYABLE_MIN_PICKS}, and holding >= ${PLAYABLE_MIN_OWN_SHARE * 100} % of the champion's own games there (its 3-dp share)`);
     if (decidingGames < THIN_PATCH_GAMES) {
       console.log(`WARNING: the deciding patch ${decidingPatch} has only ${decidingGames} train games (< ${THIN_PATCH_GAMES}) — the ${PLAYABLE_MIN_PICKS}-pick minimum governs the floor and noise-admitted playable pairs are possible; read the playable diff line before committing`);
     }
@@ -232,7 +232,7 @@ function main() {
       gamesUnit: kind === "ugg" ? "champion-matches" : undefined,
       unmeasuredAtParity: kind === "ugg" ? true : undefined,
       rule, minPicks, decidingPatch, decidingGames, fallback,
-      playableRule: floor ? { minPickRate: PLAYABLE_MIN_PICK_RATE, minPicks: PLAYABLE_MIN_PICKS, decidingPatch, decidingGames } : undefined,
+      playableRule: floor ? { minPickRate: PLAYABLE_MIN_PICK_RATE, minPicks: PLAYABLE_MIN_PICKS, minOwnShare: PLAYABLE_MIN_OWN_SHARE, decidingPatch, decidingGames } : undefined,
     }),
     champions: rows,
   };

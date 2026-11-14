@@ -297,3 +297,26 @@ test("the ≥ upper bounds list every arm with an unjudged position, floor rows 
   assert.deepEqual(upperBoundLines(m), ["roster:0.15:0.05  ≤3 / ≤2", "floor:0.1  ≤3 / ≤2"]);
   assert.match(hoverLines(find(m, "floor:0.1"), () => true).join("\n"), /upper bounds \(never \+ unjudged\): ≤3 \/ ≤2/);
 });
+
+// ---- slice B, task 5: weighted arms on the results tab (design T23) ----
+
+test("T23: a weighted arm is not in the grid; the cells, the axes and the colour scale are what they were", () => {
+  const before = gridModel(metrics());
+  const m = metrics();
+  // At the reference's own P and Q, with a count the grid would pick up if it filtered on the rule, not the role.
+  m.arms.push(arm("roster:0.1:0.05:w2", "weight", 0.1, 0.05, { never: [99, 99, 0, 0] }, {}, { readable: false }));
+  m.arms.push(arm("roster:0.3:0.4:w2", "weight", 0.3, 0.4, { never: [1, 1, 0, 0] }, {}, { readable: false }));
+  assert.deepEqual(gridModel(m), before, "no cell, axis, scale or floor row moves");
+  assert.equal(before.rows.flat().filter(Boolean).length, 4);
+});
+
+test("T23: a weighted arm's hover names it, and never says 'not readable' for its role", () => {
+  const w = arm("roster:0.1:0.05:w2", "weight", 0.1, 0.05, { never: [2, 2, 0, 0] }, {}, { readable: false });
+  const text = hoverLines(w, () => true).join("\n");
+  assert.match(text, /weighted arm/);
+  assert.match(text, /not a candidate for the pick/);
+  assert.equal(/not readable/.test(text), false, "the grid is where an arm is not readable; a weighted arm is read by the w read");
+  assert.equal(text.includes("comparison row, not selectable"), false);
+  const reading = hoverLines(arm("roster:0.1:0.05", "roster", 0.1, 0.05, {}, {}, { readable: false }), () => true).join("\n");
+  assert.match(reading, /not readable/, "a roster arm that does not read still says so");
+});

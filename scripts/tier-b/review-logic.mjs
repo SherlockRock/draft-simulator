@@ -209,6 +209,20 @@ function draftRevealState(draft, state) {
   return draft.cards.every((c) => rowsLabelled(c, positionState(state, c.id))) ? "ready" : "blind";
 }
 
+// A holdout draft of a run that was not opened (design section 5): the page never shows it revealed, whatever the
+// seeded or restored state says. Sealed overrides rendering and visibility, NOT `labelMode`: a holdout fixture
+// that holds a `scored` entry keeps recording `scored` labels, because apply and the loader refuse a `blind`
+// entry after a `scored` one. So nothing below changes `draftRevealState`; the places that SHOW a reveal ask
+// `draftShown` instead. `draft.sealed` is set by the builder from the run (`holdout_open === true` opens it).
+function draftSealed(draft) {
+  return draft.sealed === true;
+}
+
+// Whether the page shows the draft revealed: revealed in the state and not sealed.
+function draftShown(draft, state) {
+  return !draftSealed(draft) && draftRevealState(draft, state) === "revealed";
+}
+
 // A label written now is `scored` once its draft is revealed, a new row included.
 function labelMode(draft, state) {
   return draftRevealState(draft, state) === "revealed" ? "scored" : "blind";
@@ -299,7 +313,7 @@ function setPick(state, draft, cardId, value, now) {
 // the pick is given. A card that already holds labels (a re-read) or a revealed draft shows its rows.
 function stageTwoOpen(draft, card, state) {
   const ps = positionState(state, card.id);
-  return pickAnswered(ps) || Object.keys(ps.labels).length > 0 || draftRevealState(draft, state) === "revealed";
+  return pickAnswered(ps) || Object.keys(ps.labels).length > 0 || draftShown(draft, state);
 }
 
 // The rows a card shows, as the page draws them: none until stage 1 is answered, then the card's blind rows in
@@ -353,7 +367,7 @@ function cardDone(card, state) {
 // every ranks 6-10 row it holds has a label too. Revealing therefore never hides a card that still has rows to label.
 function cardSettled(draft, card, state) {
   if (!cardDone(card, state)) return false;
-  if (draftRevealState(draft, state) !== "revealed") return true;
+  if (!draftShown(draft, state)) return true;
   const ps = positionState(state, card.id);
   return laterRows(card).every((o) => ps.labels[o.id] !== undefined);
 }
@@ -458,6 +472,7 @@ function poolTag(option) {
 // and `rev` rises once, so a reveal that changes nothing still exports a dated `scored` object on every card.
 // A draft that is not ready (a blind row unlabelled) throws; one that is already revealed is a no-op.
 function revealDraft(state, draft, now) {
+  if (draftSealed(draft)) throw new Error("the " + draft.id + " draft is sealed: it is opened by --open-holdout, not on the page");
   const rs = draftRevealState(draft, state);
   if (rs === "revealed") return false;
   if (rs !== "ready") throw new Error("the " + draft.id + " draft still has blind rows to label");
@@ -541,7 +556,7 @@ function setLineVerdict(state, data, draft, cardId, ok, now) {
   const card = draft.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("card " + cardId + " is not in draft " + draft.id);
   if (typeof ok !== "boolean") throw new Error("a line verdict is ok or bad");
-  if (draftRevealState(draft, state) !== "revealed") throw new Error("the line is shown, and judged, only after the reveal");
+  if (!draftShown(draft, state)) throw new Error("the line is shown, and judged, only after the reveal");
   const top = referenceTop(data, card);
   if (!top || top.line === null) throw new Error("there is no line to judge on " + cardId);
   const ps = positionState(state, cardId);
@@ -552,7 +567,7 @@ function setLineVerdict(state, data, draft, cardId, ok, now) {
 }
 
 function armLabel(arm, referenceId) {
-  const base = arm.rule === "roster" ? "P " + arm.p + "  Q " + arm.q : "pool or roster";
+  const base = arm.rule === "roster" ? "P " + arm.p + "  Q " + arm.q + (arm.w === undefined ? "" : "  w " + arm.w) : "pool or roster";
   return base + (arm.id === referenceId ? "  (reference)" : "");
 }
 
@@ -683,6 +698,7 @@ function laterProgress(data, state) {
   let done = 0;
   let total = 0;
   for (const draft of data.drafts) {
+    if (draftSealed(draft)) continue; // its later rows are never shown
     for (const card of draft.cards) {
       const ps = positionState(state, card.id);
       const rows = laterRows(card);
@@ -885,7 +901,7 @@ function gridModel(metrics) {
 // Whether a position of the run may be named on the results tab: only once its draft is revealed.
 function positionVisible(data, state, positionId) {
   for (const d of data.drafts) {
-    if (d.cards.some((c) => c.id === positionId)) return draftRevealState(d, state) === "revealed";
+    if (d.cards.some((c) => c.id === positionId)) return draftShown(d, state);
   }
   return false;
 }
@@ -907,7 +923,7 @@ function hoverLines(arm, visible) {
   const p = arm.positions;
   const named = (key) => namedPositions(p[key], visible);
   const lines = [
-    arm.id + (arm.role === "roster" ? "" : arm.role === "pool_or_roster" ? " (not a candidate for the pick)" : " (comparison row, not selectable)"),
+    arm.id + (arm.role === "roster" ? "" : arm.role === "pool_or_roster" ? " (not a candidate for the pick)" : arm.role === "weight" ? " (weighted arm: not a candidate for the pick, read by the w read)" : " (comparison row, not selectable)"),
     "never@1 " + countText(m, 0) + ", never@3 " + countText(m, 1) + ", pick@3 " + m.pick[1] + " of " + m.with_pick + " with an own pick",
     "never@1 " + m.never[0] + ", near " + m.near[0] + ", unjudged " + m.unjudged[0] + ". never@3 " + m.never[1] + ", near " + m.near[1] + ", unjudged " + m.unjudged[1] + ".",
     "never@1 at: " + named("never_1"),
@@ -923,7 +939,7 @@ function hoverLines(arm, visible) {
     "bad_line@1 " + m.bad_line + " bad of " + m.judged_line + " judged, " + m.unjudged_line + " unjudged, " + m.no_line + " with no line",
   ];
   if (m.unjudged[0] > 0 || m.unjudged[1] > 0) lines.splice(3, 0, "upper bounds (never + unjudged): ≤" + (m.never[0] + m.unjudged[0]) + " / ≤" + (m.never[1] + m.unjudged[1]));
-  if (!arm.readable) lines.splice(1, 0, "not readable: a position does not speak, or a count is unjudged at k = 1 or 3");
+  if (!arm.readable && arm.role !== "weight") lines.splice(1, 0, "not readable: a position does not speak, or a count is unjudged at k = 1 or 3");
   return lines;
 }
 
@@ -938,7 +954,7 @@ function armChoice(data, armId) {
 function selectionNote(data, state, armIdx) {
   const arm = data.run.arms[armIdx];
   const label = armLabel(arm, data.run.reference_arm);
-  const revealed = data.drafts.some((d) => draftRevealState(d, state) === "revealed");
+  const revealed = data.drafts.some((d) => draftShown(d, state));
   return "Cards show: " + label + (revealed ? "." : ". No draft is revealed yet, so no card shows an arm.");
 }
 
@@ -1074,4 +1090,4 @@ function labelsLine(l) {
     " scored only), " + l.own_picks + " own picks (" + l.blind_picks + " blind). Read from the current fold, no blind answer: " + l.fallback_labels + " labels, " + l.fallback_picks + " own picks.";
 }
 
-export { BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen, HEAT_STEPS, linesHeader, NOT_JUDGEABLE, upperBoundLines, heatLegend, revealChangesView, armChoice, badLineLines, cellModel, countText, gridModel, heatStep, hoverLines, labelsLine, namedPositions, neverEverywhereLine, positionVisible, rByLabelRows, receiptLines, revealChangesLine, ruleLine, secondLine, selectionNote, sensitivityLines, worklistView };
+export { draftSealed, draftShown, BLIND_REACH, LABELS, armLabel, cardSettled, currentLineVerdict, currentNote, earlierView, blindRows, buildExport, buildNameIndex, cardDone, cardRows, currentLabel, depthNote, dn, draftRevealState, exportWithProblems, hash53, isPositionRevealed, isUtc, labelMode, laterProgress, laterRows, lineText, makeStorage, menuView, newState, ownPickPlace, parseNameInput, pickAnswered, pickProblem, pickText, poolTag, progress, referenceArmIndex, referenceTop, restoreState, revealDraft, revealRows, rowView, samePick, setLabel, setLineVerdict, setNote, setPick, shuffleRows, sideParts, sideText, stageTwoOpen, HEAT_STEPS, linesHeader, NOT_JUDGEABLE, upperBoundLines, heatLegend, revealChangesView, armChoice, badLineLines, cellModel, countText, gridModel, heatStep, hoverLines, labelsLine, namedPositions, neverEverywhereLine, positionVisible, rByLabelRows, receiptLines, revealChangesLine, ruleLine, secondLine, selectionNote, sensitivityLines, worklistView };

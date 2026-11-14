@@ -5,7 +5,8 @@ import test from "node:test";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { assemblePageData, buildPageHtml, iconReader, jsonForScript, loadNames, stripExport } from "./build-review-page.mjs";
-import { blindRows, draftRevealState, newState } from "./review-logic.mjs";
+import { BLIND_REACH, blindRows, draftRevealState, newState } from "./review-logic.mjs";
+import * as BUILD from "./build-review-page.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -172,4 +173,87 @@ test("the pinned run contract (the Task 3 snapshot) assembles: seeded labels, ow
   assert.deepEqual(state.positions[card.id].labels[galio], { blind: "play", current: "play", mode: null, t: null });
   assert.deepEqual(state.positions[card.id].labels["Ahri+LeeSin|top=Rumble,jungle=LeeSin,mid=Ahri"], { current: "play", mode: null, t: null });
   for (const o of card.options) assert.ok(o.row === null || o.row === "blind" || o.row === "later");
+});
+
+// ---- slice B, task 5: sealed holdout drafts, the band, the title (design T24) ----
+
+const SEALED = JSON.parse(fs.readFileSync(path.join(REPO, "packages/engine-core/tests/data/tier-b-review/runs/sealed-run.json"), "utf8"));
+
+test("T24: the page's blind reach is 5, the Rust side's copy of it", () => {
+  assert.equal(BLIND_REACH, 5);
+  const rust = fs.readFileSync(path.join(REPO, "packages/engine-core/src/reference/tier_b_review.rs"), "utf8");
+  assert.match(rust, /BLIND_REACH: usize = 5/);
+});
+
+test("T24: rowKind reads band where reach is absent and its own rule where it is not", () => {
+  const rowKind = BUILD.rowKind;
+  assert.equal(rowKind({ row: true, band: "blind", margin: false }), "blind", "a sealed option: reach absent, band blind");
+  assert.equal(rowKind({ row: true, band: "later", margin: true }), "later", "band is the answer, not margin");
+  assert.equal(rowKind({ row: false, margin: false }), null);
+  assert.equal(rowKind({ row: false, band: "blind", margin: false }), null, "not a row, no kind");
+  // reach present: as today, and band never consulted
+  assert.equal(rowKind({ row: true, reach: 5, margin: false }), "blind");
+  assert.equal(rowKind({ row: true, reach: 6, margin: false }), "later");
+  assert.equal(rowKind({ row: true, reach: 7, margin: true }), "blind");
+  assert.equal(rowKind({ row: true, reach: 3, band: "later", margin: false }), "blind");
+  // an opened run's reach: null (a row no arm reached) is a present key, so it is not read as absent
+  assert.equal(rowKind({ row: true, reach: null, margin: false }), "later");
+  assert.equal(rowKind({ row: true, reach: null, band: "blind", margin: false }), "later");
+  assert.equal(rowKind({ row: true, reach: null, margin: true }), "blind");
+});
+
+test("T24: an ho- draft is titled Holdout: plus the title of the rest", () => {
+  assert.equal(BUILD.titleOf("ho-supp"), "Holdout: Support draft");
+  assert.equal(BUILD.titleOf("ho-top"), "Holdout: Top draft");
+  assert.equal(BUILD.titleOf("ho-blind"), "Holdout: blind");
+  assert.equal(BUILD.titleOf("supp"), "Support draft");
+  assert.equal(BUILD.titleOf("hold"), "hold");
+});
+
+test("T24: Task 4's sealed run builds, its drafts are sealed, and the blind rows are the options whose band is blind", () => {
+  const data = assemble(() => "AAAA", SEALED);
+  assert.deepEqual(data.drafts.map((d) => d.id), ["ho-blind", "ho-scored"]);
+  assert.deepEqual(data.drafts.map((d) => d.title), ["Holdout: blind", "Holdout: scored"]);
+  assert.deepEqual(data.drafts.map((d) => d.sealed), [true, true]);
+  let blind = 0;
+  for (const raw of SEALED.positions) {
+    const card = cardOf(data, raw.id);
+    assert.equal(card.split, "holdout");
+    const want = Object.entries(raw.options).filter(([, o]) => o.band === "blind").map(([id]) => id).sort();
+    const got = card.options.filter((o) => o.row === "blind").map((o) => o.id).sort();
+    assert.deepEqual(got, want, raw.id);
+    assert.deepEqual(card.options.filter((o) => o.row === "later").map((o) => o.id).sort(), Object.entries(raw.options).filter(([, o]) => o.band === "later").map(([id]) => id).sort());
+    assert.deepEqual(card.options.filter((o) => o.row === null).map((o) => o.id).sort(), Object.entries(raw.options).filter(([, o]) => !o.row).map(([id]) => id).sort());
+    assert.deepEqual(card.readings, []);
+    assert.deepEqual(card.reference_ranking, []);
+    blind += got.length;
+  }
+  assert.ok(blind > 0 && SEALED.positions.some((p) => Object.values(p.options).some((o) => o.band === "later")), "both bands occur in the pinned run");
+  assert.equal(data.run.holdout_open, undefined);
+  assert.equal(JSON.stringify(data).includes('"rank"'), false);
+});
+
+test("T24: a run without holdout_open reads sealed; holdout_open true opens it; anything else is still sealed", () => {
+  for (const open of [undefined, false, "true", null]) {
+    const run = structuredClone(SEALED);
+    if (open !== undefined) run.run.holdout_open = open;
+    assert.deepEqual(assemble(() => "AAAA", run).drafts.map((d) => d.sealed), [true, true], String(open));
+  }
+  const opened = structuredClone(SEALED);
+  opened.run.holdout_open = true;
+  const data = assemble(() => "AAAA", opened);
+  assert.deepEqual(data.drafts.map((d) => d.sealed), [false, false]);
+  assert.equal(data.run.holdout_open, true);
+  assert.deepEqual(assemble(() => "AAAA").drafts.map((d) => d.sealed), [false, false, false], "a development run seals nothing");
+});
+
+test("T24 fix: the sealed holdout's unlabelled option ids are not carried into the page; an opened run keeps them", () => {
+  const run = structuredClone(SEALED);
+  run.metrics.worklist = { ...(run.metrics.worklist || {}), holdout_unlabelled_rows: [{ position: "x", rows: ["LEAK-ROW-ID"] }] };
+  const sealed = assemble(() => "AAAA", run);
+  assert.equal("holdout_unlabelled_rows" in sealed.metrics.worklist, false);
+  assert.equal(JSON.stringify(sealed).includes("LEAK-ROW-ID"), false);
+  assert.equal(JSON.stringify(sealed.metrics).includes("holdout_unlabelled_rows"), false);
+  run.run.holdout_open = true;
+  assert.ok("holdout_unlabelled_rows" in assemble(() => "AAAA", run).metrics.worklist);
 });

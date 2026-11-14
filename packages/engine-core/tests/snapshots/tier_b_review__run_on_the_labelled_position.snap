@@ -4256,7 +4256,7 @@ expression: text
               "value": -0.12478424
             }
           ],
-          "searched": 382,
+          "searched": 385,
           "top_set": 1
         },
         {
@@ -5928,7 +5928,7 @@ expression: text
               "value": -0.12478424
             }
           ],
-          "searched": 382,
+          "searched": 385,
           "top_set": 1
         },
         {
@@ -7508,7 +7508,7 @@ expression: text
               "value": -0.12478424
             }
           ],
-          "searched": 382,
+          "searched": 385,
           "top_set": 1
         },
         {
@@ -9180,7 +9180,7 @@ expression: text
               "value": -0.12478424
             }
           ],
-          "searched": 382,
+          "searched": 385,
           "top_set": 1
         },
         {
@@ -10760,7 +10760,7 @@ expression: text
               "value": -0.12478424
             }
           ],
-          "searched": 382,
+          "searched": 385,
           "top_set": 1
         }
       ],
@@ -13767,10 +13767,18 @@ expression: text
         },
         {
           "action": [
+            "Kaisa",
+            "Zeri"
+          ],
+          "rank": 376,
+          "value": -11290.903275802
+        },
+        {
+          "action": [
             "Lulu",
             "Milio"
           ],
-          "rank": 376,
+          "rank": 377,
           "value": -11290.916615481
         },
         {
@@ -13778,7 +13786,7 @@ expression: text
             "Bard",
             "Milio"
           ],
-          "rank": 377,
+          "rank": 378,
           "value": -11290.920953968
         },
         {
@@ -13786,7 +13794,7 @@ expression: text
             "Aphelios",
             "Zeri"
           ],
-          "rank": 378,
+          "rank": 379,
           "value": -11290.923475362
         },
         {
@@ -13794,7 +13802,7 @@ expression: text
             "Bard",
             "Nautilus"
           ],
-          "rank": 379,
+          "rank": 380,
           "value": -11290.937941957
         },
         {
@@ -13802,7 +13810,7 @@ expression: text
             "Milio",
             "Renata"
           ],
-          "rank": 380,
+          "rank": 381,
           "value": -11290.940812813
         },
         {
@@ -13810,7 +13818,7 @@ expression: text
             "Milio",
             "Nautilus"
           ],
-          "rank": 381,
+          "rank": 382,
           "value": -11290.956472586
         },
         {
@@ -13818,8 +13826,24 @@ expression: text
             "Aphelios",
             "Yunara"
           ],
-          "rank": 382,
+          "rank": 383,
           "value": -11290.959679195
+        },
+        {
+          "action": [
+            "Kaisa",
+            "Yunara"
+          ],
+          "rank": 384,
+          "value": -11290.986907483
+        },
+        {
+          "action": [
+            "Aphelios",
+            "Kaisa"
+          ],
+          "rank": 385,
+          "value": -11291.060676732
         }
       ],
       "review": "2026-10-04 user (scored read, role maps): stay.",

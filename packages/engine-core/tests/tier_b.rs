@@ -2138,7 +2138,10 @@ fn a_role_map_is_checked_against_the_captures_display() {
 /// top action's class accordingly.
 #[test]
 fn the_report_marks_an_off_role_fill_off_pool() {
-    let live = live();
+    // The premise is "Kaisa is PLAYABLE mid" (1.7 % of her games). The 2 % own-games floor (slice B)
+    // removed that role from the live table, so the test reads the frozen 2026-10-10 copy, which
+    // agrees with the pre-floor live table on every champion's positions, shares and `playable`.
+    let live = live_from(&dir("tests/data/champion-meta-2026-10-10-shares.json"));
     let mut red = team_liquid_map();
     red["adc"] = json!(["Jinx"]);
     red["mid"] = json!(["Azir", "Sylas", "Kaisa"]);
@@ -2181,7 +2184,7 @@ fn the_report_marks_an_off_role_fill_off_pool() {
 
     // As a map: an off-role fill. Marked, charged L under `pool_or_roster` (0.1138 + 1026.4), counted
     // on Red's side of the leaf, and no longer one of the root's in-pool actions (52 searched: Jinx,
-    // K'Sante and the best 50 off-pool). NOT noted as an off-meta entry: on the 16.19 table Kai'Sa is
+    // K'Sante and the best 50 off-pool). NOT noted as an off-meta entry: on the 16.19 table (frozen 2026-10-10) Kai'Sa is
     // PLAYABLE mid (1.7% of her picks, above the pick-count floor — champion-role-shares § 4.1), so the
     // mid entry is honoured without a note (the note on a role outside the playable set is pinned on
     // the frozen table by `an_off_meta_entry_loads_and_is_noted`). Her LISTED role is still BOTTOM

@@ -125,3 +125,20 @@ export function playableProblems(row, label) {
   }
   return problems;
 }
+
+/**
+ * The own-games floor (engine slice B, S1/F2), kept apart from `playableProblems` so a widening override
+ * that the floor would refuse is still a legal `playable` set in the compile: a role the positions do not
+ * list must hold at least `minOwnShare` of the champion's games on the stored 3-dp share. Skips a row
+ * without `playable` or without five numeric shares.
+ * @returns {string[]}
+ */
+export function ownShareFloorProblems(row, label, minOwnShare) {
+  const shares = row.positionShares;
+  if (!Array.isArray(row.playable) || shares === undefined || shares === null || META_POSITIONS.some((r) => typeof shares[r] !== "number")) return [];
+  const id = typeof row.id === "string" && row.id ? row.id : "<missing id>";
+  const positions = Array.isArray(row.positions) ? row.positions : [];
+  return row.playable
+    .filter((role) => !positions.includes(role) && shares[role] < minOwnShare)
+    .map((role) => `${label}: ${id} playable role ${role} holds ${shares[role]} of the champion's games, under the ${minOwnShare} floor`);
+}

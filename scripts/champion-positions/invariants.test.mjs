@@ -1,7 +1,7 @@
 // scripts/champion-positions/invariants.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { META_POSITIONS, assertChampionRows, positionSharesProblems, playableProblems } from "./invariants.mjs";
+import { META_POSITIONS, assertChampionRows, positionSharesProblems, playableProblems, ownShareFloorProblems } from "./invariants.mjs";
 
 const ok = [
   { id: "Ahri", name: "Ahri", positions: ["MIDDLE"] },
@@ -154,4 +154,23 @@ test("playable refuses a non-array, a vocabulary miss, a duplicate, an empty lis
   // The rule the engine's fallback depends on: positions ⊆ playable (a narrowing override would prune a listed role).
   const narrow = { id: "Syndra", name: "Syndra", positions: ["MIDDLE", "BOTTOM"], playable: ["MIDDLE"] };
   assert.throws(() => assertChampionRows([narrow], { label: "t" }), /Syndra playable lacks the listed position BOTTOM/);
+});
+
+// ---- the own-games floor (engine slice B, S1/F2; design T29) ----
+
+test("T29 ownShareFloorProblems flags a non-listed playable role stored under the floor, and nothing else", () => {
+  const sh = (o) => ({ TOP: 0, JUNGLE: 0, MIDDLE: 0, BOTTOM: 0.9, SUPPORT: 0, ...o });
+  const row = (playable, o, positions = ["BOTTOM"]) => ({ id: "Kaisa", positions, playable, positionShares: sh(o) });
+  const bad = ownShareFloorProblems(row(["TOP", "BOTTOM"], { TOP: 0.019 }), "t", 0.02);
+  assert.equal(bad.length, 1);
+  assert.match(bad[0], /t: Kaisa playable role TOP holds 0\.019 of the champion's games, under the 0\.02 floor/);
+  assert.deepEqual(ownShareFloorProblems(row(["TOP", "BOTTOM"], { TOP: 0.02 }), "t", 0.02), [], "0.020 passes");
+  assert.deepEqual(ownShareFloorProblems(row(["TOP", "BOTTOM"], { BOTTOM: 0.01 }, ["TOP", "BOTTOM"]), "t", 0.02), [], "a listed role at 0.010 passes");
+  assert.deepEqual(ownShareFloorProblems({ id: "X", positions: ["TOP"], playable: ["TOP", "JUNGLE"] }, "t", 0.02), [], "no shares: skipped");
+  assert.deepEqual(ownShareFloorProblems({ id: "X", positions: ["TOP"], playable: ["TOP", "JUNGLE"], positionShares: { TOP: 1 } }, "t", 0.02), [], "not five shares: skipped");
+  assert.deepEqual(ownShareFloorProblems({ id: "X", positions: ["TOP"], positionShares: sh({}) }, "t", 0.02), [], "no playable: skipped");
+  // Kept apart from playableProblems: a widening override that the floor would refuse is still a legal playable set.
+  const widened = row(["TOP", "BOTTOM"], { TOP: 0.019 });
+  assert.deepEqual(playableProblems(widened, "t"), []);
+  assert.doesNotThrow(() => assertChampionRows([{ ...widened, name: "Kaisa" }], { label: "t" }));
 });

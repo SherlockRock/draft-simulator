@@ -12,8 +12,8 @@ import { readFileSync, existsSync } from "fs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { META_POSITIONS, positionSharesProblems, playableProblems } from "./champion-positions/invariants.mjs";
-import { formatPositionsSource } from "./champion-positions/derive.mjs";
+import { META_POSITIONS, positionSharesProblems, playableProblems, ownShareFloorProblems } from "./champion-positions/invariants.mjs";
+import { formatPositionsSource, PLAYABLE_MIN_OWN_SHARE } from "./champion-positions/derive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -72,6 +72,12 @@ function main() {
   // 1b. Count parity both ways (design § 5): never a hard-coded 173.
   if (metaIds.size !== canonical.champions.length) {
     fail(`champion count: ${metaIds.size} compiled vs ${canonical.champions.length} in champions.json`);
+  }
+
+  // 1b'. The own-games floor (engine slice B, F2): no non-listed playable role of champions.json
+  //      may hold under PLAYABLE_MIN_OWN_SHARE of the champion's own games (stored 3-dp share).
+  for (const champ of canonical.champions) {
+    for (const problem of ownShareFloorProblems(champ, "champions.json", PLAYABLE_MIN_OWN_SHARE)) fail(problem);
   }
 
   // 1c. Provenance carried VERBATIM (design § 5): the boot log and this

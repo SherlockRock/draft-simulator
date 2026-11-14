@@ -701,3 +701,27 @@ test("dirBytes totals the files under a directory, nested ones included", () => 
   fs.writeFileSync(path.join(dir, "a", "y"), "123");
   assert.equal(dirBytes(dir), 8);
 });
+
+// ---- slice B, task 5: an export from a sealed holdout position (design T24) ----
+
+test("T24: apply accepts the export of a sealed holdout card, scored for ho-scored and blind for ho-blind", async () => {
+  const { assemblePageData } = await import("./build-review-page.mjs");
+  const L = await import("./review-logic.mjs");
+  const sealed = read("runs/sealed-run.json");
+  const data = assemblePageData(sealed, { names: {}, icons: () => "AAAA" });
+  for (const [draftId, file, mode] of [["ho-scored", "ho-scored.json", "scored"], ["ho-blind", "ho-blind.json", "blind"]]) {
+    const draft = data.drafts.find((d) => d.id === draftId);
+    const card = draft.cards[0];
+    const state = L.newState(data);
+    const row = L.blindRows(card).find((o) => L.currentLabel(state, card.id, o.id) !== "maybe");
+    assert.equal(L.setLabel(state, draft, card.id, row.id, "maybe", "2026-11-12T09:00:00Z"), true);
+    const exp = L.buildExport(state, data);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tier-b-sealed-apply-"));
+    fs.copyFileSync(path.join(DATA, "holdout", file), path.join(dir, file));
+    const out = applyExport(exp, dir, { champions: CHAMPIONS });
+    assert.deepEqual(out.results.map((r) => r.outcome.kind), ["applied"], draftId + ": " + JSON.stringify(out.results));
+    const entries = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")).verdicts;
+    assert.equal(entries.at(-1).mode, mode, draftId);
+    assert.equal(entries.at(-1).labels[row.id], "maybe");
+  }
+});

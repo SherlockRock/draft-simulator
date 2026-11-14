@@ -4,7 +4,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { assemblePageData, loadNames } from "./build-review-page.mjs";
+import * as LOGIC from "./review-logic.mjs";
 import {
+  armLabel,
   blindRows,
   buildNameIndex,
   cardDone,
@@ -347,4 +349,81 @@ test("no stage 1 or stage 2 render path reads a score, a rank, a reach or a marg
   }
   const card = cardOf(load(), A);
   for (const o of card.options) assert.deepEqual(Object.keys(o).sort(), ["action", "id", "row", "side"], "a row carries no reach or margin");
+});
+
+// ---- slice B, task 5: weighted arms and sealed drafts (design T23, T24) ----
+
+test("T23: armLabel prints the weight on a weighted arm and nothing on a roster arm", () => {
+  assert.equal(armLabel({ id: "roster:0.1:0.05", rule: "roster", p: 0.1, q: 0.05 }, "roster:0.1:0.05"), "P 0.1  Q 0.05  (reference)");
+  assert.equal(armLabel({ id: "roster:0.1:0.05:w2", rule: "roster", p: 0.1, q: 0.05, w: 2 }, "roster:0.1:0.05"), "P 0.1  Q 0.05  w 2");
+  assert.equal(armLabel({ id: "roster:0.1:0.05:w0.5", rule: "roster", p: 0.1, q: 0.05, w: 0.5 }, "x"), "P 0.1  Q 0.05  w 0.5");
+  assert.equal(armLabel({ id: "pool_or_roster", rule: "pool_or_roster" }, "x"), "pool or roster");
+});
+
+// A run whose supp draft is a holdout draft, built from the tiny run so the logic tests need no Rust output.
+function holdoutRun({ open } = {}) {
+  const run = structuredClone(RUN);
+  for (const p of run.positions) if (p.draft === "supp") p.split = "holdout";
+  if (open !== undefined) run.run.holdout_open = open;
+  return run;
+}
+const loadRun = (run) => assemblePageData(structuredClone(run), { names: NAMES, icons: () => "AAAA" });
+
+test("T24: a holdout draft is sealed unless the run says holdout_open is true; a development draft never is", () => {
+  for (const open of [undefined, false, null, "true", 1, "open"]) {
+    const data = loadRun(holdoutRun({ open }));
+    assert.equal(LOGIC.draftSealed(draftOf(data, "supp")), true, `holdout_open ${JSON.stringify(open)}`);
+    assert.equal(LOGIC.draftSealed(draftOf(data, "top")), false);
+  }
+  assert.equal(LOGIC.draftSealed(draftOf(loadRun(holdoutRun({ open: true })), "supp")), false, "an opened run reveals it as any other draft");
+  assert.equal(LOGIC.draftSealed(draftOf(load(), "supp")), false, "a run with no holdout position seals nothing");
+});
+
+test("T24: a sealed draft is never shown: not revealed, no rows past the blind ones, not on the results tab, whatever the state says", () => {
+  const data = loadRun(holdoutRun());
+  const supp = draftOf(data, "supp");
+  const state = newState(data);
+  // A restored state that says revealed: a seeded scored entry, a dated reveal, and a scored label.
+  const ps = state.positions[B];
+  ps.revealedAt = T1;
+  ps.labels[blindRows(cardOf(data, B))[0].id] = { current: "play", mode: "scored", t: T1 };
+  assert.equal(draftRevealState(supp, state), "revealed", "the state itself still says revealed: labelMode reads it");
+  assert.equal(LOGIC.draftShown(supp, state), false);
+  assert.equal(LOGIC.positionVisible(data, state, B), false);
+  assert.equal(LOGIC.positionVisible(data, state, A), false);
+  assert.equal(LOGIC.positionVisible(data, state, D), false, "an unrevealed development draft stays hidden as before");
+  assert.equal(LOGIC.selectionNote({ ...data, drafts: [supp] }, state, 0).includes("No draft is revealed yet"), true, "a sealed draft does not count as revealed for the arm control");
+  const opened = loadRun(holdoutRun({ open: true }));
+  const so = newState(opened);
+  so.positions[B].revealedAt = T1;
+  assert.equal(LOGIC.draftShown(draftOf(opened, "supp"), so), true);
+  assert.equal(LOGIC.positionVisible(opened, so, B), true);
+});
+
+test("T24: revealing a sealed draft does nothing, even with every blind row labelled", () => {
+  const data = loadRun(holdoutRun());
+  const supp = draftOf(data, "supp");
+  const state = newState(data);
+  for (const card of supp.cards) {
+    setPick(state, supp, card.id, null, T1);
+    for (const o of blindRows(card)) setLabel(state, supp, card.id, o.id, "play", T2);
+  }
+  assert.equal(draftRevealState(supp, state), "ready");
+  const before = JSON.stringify(state);
+  assert.throws(() => LOGIC.revealDraft(state, supp, T3), /sealed/);
+  assert.equal(JSON.stringify(state), before, "no revealedAt, no span, no rev");
+});
+
+test("T24: sealed overrides rendering and visibility, not the label mode", () => {
+  const data = loadRun(holdoutRun());
+  const supp = draftOf(data, "supp");
+  const state = newState(data);
+  assert.equal(labelMode(supp, state), "blind");
+  state.positions[B].revealedAt = T1; // the seed of a holdout fixture that holds a scored entry
+  assert.equal(labelMode(supp, state), "scored", "labels follow the fixture's history: apply refuses a blind entry after a scored one");
+  const card = cardOf(data, B);
+  const row = blindRows(card)[0];
+  assert.equal(setLabel(state, supp, B, row.id, "never", T2), true);
+  assert.equal(state.positions[B].labels[row.id].mode, "scored");
+  assert.equal(LOGIC.draftShown(supp, state), false);
 });
