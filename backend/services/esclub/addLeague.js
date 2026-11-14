@@ -193,11 +193,14 @@ async function writeLeague({ located, region, userId, syncId, store }) {
         { transaction },
       );
     }
-    await ensureUserTournament(userId, tournament.id, transaction);
+    // The CLI adds without a user: no UserTournaments row then.
+    if (userId) await ensureUserTournament(userId, tournament.id, transaction);
     await setSyncTarget(syncId, tournament.id, stageRow.id, transaction);
     return {
       newSeason,
       newStage,
+      // A stage whose first backfill failed has never been stamped: backfill it now.
+      stageSynced: Boolean(stageRow.last_synced_at),
       tournament: {
         id: tournament.id,
         external_id: tournament.external_id,
@@ -254,7 +257,9 @@ async function addLeague({
     raw: true,
   });
   if (knownSeries) {
-    await store.inTransaction((transaction) => ensureUserTournament(userId, knownSeries.tournament_id, transaction));
+    if (userId) {
+      await store.inTransaction((transaction) => ensureUserTournament(userId, knownSeries.tournament_id, transaction));
+    }
     return { known: { tournamentId: knownSeries.tournament_id, stageId: knownSeries.stage_id } };
   }
 
@@ -267,7 +272,8 @@ async function addLeague({
     const written = await writeLeague({ located, region, userId, syncId: sync.id, store });
     summary.newSeason = written.newSeason;
     summary.newStage = written.newStage;
-    if (written.newStage) {
+    summary.backfilled = written.newStage || !written.stageSynced;
+    if (summary.backfilled) {
       await syncEngine.syncStage(client, { tournament: written.tournament, stage: written.stage, store, summary, now });
       await store.touchSynced(written.stage, written.tournament, now());
     }

@@ -445,7 +445,7 @@ describe("addLeague: a stage the mirror already has, reached through an unseen s
     // is an add, so it counts toward the 3-a-day add limit.
     const w = makeWorld({
       tournament: { id: "tour-1", external_id: SEASON_ID, region: "na1", name: "NA Premier Season 1" },
-      stage: { id: "stage-1", external_id: STAGE_ID, tournament_id: "tour-1", name: "Regular Season" },
+      stage: { id: "stage-1", external_id: STAGE_ID, tournament_id: "tour-1", name: "Regular Season", last_synced_at: T0 },
     });
     const { client, done } = run();
     const out = await done;
@@ -460,6 +460,25 @@ describe("addLeague: a stage the mirror already has, reached through an unseen s
     expect(out.result.summary).toMatchObject({ newStage: false, newSeason: false });
   });
 
+  it("a known stage that was never synced (its backfill failed) is backfilled now (Task 7 review)", async () => {
+    makeWorld({
+      tournament: { id: "tour-1", external_id: SEASON_ID, region: "na1", name: "NA Premier Season 1" },
+      stage: { id: "stage-1", external_id: STAGE_ID, tournament_id: "tour-1", name: "Regular Season", last_synced_at: null },
+    });
+    const out = await run().done;
+    expect(syncStage).toHaveBeenCalledTimes(1);
+    expect(mirrorStore.touchSynced).toHaveBeenCalledTimes(1);
+    expect(out.result.summary).toMatchObject({ newStage: false, backfilled: true });
+  });
+});
+
+describe("addLeague: no user (the CLI)", () => {
+  it("writes no UserTournaments row on a new league (Task 7 review)", async () => {
+    const w = makeWorld();
+    await run({ userId: null, via: "cli" }).done;
+    expect(w.writes.some(([k]) => k === "userUpdate" || k === "userCreate")).toBe(false);
+    expect(syncStage).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("addLeague: rejections write nothing", () => {
