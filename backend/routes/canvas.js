@@ -490,6 +490,92 @@ router.get("/:canvasId", async (req, res) => {
   }
 });
 
+// The per-game fields esclub owns on an imported game (S3 Answer Q3 A): sides,
+// first pick and winner, plus the card's own team-name overrides, which would
+// relabel the teams esclub names.
+const ESCLUB_OWNED_DRAFT_FIELDS = [
+  "winner",
+  "blueSideTeam",
+  "firstPick",
+  "team1Name",
+  "team2Name",
+];
+
+/**
+ * Whether a Draft belongs to an imported series: its VersusDraft carries a
+ * `league_series_id` (S3 D1). After a purge the column is NULL and the game is
+ * an ordinary manual-series game again.
+ *
+ * One query: the Draft inner-joined to its VersusDraft, filtered on the column.
+ *
+ * @param {string} draftId
+ * @returns {Promise<boolean>}
+ */
+async function isDraftImported(draftId) {
+  const draft = await Draft.findOne({
+    where: { id: draftId },
+    attributes: ["id"],
+    include: [
+      {
+        model: VersusDraft,
+        attributes: [],
+        required: true,
+        where: { league_series_id: { [Op.ne]: null } },
+      },
+    ],
+  });
+  return draft !== null;
+}
+
+/**
+ * Why a group settings save may not touch an imported series (S3 D9), or
+ * null when it may. esclub sets the teams, their names, the length and the
+ * draft type; the settings dialog sends them all back unchanged, so a value
+ * equal to the stored one passes. Name, game type, disabled champions and
+ * layout stay editable.
+ *
+ * @param {object} body - the request body
+ * @param {object} group - the stored CanvasGroup
+ * @param {object} versusDraft - the group's VersusDraft (league_series_id set)
+ * @returns {string|null} the refusal message
+ */
+function importedSeriesRefusal(body, group, versusDraft) {
+  for (const key of ["team1_id", "team2_id"]) {
+    if (hasKey(body, key) && body[key] !== group[key]) {
+      return "Teams of an imported series are set by esclub";
+    }
+  }
+
+  const metadata =
+    body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  const storedNames = {
+    // A name withoutPlaceholderTeamNames kept out of the metadata is still
+    // on the VersusDraft, and the dialog sends that one back.
+    blueTeamName: group.metadata?.blueTeamName ?? versusDraft.blueTeamName,
+    redTeamName: group.metadata?.redTeamName ?? versusDraft.redTeamName,
+  };
+  for (const key of ["blueTeamName", "redTeamName"]) {
+    if (metadata[key] !== undefined && metadata[key] !== storedNames[key]) {
+      return "Teams of an imported series are set by esclub";
+    }
+  }
+
+  if (
+    metadata.length !== undefined &&
+    Number(metadata.length) !== versusDraft.length
+  ) {
+    return "The length of an imported series is set by esclub";
+  }
+
+  for (const key of ["seriesType", "draftMode"]) {
+    if (metadata[key] !== undefined && metadata[key] !== versusDraft.type) {
+      return "The draft type of an imported series is set by esclub";
+    }
+  }
+
+  return null;
+}
+
 router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
   try {
     const {
@@ -557,6 +643,15 @@ router.put("/:canvasId/draft/:draftId", protect, async (req, res) => {
     });
 
     if (canvasDraft) {
+      // Answer Q3 A: esclub owns these on an imported game. Looked up only when
+      // the request carries one of them, so a card move costs no query.
+      const touchesEsclubField = ESCLUB_OWNED_DRAFT_FIELDS.some(
+        (key) => req.body[key] !== undefined,
+      );
+      if (touchesEsclubField && (await isDraftImported(draftId))) {
+        return res.status(400).json({ error: "Set by esclub" });
+      }
+
       if (Object.keys(canvasDraftUpdates).length > 0) {
         await canvasDraft.update(canvasDraftUpdates);
       }
@@ -1554,6 +1649,17 @@ router.post("/:canvasId/import/series", protect, async (req, res) => {
       return res.status(404).json({ error: "Versus series not found" });
     }
 
+    // S3 D10: an imported series is put on a canvas by the league send, which
+    // builds its own VersusDraft. A second group on this one would share its
+    // games, and deleting either group would destroy the other's cards.
+    if (versusDraft.league_series_id) {
+      await t.rollback();
+      return res.status(400).json({
+        error:
+          "This series was imported from esclub; send it from the league instead",
+      });
+    }
+
     // Create the group container
     const group = await CanvasGroup.create(
       {
@@ -2233,6 +2339,28 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       return res.status(404).json({ error: "Group not found" });
     }
 
+    // S3 D9: on an imported series esclub sets the teams, names, length and
+    // draft type. Read the VersusDraft whenever the request could touch one
+    // of those, and refuse before anything is written. The manual-series
+    // branch below reuses this row instead of reading it again.
+    const hasMetadata = metadata && typeof metadata === "object";
+    const hasTeamLinks = hasKey(req.body, "team1_id") || hasKey(req.body, "team2_id");
+    let versusDraft = null;
+    let versusDraftLoaded = false;
+    if (group.versus_draft_id && (hasMetadata || hasTeamLinks)) {
+      versusDraft = await VersusDraft.findByPk(group.versus_draft_id, {
+        transaction: t,
+      });
+      versusDraftLoaded = true;
+      if (versusDraft?.league_series_id) {
+        const refusal = importedSeriesRefusal(req.body, group, versusDraft);
+        if (refusal) {
+          await t.rollback();
+          return res.status(400).json({ error: refusal });
+        }
+      }
+    }
+
     // Build update object with only provided fields
     const updates = {};
     if (
@@ -2283,18 +2411,16 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
       return res.status(400).json({ error: "No valid fields to update" });
     }
 
-    let versusDraft = null;
     // Declared out here because the response builder below reads it: a length
     // change creates or destroys game Cards server-side, and the saving client
     // needs them back to reflow the parent grid against the new footprint.
     let lengthChanged = false;
-    if (
-      group.versus_draft_id &&
-      ((metadata && typeof metadata === "object") || updates.name)
-    ) {
-      versusDraft = await VersusDraft.findByPk(group.versus_draft_id, {
-        transaction: t,
-      });
+    if (group.versus_draft_id && (hasMetadata || updates.name)) {
+      if (!versusDraftLoaded) {
+        versusDraft = await VersusDraft.findByPk(group.versus_draft_id, {
+          transaction: t,
+        });
+      }
 
       if (versusDraft && versusDraft.origin === "manual") {
         const seriesMetadata =
@@ -3417,3 +3543,4 @@ router.use(require("./canvasPools"));
 module.exports = router;
 module.exports.resolveTeamLinkUpdate = resolveTeamLinkUpdate;
 module.exports.loadLinkableTeamIds = loadLinkableTeamIds;
+module.exports.isDraftImported = isDraftImported;
