@@ -15,6 +15,9 @@ const Team = require("./Team");
 const TeamPlayer = require("./TeamPlayer");
 const Tournament = require("./Tournament");
 const UserTournament = require("./UserTournament");
+const LeagueStage = require("./LeagueStage");
+const LeagueSeries = require("./LeagueSeries");
+const LeagueGame = require("./LeagueGame");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -99,6 +102,53 @@ const setupAssociations = () => {
   });
   UserTournament.belongsTo(Tournament, { foreignKey: "tournament_id" });
   UserTournament.belongsTo(User, { foreignKey: "user_id" });
+
+  // League mirror (S2). Deleting a tournament removes its stages, series and
+  // games; a Team a series points at cannot be deleted (RESTRICT).
+  Tournament.hasMany(LeagueStage, {
+    foreignKey: "tournament_id",
+    onDelete: "CASCADE",
+  });
+  LeagueStage.belongsTo(Tournament, {
+    foreignKey: "tournament_id",
+    onDelete: "CASCADE",
+  });
+  Tournament.hasMany(LeagueSeries, {
+    foreignKey: "tournament_id",
+    onDelete: "CASCADE",
+  });
+  LeagueSeries.belongsTo(Tournament, {
+    foreignKey: "tournament_id",
+    onDelete: "CASCADE",
+  });
+  LeagueStage.hasMany(LeagueSeries, {
+    foreignKey: "stage_id",
+    onDelete: "CASCADE",
+  });
+  LeagueSeries.belongsTo(LeagueStage, {
+    as: "Stage",
+    foreignKey: "stage_id",
+    onDelete: "CASCADE",
+  });
+  LeagueSeries.belongsTo(Team, {
+    as: "Team1",
+    foreignKey: "team1_id",
+    onDelete: "RESTRICT",
+  });
+  LeagueSeries.belongsTo(Team, {
+    as: "Team2",
+    foreignKey: "team2_id",
+    onDelete: "RESTRICT",
+  });
+  LeagueSeries.hasMany(LeagueGame, {
+    as: "Games",
+    foreignKey: "series_id",
+    onDelete: "CASCADE",
+  });
+  LeagueGame.belongsTo(LeagueSeries, {
+    foreignKey: "series_id",
+    onDelete: "CASCADE",
+  });
 
   CanvasGroup.hasMany(CanvasDraft, { foreignKey: "group_id", onDelete: "SET NULL" });
   CanvasDraft.belongsTo(CanvasGroup, { foreignKey: "group_id", onDelete: "SET NULL" });
