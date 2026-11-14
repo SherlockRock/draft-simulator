@@ -40,6 +40,7 @@ import {
     esclubActionMessage,
     esclubActionSync,
     esclubRefreshButton,
+    esclubSyncFailureMessage,
     esclubSyncPollInterval,
     type EsclubActionResult
 } from "../utils/esclubSync";
@@ -149,10 +150,7 @@ const TeamsPage: Component = () => {
             void invalidateTeams(queryClient);
             void queryClient.invalidateQueries({ queryKey: ["esclubTournament"] });
             if (sync.status === "succeeded") toast.success("League sync finished");
-            else
-                toast.error(
-                    "League sync failed. Saved teams have been refreshed; try again when available."
-                );
+            else toast.error(esclubSyncFailureMessage(sync));
         });
 
         return (

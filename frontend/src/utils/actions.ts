@@ -968,8 +968,19 @@ async function postEsclubAction(
         body: JSON.stringify(body)
     });
     switch (response.status) {
-        case 401:
-            return { status: 401 };
+        case 401: {
+            let sessionRefreshed = false;
+            try {
+                const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
+                    credentials: "include"
+                });
+                sessionRefreshed = refresh.ok;
+            } catch {
+                sessionRefreshed = false;
+            }
+            if (!sessionRefreshed) markAuthExpired();
+            return { status: 401, sessionRefreshed };
+        }
         case 200:
         case 202:
             return {

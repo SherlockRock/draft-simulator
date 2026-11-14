@@ -20,7 +20,7 @@ export function parseEsclubUrl(text: string): { kind: "serie"; id: string } | nu
 
 export type EsclubActionResult =
     | { status: 200 | 202; body: EsclubActionResponse }
-    | { status: 401 }
+    | { status: 401; sessionRefreshed: boolean }
     | {
           status: 409 | 429;
           body: EsclubRetryAfterResponse;
@@ -71,7 +71,9 @@ function retryMinutes(
 export function esclubActionMessage(result: EsclubActionResult, now: number): string {
     switch (result.status) {
         case 401:
-            return "Please sign in again, then press Add league or Refresh league again.";
+            return result.sessionRefreshed
+                ? "Your session was refreshed. Press again."
+                : "Sign in again.";
         case 400:
             return result.body.code === "INVALID_URL"
                 ? `Paste an esclub series link, like ${ACCEPTED_LINK_EXAMPLE}.`
@@ -105,6 +107,12 @@ export function esclubActionSync(result: EsclubActionResult): EsclubSyncView | n
     if (result.status !== 200 && result.status !== 202) return null;
     if ("sync" in result.body) return result.body.sync;
     return null;
+}
+
+export function esclubSyncFailureMessage(sync: EsclubSyncView): string {
+    return sync.errorClass === "EsclubLeagueRejected"
+        ? "This league can't be imported: it is not a League of Legends league with a supported draft (standard or fearless hard-pick; not blind). Retrying won't help."
+        : "League sync failed. Saved teams have been refreshed; try again when available.";
 }
 
 export function esclubSyncPollInterval(

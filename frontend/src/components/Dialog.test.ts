@@ -3,6 +3,33 @@ import { describe, expect, it } from "vitest";
 import { shouldDialogConfirmOnEnter } from "./Dialog";
 
 describe("Dialog Enter confirmation target", () => {
+    it.each(["Delete team", "Delete teams", "Apply", "Delete account"])(
+        "confirms when the %s opener is outside the dialog",
+        (label) => {
+            const opener = document.createElement("button");
+            opener.textContent = label;
+            document.body.append(opener);
+            opener.focus();
+            try {
+                expect(document.activeElement).toBe(opener);
+                expect(shouldDialogConfirmOnEnter(opener, false, undefined, false)).toBe(
+                    true
+                );
+            } finally {
+                opener.remove();
+            }
+        }
+    );
+
+    it.each(["Cancel", "Close dialog"])(
+        "preserves native Enter on %s inside the dialog",
+        (label) => {
+            const button = document.createElement("button");
+            button.textContent = label;
+            expect(shouldDialogConfirmOnEnter(button, true, undefined, true)).toBe(false);
+        }
+    );
+
     it.each(["Cancel", "Close dialog", "Add league"])(
         "leaves Enter on %s to the focused button",
         (label) => {

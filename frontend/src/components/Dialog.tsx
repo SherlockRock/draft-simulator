@@ -7,10 +7,11 @@ const DEFAULT_CONTENT_CLASS =
 export function shouldDialogConfirmOnEnter(
     target: EventTarget | null,
     confirmOnInput = false,
-    shouldConfirmOnTarget?: (target: EventTarget | null) => boolean
+    shouldConfirmOnTarget?: (target: EventTarget | null) => boolean,
+    targetInsideDialog = true
 ): boolean {
-    // Let controls keep their own keyboard activation, including icon targets
-    // inside buttons. Input confirmation opts in only text entry below.
+    if (!targetInsideDialog) return true;
+
     if (
         target instanceof Element &&
         target.closest(
@@ -54,6 +55,7 @@ export const Dialog = (props: {
     // the common ancestor of press+release and can't tell where the pointer was
     // actually released.
     let pointerDownOnBackdrop = false;
+    let panel: HTMLDivElement | undefined;
 
     createEffect(() => {
         if (!props.isOpen()) return;
@@ -73,7 +75,8 @@ export const Dialog = (props: {
                 !shouldDialogConfirmOnEnter(
                     e.target,
                     props.confirmOnInput,
-                    props.shouldConfirmOnTarget
+                    props.shouldConfirmOnTarget,
+                    e.target instanceof Node && panel?.contains(e.target) === true
                 )
             ) {
                 return;
@@ -108,6 +111,7 @@ export const Dialog = (props: {
                 }}
             >
                 <div
+                    ref={panel}
                     class={props.contentClass ?? DEFAULT_CONTENT_CLASS}
                     onContextMenu={(e: MouseEvent) => {
                         e.stopPropagation();

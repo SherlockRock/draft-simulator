@@ -4,6 +4,7 @@ import { createComponent, untrack, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import TeamsPage from "../pages/TeamsPage";
+import { resetAuthExpired } from "./apiClient";
 import type { EsclubSyncView, EsclubTournamentView } from "@draft-sim/shared-types";
 import {
     addEsclubLeague,
@@ -34,6 +35,7 @@ const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("solid-toast", () => ({ default: notifications }));
 
 afterEach(() => {
+    resetAuthExpired();
     vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.clearAllMocks();
@@ -262,9 +264,13 @@ describe("add league outcome messages", () => {
 });
 
 describe("sync polling", () => {
-    it.each(["succeeded", "failed"])(
-        "does not rediscover a %s sync when tournament refetches fail with 503",
-        async (terminalStatus) => {
+    it.each([
+        { terminalStatus: "succeeded", errorClass: null },
+        { terminalStatus: "failed", errorClass: null },
+        { terminalStatus: "failed", errorClass: "EsclubLeagueRejected" }
+    ])(
+        "does not rediscover a $terminalStatus / $errorClass sync when tournament refetches fail with 503",
+        async ({ terminalStatus, errorClass }) => {
             vi.useFakeTimers();
             vi.setSystemTime(NOW);
             const statusReads: number[] = [];
@@ -314,7 +320,8 @@ describe("sync polling", () => {
                                         status:
                                             statusReads.length === 1
                                                 ? "running"
-                                                : terminalStatus
+                                                : terminalStatus,
+                                        errorClass
                                     }
                                 })
                             )
@@ -354,6 +361,14 @@ describe("sync polling", () => {
                     notifications.success.mock.calls.length +
                         notifications.error.mock.calls.length
                 ).toBe(1);
+                if (errorClass === "EsclubLeagueRejected") {
+                    expect(notifications.error).toHaveBeenCalledWith(
+                        "This league can't be imported: it is not a League of Legends league with a supported draft (standard or fearless hard-pick; not blind). Retrying won't help."
+                    );
+                    expect(notifications.error.mock.calls.flat().join(" ")).not.toMatch(
+                        /try again/i
+                    );
+                }
                 await vi.advanceTimersByTimeAsync(30_000);
                 expect(statusReads).toHaveLength(2);
                 expect(tournamentReads).toBe(2);
@@ -392,16 +407,21 @@ describe("sync polling", () => {
 });
 
 describe("esclub actions", () => {
-    it.each([
+    const actions = [
         { name: "add", run: () => addEsclubLeague({ url: LINK, region: "na1" }) },
         { name: "league refresh", run: () => refreshEsclubLeague("league-1") },
         { name: "series refresh", run: () => refreshEsclubSeries("series-1") }
-    ])(
-        "does not replay $name after a 401 even if token refresh succeeds",
+    ];
+
+    it.each(actions)(
+        "refreshes the session once without replaying $name and succeeds on the next press",
         async ({ run }) => {
             let posts = 0;
+            let refreshes = 0;
             const fetch = vi.fn((url: string, options?: RequestInit) => {
                 if (url === "/api/auth/refresh-token") {
+                    refreshes += 1;
+                    expect(options).toEqual({ credentials: "include" });
                     return Promise.resolve(new Response("{}", { status: 200 }));
                 }
                 if (options?.method === "POST") {
@@ -419,13 +439,55 @@ describe("esclub actions", () => {
             const result = await run();
 
             expect(posts).toBe(1);
-            expect(result).toEqual({ status: 401 });
+            expect(refreshes).toBe(1);
+            expect(fetch).toHaveBeenCalledTimes(2);
+            expect(result).toEqual({ status: 401, sessionRefreshed: true });
             expect(esclubActionMessage(result, NOW)).toBe(
-                "Please sign in again, then press Add league or Refresh league again."
+                "Your session was refreshed. Press again."
             );
             expect(esclubActionSync(result)).toBeNull();
+
+            expect(await run()).toEqual({ status: 202, body: { sync } });
+            expect(posts).toBe(2);
+            expect(refreshes).toBe(1);
+            expect(fetch).toHaveBeenCalledTimes(3);
         }
     );
+
+    const refreshFailures: (number | "network")[] = [401, 403, 503, "network"];
+    describe.each(actions)("$name when session refresh fails", ({ run }) => {
+        it.each(refreshFailures)(
+            "refreshes only once after a POST 401 and reports sign-in for %s",
+            async (failure) => {
+                let posts = 0;
+                let refreshes = 0;
+                const fetch = vi.fn((url: string, options?: RequestInit) => {
+                    if (url === "/api/auth/refresh-token") {
+                        refreshes += 1;
+                        expect(options).toEqual({ credentials: "include" });
+                        return failure === "network"
+                            ? Promise.reject(new Error("Offline"))
+                            : Promise.resolve(new Response(null, { status: failure }));
+                    }
+                    if (options?.method === "POST") {
+                        posts += 1;
+                        return Promise.resolve(new Response(null, { status: 401 }));
+                    }
+                    throw new Error(`Unexpected fetch: ${url}`);
+                });
+                vi.stubGlobal("fetch", fetch);
+
+                const result = await run();
+
+                expect(posts).toBe(1);
+                expect(refreshes).toBe(1);
+                expect(fetch).toHaveBeenCalledTimes(2);
+                expect(result).toEqual({ status: 401, sessionRefreshed: false });
+                expect(esclubActionMessage(result, NOW)).toBe("Sign in again.");
+                expect(esclubActionSync(result)).toBeNull();
+            }
+        );
+    });
 
     it("posts an add once with credentials and preserves 202", async () => {
         const fetch = vi
