@@ -44,8 +44,12 @@ import {
     copyAnnotation,
     createCanvasPool,
     updateCanvasPool,
-    deleteCanvasPool
+    deleteCanvasPool,
+    refreshEsclubSeries,
+    fetchEsclubSync,
+    applyLeagueRefresh
 } from "./utils/actions";
+import { runLeagueRefresh } from "./utils/leagueRefreshFlow";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
 import {
@@ -4675,10 +4679,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
          * no longer reach. `null` is the D3 clear protocol; `undefined` would
          * just drop out of the request.
          */
+        // S3 D9: esclub owns an imported series' teams, names, length and
+        // draft mode (the server refuses a change), so the save leaves them
+        // out entirely rather than echoing them back.
+        const isImportedSeries =
+            !data.convertToSeries && editing?.type === "series" && !!editing.LeagueImport;
         const editedMetadata: CanvasGroupMetadataUpdate = {
             disabledChampions: data.disabledChampions,
             gameType: data.gameType,
-            draftMode: staysSeries ? data.draftMode : null,
+            ...(isImportedSeries
+                ? {}
+                : { draftMode: staysSeries ? data.draftMode : null }),
             // The counts and the manual floor are two views of one thing: a
             // resize writes the counts, and a count change re-writes the floor.
             // Without this half, a container that had ever been resized could
@@ -4743,7 +4754,9 @@ const CanvasComponent = (props: CanvasComponentProps) => {
             });
         } else {
             const isManualSeries =
-                editing?.type === "series" && editing.metadata.origin === "manual";
+                editing?.type === "series" &&
+                editing.metadata.origin === "manual" &&
+                !isImportedSeries;
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
@@ -5968,6 +5981,63 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     const handleDraftGoTo = (draft: CanvasDraft) => {
         const pos = getDraftWorldPosition(draft);
         navigateToDraft(pos.x, pos.y);
+    };
+
+    // The group menu's "Go to": the group's corner at the viewport centre.
+    const goToGroup = (group: { positionX: number; positionY: number }) => {
+        props.setViewport({
+            x: group.positionX - window.innerWidth / 2 / props.viewport().zoom,
+            y: group.positionY - window.innerHeight / 2 / props.viewport().zoom,
+            zoom: props.viewport().zoom
+        });
+    };
+
+    // After a league send (S3): refetch, then "Go to" the first created or
+    // existing group. The fresh payload has the new group even before the
+    // send's canvasUpdate broadcast lands in the stores.
+    const handleFocusSentGroup = async (groupId: string) => {
+        const fresh = await Promise.resolve(canvasContext.refetchCanvas());
+        const group =
+            fresh?.groups?.find((g) => g.id === groupId) ??
+            canvasGroups.find((g) => g.id === groupId);
+        if (group && !group.parent_group_id) goToGroup(group);
+    };
+
+    // "Refresh from league" (S3 D6): one run per group at a time; the
+    // header button spins while its group's run is in flight.
+    const [leagueRefreshing, setLeagueRefreshing] = createSignal<ReadonlySet<string>>(
+        new Set()
+    );
+    const isLeagueRefreshing = (groupId: string) => leagueRefreshing().has(groupId);
+    const handleRefreshFromLeague = (groupId: string) => {
+        if (!canEdit() || isLocalMode() || isLeagueRefreshing(groupId)) return;
+        const group = canvasGroups.find((g) => g.id === groupId);
+        const leagueImport = group?.LeagueImport;
+        if (!leagueImport) return;
+        const forCanvas = canvasId();
+        setLeagueRefreshing((prev) => new Set(prev).add(groupId));
+        void runLeagueRefresh({
+            group: { id: groupId, LeagueImport: leagueImport },
+            deps: {
+                refreshEsclubSeries,
+                fetchEsclubSync,
+                applyLeagueRefresh: (id) =>
+                    applyLeagueRefresh({ canvasId: forCanvas, groupId: id }),
+                sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+                now: () => Date.now()
+            }
+        })
+            .then((run) => {
+                if (run.ok) toast.success(run.message);
+                else toast.error(run.message);
+            })
+            .finally(() => {
+                setLeagueRefreshing((prev) => {
+                    const next = new Set(prev);
+                    next.delete(groupId);
+                    return next;
+                });
+            });
     };
 
     /**
@@ -7663,6 +7733,8 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                     isGroupSelected={groupConnectionSource() === group.id}
                                     sourceAnchor={sourceAnchor()}
                                     onUpdateDraftMetadata={handleUpdateDraftMetadata}
+                                    onRefreshFromLeague={handleRefreshFromLeague}
+                                    isLeagueRefreshing={isLeagueRefreshing}
                                     renderDraftCard={(cd) => {
                                         return (
                                             <CanvasCard
@@ -8178,10 +8250,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                             positionY={importPosition().y}
                             existingDraftNames={canvasDrafts.map((cd) => cd.Draft.name)}
                             existingGroupNames={canvasGroups.map((g) => g.name)}
+                            showLeagueTab={teamsEnabled()}
+                            canvasGroups={canvasGroups}
+                            cardLayout={props.cardLayout()}
                             onClose={() => setIsImportDialogOpen(false)}
                             onSuccess={() => {
                                 canvasContext.refetchCanvas();
                             }}
+                            onFocusGroup={handleFocusSentGroup}
                         />
                     }
                 />
@@ -8287,6 +8363,11 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                               )
                     }
                     isSeries={settingsGroup()?.type === "series"}
+                    isImported={
+                        pendingGroupSettingsPosition() === null &&
+                        settingsGroup()?.type === "series" &&
+                        !!settingsGroup()?.LeagueImport
+                    }
                     canEditSeriesSettings={
                         settingsGroup()?.type !== "series" ||
                         settingsGroup()?.metadata.origin === "manual"
@@ -8611,17 +8692,16 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                                 handleMoveGroupToTopLevel(menu().group.id);
                                 closeGroupContextMenu();
                             }}
+                            onRefreshFromLeague={
+                                canEdit() && !isLocalMode() && menu().group.LeagueImport
+                                    ? () => {
+                                          handleRefreshFromLeague(menu().group.id);
+                                          closeGroupContextMenu();
+                                      }
+                                    : undefined
+                            }
                             onGoTo={() => {
-                                const group = menu().group;
-                                props.setViewport({
-                                    x:
-                                        group.positionX -
-                                        window.innerWidth / 2 / props.viewport().zoom,
-                                    y:
-                                        group.positionY -
-                                        window.innerHeight / 2 / props.viewport().zoom,
-                                    zoom: props.viewport().zoom
-                                });
+                                goToGroup(menu().group);
                                 closeGroupContextMenu();
                             }}
                             onDelete={() => {

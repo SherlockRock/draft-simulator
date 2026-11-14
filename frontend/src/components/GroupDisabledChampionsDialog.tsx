@@ -34,6 +34,13 @@ interface GroupSettingsDialogProps {
     initialDraftMode: DraftMode;
     isSeries?: boolean;
     canEditSeriesSettings?: boolean;
+    /**
+     * A series sent from the league (S3 D9): teams, team names, length and
+     * draft mode are set by esclub and shown read-only; the save sends them
+     * back unchanged (the server refuses a change). Name, game type and
+     * disabled champions stay editable.
+     */
+    isImported?: boolean;
     initialBlueTeamName?: string;
     initialRedTeamName?: string;
     initialTeam1Id?: string | null;
@@ -127,6 +134,17 @@ const SERIES_LENGTH_OPTIONS = [
     { value: "6", label: "6 games" },
     { value: "7", label: "7 games" }
 ];
+
+/** A series setting esclub owns on an imported group (S3 D9), shown, not edited. */
+const ReadOnlyField: Component<{ label: string; value: string }> = (props) => (
+    <div class="block text-sm font-medium text-darius-text-secondary">
+        {props.label}
+        <div class="mt-2 flex items-center justify-between gap-2 rounded-md border border-darius-border bg-darius-card px-3 py-2">
+            <span class="min-w-0 truncate text-darius-text-primary">{props.value}</span>
+            <span class="shrink-0 text-xs text-darius-purple-bright">Set by esclub</span>
+        </div>
+    </div>
+);
 
 const clampSeriesLength = (value: number) => {
     if (!Number.isFinite(value)) return 3;
@@ -335,7 +353,17 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
                           live-imported series, which is exactly the series most
                           likely to need it corrected.
                         */}
-                        <Show when={showDraftMode()}>
+                        <Show when={showDraftMode() && props.isImported}>
+                            <ReadOnlyField
+                                label="Draft Mode"
+                                value={
+                                    DRAFT_MODE_OPTIONS.find(
+                                        (o) => o.value === draftMode()
+                                    )?.label ?? draftMode()
+                                }
+                            />
+                        </Show>
+                        <Show when={showDraftMode() && !props.isImported}>
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-darius-text-secondary">
                                     Draft Mode
@@ -375,7 +403,35 @@ export const GroupSettingsDialog: Component<GroupSettingsDialogProps> = (props) 
 
                         <Show
                             when={
-                                seriesEnabled() && (props.canEditSeriesSettings ?? true)
+                                seriesEnabled() &&
+                                (props.canEditSeriesSettings ?? true) &&
+                                props.isImported
+                            }
+                        >
+                            <div class="grid grid-cols-1 gap-3 rounded-md border border-darius-border bg-darius-card-hover/30 p-3 sm:grid-cols-2">
+                                <ReadOnlyField
+                                    label="Blue Team Name"
+                                    value={blueTeamName()}
+                                />
+                                <ReadOnlyField
+                                    label="Red Team Name"
+                                    value={redTeamName()}
+                                />
+                                <ReadOnlyField
+                                    label="Series Length"
+                                    value={
+                                        SERIES_LENGTH_OPTIONS.find(
+                                            (o) => o.value === String(length())
+                                        )?.label ?? String(length())
+                                    }
+                                />
+                            </div>
+                        </Show>
+                        <Show
+                            when={
+                                seriesEnabled() &&
+                                (props.canEditSeriesSettings ?? true) &&
+                                !props.isImported
                             }
                         >
                             <div class="space-y-4 rounded-md border border-darius-border bg-darius-card-hover/30 p-3">

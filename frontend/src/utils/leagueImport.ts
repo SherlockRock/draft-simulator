@@ -1,7 +1,10 @@
 import type {
     EsclubSeriesItem,
     EsclubSyncView,
-    LeagueImport
+    LeagueImport,
+    LeagueRefreshResponse,
+    LeagueSendResponse,
+    LeagueSendSkipReason
 } from "@draft-sim/shared-types";
 import type { EsclubActionResult } from "./esclubSync";
 
@@ -10,26 +13,13 @@ export type LeagueSeriesStatus = LeagueImport["status"];
 /** What an imported canvas group carries as `group.LeagueImport` (plan D8). */
 export type LeagueImportView = LeagueImport;
 
-export type LeagueSendSkipReason =
-    | "no-teams"
-    | "no-games"
-    | "upcoming"
-    | "unsupported-length"
-    | "not-found";
+export type { LeagueSendSkipReason };
 
 /** Response of `POST /api/canvas/:canvasId/import/league-series` (plan D5). */
-export type LeagueSendResult = {
-    created: { leagueSeriesId: string; groupId: string }[];
-    existing: { leagueSeriesId: string; groupId: string }[];
-    skipped: { leagueSeriesId: string; reason: LeagueSendSkipReason }[];
-};
+export type LeagueSendResult = LeagueSendResponse;
 
 /** Response of `POST /api/canvas/:canvasId/group/:groupId/league-refresh` (plan D6). */
-export type LeagueRefreshResult = {
-    added: number;
-    updated: number;
-    series: { status: LeagueSeriesStatus; complete: boolean };
-};
+export type LeagueRefreshResult = LeagueRefreshResponse;
 
 /**
  * How step 1 of "Refresh from league" (S2's serie refresh) ended:
@@ -260,8 +250,16 @@ const SKIP_REASONS: Record<LeagueSendSkipReason, string> = {
     "no-games": "no games yet",
     upcoming: "upcoming",
     "unsupported-length": "unsupported series length",
-    "not-found": "not found"
+    "not-found": "not found",
+    "not-linkable": "teams can't be linked"
 };
+
+// The wire reason is any string (a newer server may add one): word the known
+// ones, show the rest as sent.
+function skipReasonText(reason: string): string {
+    const known = Object.entries(SKIP_REASONS).find(([key]) => key === reason);
+    return known ? known[1] : reason;
+}
 
 /** "Sent 3 series · 1 already on this canvas · 1 skipped". */
 export function sendResultToast(result: LeagueSendResult): string {
@@ -271,7 +269,7 @@ export function sendResultToast(result: LeagueSendResult): string {
         parts.push(`${result.existing.length} already on this canvas`);
     const [onlySkip] = result.skipped;
     if (result.skipped.length === 1 && onlySkip)
-        parts.push(`1 skipped: ${SKIP_REASONS[onlySkip.reason]}`);
+        parts.push(`1 skipped: ${skipReasonText(onlySkip.reason)}`);
     else if (result.skipped.length > 1) parts.push(`${result.skipped.length} skipped`);
     return parts.length > 0 ? parts.join(" · ") : "Nothing sent";
 }
@@ -279,4 +277,123 @@ export function sendResultToast(result: LeagueSendResult): string {
 /** The group to pan to after a send: first created, else first existing. */
 export function focusGroupId(result: LeagueSendResult): string | null {
     return result.created[0]?.groupId ?? result.existing[0]?.groupId ?? null;
+}
+
+/** The server's cap on one send (`MAX_SERIES_PER_SEND` in send.js). */
+export const MAX_SERIES_PER_SEND = 50;
+
+export type LeagueOption = { id: string; name: string };
+
+type LinkedTeam = {
+    id: string;
+    name: string;
+    tournament_id?: string | null;
+    Tournament?: { id: string; name: string; source: string } | null;
+};
+
+/** The parts of a canvas group the "From league" tab reads. */
+export type LeagueCanvasGroup = {
+    Team1?: LinkedTeam | null;
+    Team2?: LinkedTeam | null;
+    LeagueImport?: LeagueImportView | null;
+};
+
+function linkedTeams(groups: LeagueCanvasGroup[]): LinkedTeam[] {
+    return groups
+        .flatMap((g) => [g.Team1, g.Team2])
+        .filter((t): t is LinkedTeam => t != null);
+}
+
+const byName = (a: LeagueOption, b: LeagueOption) =>
+    a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+
+/**
+ * The league select (Q1 A): your esclub leagues from the Teams page (archived
+ * ones left out) plus the esclub leagues of teams already linked on this
+ * canvas, once each, by name.
+ */
+export function leagueOptions(
+    managed: { id: string; name: string; source: string; archived_at: string | null }[],
+    groups: LeagueCanvasGroup[]
+): LeagueOption[] {
+    const options = new Map<string, LeagueOption>();
+    for (const team of linkedTeams(groups)) {
+        const t = team.Tournament;
+        if (t && t.source === "esclub") options.set(t.id, { id: t.id, name: t.name });
+    }
+    for (const t of managed) {
+        if (t.source !== "esclub") continue;
+        if (t.archived_at !== null && !options.has(t.id)) continue;
+        options.set(t.id, { id: t.id, name: t.name });
+    }
+    return [...options.values()].sort(byName);
+}
+
+/**
+ * The team select for one league: its teams from the Teams page plus the ones
+ * linked on this canvas (a league only linked here has no Teams-page rows).
+ */
+export function leagueTeamOptions(
+    tournamentId: string,
+    managedTeams: { id: string; name: string; tournament_id?: string | null }[],
+    groups: LeagueCanvasGroup[]
+): LeagueOption[] {
+    const options = new Map<string, LeagueOption>();
+    for (const team of [...managedTeams, ...linkedTeams(groups)]) {
+        if (team.tournament_id === tournamentId)
+            options.set(team.id, { id: team.id, name: team.name });
+    }
+    return [...options.values()].sort(byName);
+}
+
+/** The league series already on this canvas (D4), for the checklist. */
+export function onCanvasSeriesIds(groups: LeagueCanvasGroup[]): Set<string> {
+    const ids = new Set<string>();
+    for (const g of groups) {
+        if (g.LeagueImport) ids.add(g.LeagueImport.leagueSeriesId);
+    }
+    return ids;
+}
+
+/** The checklist's starting selection: the pre-checked rows (Q4 A). */
+export function checkedIds(rows: SeriesPickerRow[]): Set<string> {
+    return new Set(rows.filter((r) => r.checked && !r.disabled).map((r) => r.id));
+}
+
+/** "Send N series", disabled at 0 and above the server's cap. */
+export function sendButtonLabel(count: number): { label: string; disabled: boolean } {
+    if (count > MAX_SERIES_PER_SEND)
+        return {
+            label: `At most ${MAX_SERIES_PER_SEND} series per send`,
+            disabled: true
+        };
+    return { label: `Send ${count} series`, disabled: count === 0 };
+}
+
+/**
+ * A failed send, by HTTP status (null: network or an unreadable reply). The
+ * send is never replayed after a 401; the session is refreshed for the next
+ * press instead.
+ */
+export function leagueSendErrorMessage(status: number | null): string {
+    switch (status) {
+        case 401:
+            return "Your session expired · press Send again, or sign in";
+        case 403:
+            return "You can't edit this canvas";
+        case 404:
+            return "Canvas not found";
+        case 400:
+            return "Couldn't send these series";
+        default:
+            return "Couldn't send the series · try again";
+    }
+}
+
+/** The header refresh button's tooltip (D7). */
+export function refreshButtonTitle(view: LeagueImportView, running: boolean): string {
+    if (running) return "Refreshing…";
+    return view.complete
+        ? "Series finished · re-apply from league"
+        : "Refresh from league";
 }

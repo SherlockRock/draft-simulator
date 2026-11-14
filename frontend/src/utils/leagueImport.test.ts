@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { EsclubSeriesItem, EsclubSyncView } from "@draft-sim/shared-types";
 import {
+    checkedIds,
     focusGroupId,
     importedHeaderLabel,
+    leagueOptions,
+    leagueSendErrorMessage,
+    leagueTeamOptions,
+    onCanvasSeriesIds,
+    refreshButtonTitle,
+    sendButtonLabel,
     refreshToast,
     sendResultToast,
     seriesPickerRows,
@@ -512,11 +519,178 @@ describe("sendResultToast", () => {
                 sendResult(0, 0, [{ leagueSeriesId: "x", reason: "unsupported-length" }])
             )
         ).toBe("1 skipped: unsupported series length");
+        expect(
+            sendResultToast(
+                sendResult(0, 0, [{ leagueSeriesId: "x", reason: "not-linkable" }])
+            )
+        ).toBe("1 skipped: teams can't be linked");
+    });
+
+    it("shows a reason it doesn't know as sent", () => {
+        expect(
+            sendResultToast(
+                sendResult(0, 0, [{ leagueSeriesId: "x", reason: "brand-new" }])
+            )
+        ).toBe("1 skipped: brand-new");
     });
 
     it("handles existing-only and empty results", () => {
         expect(sendResultToast(sendResult(0, 1, []))).toBe("1 already on this canvas");
         expect(sendResultToast(sendResult(0, 0, []))).toBe("Nothing sent");
+    });
+});
+
+const tournament = (id: string, name: string, source = "esclub") => ({
+    id,
+    name,
+    source
+});
+
+const linked = (
+    id: string,
+    name: string,
+    tournamentId: string | null,
+    source = "esclub"
+) => ({
+    id,
+    owner_id: null,
+    name,
+    region: "EUW",
+    tournament_id: tournamentId,
+    Tournament: tournamentId
+        ? tournament(tournamentId, `League ${tournamentId}`, source)
+        : null
+});
+
+describe("leagueOptions", () => {
+    const managed = (
+        id: string,
+        name: string,
+        extra: { source?: string; archived?: boolean } = {}
+    ) => ({
+        id,
+        name,
+        source: extra.source ?? "esclub",
+        region: "EUW",
+        archived_at: extra.archived ? "2026-11-01T00:00:00Z" : null
+    });
+
+    it("lists your esclub leagues and the ones linked on this canvas, once each, by name", () => {
+        expect(
+            leagueOptions(
+                [
+                    managed("l-b", "Beta League"),
+                    managed("l-x", "Pickup", { source: "manual" }),
+                    managed("l-old", "Old League", { archived: true })
+                ],
+                [
+                    {
+                        Team1: linked("t1", "DOG", "l-a"),
+                        Team2: linked("t2", "CAT", "l-a")
+                    },
+                    { Team1: linked("t3", "EEL", "l-b"), Team2: null },
+                    { Team1: linked("t4", "Own", null), Team2: undefined },
+                    { Team1: linked("t5", "Other", "l-o", "manual") }
+                ]
+            )
+        ).toEqual([
+            { id: "l-b", name: "Beta League" },
+            { id: "l-a", name: "League l-a" }
+        ]);
+    });
+
+    it("keeps an archived league that is linked on this canvas", () => {
+        expect(
+            leagueOptions(
+                [managed("l-old", "Old League", { archived: true })],
+                [{ Team1: linked("t1", "DOG", "l-old") }]
+            )
+        ).toEqual([{ id: "l-old", name: "Old League" }]);
+    });
+});
+
+describe("leagueTeamOptions", () => {
+    it("merges the league's teams from Teams and the canvas, sorted, without duplicates", () => {
+        expect(
+            leagueTeamOptions(
+                "l-a",
+                [
+                    { id: "t2", name: "CAT", tournament_id: "l-a" },
+                    { id: "t9", name: "Elsewhere", tournament_id: "l-b" },
+                    { id: "t8", name: "Pickup", tournament_id: null }
+                ],
+                [
+                    {
+                        Team1: linked("t1", "DOG", "l-a"),
+                        Team2: linked("t2", "CAT", "l-a")
+                    },
+                    { Team1: linked("t3", "EEL", "l-b") }
+                ]
+            )
+        ).toEqual([
+            { id: "t2", name: "CAT" },
+            { id: "t1", name: "DOG" }
+        ]);
+    });
+});
+
+describe("onCanvasSeriesIds", () => {
+    it("collects the imported groups' series ids", () => {
+        const imported = view({ leagueSeriesId: "ls-7" });
+        expect(
+            onCanvasSeriesIds([{ LeagueImport: imported }, { LeagueImport: null }, {}])
+        ).toEqual(new Set(["ls-7"]));
+    });
+});
+
+describe("checkedIds", () => {
+    it("starts from the pre-checked, enabled rows", () => {
+        const rows = seriesPickerRows(
+            [
+                series({ id: "a", status: "finished" }),
+                series({ id: "b", status: "in_progress", complete: false }),
+                series({ id: "c", status: "finished" })
+            ],
+            new Set(["c"])
+        );
+        expect(checkedIds(rows)).toEqual(new Set(["a"]));
+    });
+});
+
+describe("sendButtonLabel", () => {
+    it("counts the series and caps a send at 50", () => {
+        expect(sendButtonLabel(0)).toEqual({ label: "Send 0 series", disabled: true });
+        expect(sendButtonLabel(3)).toEqual({ label: "Send 3 series", disabled: false });
+        expect(sendButtonLabel(50)).toEqual({ label: "Send 50 series", disabled: false });
+        expect(sendButtonLabel(51)).toEqual({
+            label: "At most 50 series per send",
+            disabled: true
+        });
+    });
+});
+
+describe("leagueSendErrorMessage", () => {
+    it("words a failed send by status", () => {
+        expect(leagueSendErrorMessage(401)).toBe(
+            "Your session expired · press Send again, or sign in"
+        );
+        expect(leagueSendErrorMessage(403)).toBe("You can't edit this canvas");
+        expect(leagueSendErrorMessage(404)).toBe("Canvas not found");
+        expect(leagueSendErrorMessage(400)).toBe("Couldn't send these series");
+        expect(leagueSendErrorMessage(500)).toBe("Couldn't send the series · try again");
+        expect(leagueSendErrorMessage(null)).toBe("Couldn't send the series · try again");
+    });
+});
+
+describe("refreshButtonTitle", () => {
+    it("says when the series is finished or a refresh is running", () => {
+        expect(refreshButtonTitle(view({ complete: true }), false)).toBe(
+            "Series finished · re-apply from league"
+        );
+        expect(refreshButtonTitle(view({ complete: false }), false)).toBe(
+            "Refresh from league"
+        );
+        expect(refreshButtonTitle(view({ complete: false }), true)).toBe("Refreshing…");
     });
 });
 

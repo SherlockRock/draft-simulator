@@ -8,9 +8,11 @@ import {
     Check,
     Trash2,
     Settings,
-    Trophy
+    Trophy,
+    RefreshCw
 } from "lucide-solid";
 import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
+import { importedHeaderLabel, refreshButtonTitle } from "../utils/leagueImport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     getSeriesGroupDimensions,
@@ -44,6 +46,10 @@ type SeriesGroupContainerProps = {
             firstPick?: "blue" | "red";
         }
     ) => void;
+    /** "Refresh from league" on an imported series (S3 D6); Canvas runs it. */
+    onRefreshFromLeague: (groupId: string) => void;
+    /** True while that group's league refresh runs (spinner, no second press). */
+    isLeagueRefreshing: (groupId: string) => boolean;
     // Pass-through for CanvasCard rendering
     renderDraftCard: (draft: CanvasDraft) => JSX.Element;
     // Connection anchor props
@@ -128,10 +134,18 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         if (!draft.Draft.winner) return null;
         return draft.Draft.winner === teamSide(draft, 1) ? 1 : 2;
     };
+    // S3 Q3 A: on a series sent from the league, esclub owns each game's
+    // sides, first pick and winner (the server refuses edits); they show
+    // read-only. Lifts when LeagueImport goes null (purge).
+    const leagueImport = () => props.group.LeagueImport ?? null;
+    const canEditGames = () => props.canEdit() && leagueImport() === null;
+    const gameControlTitle = (title: string) =>
+        leagueImport() ? `${title} · set by esclub` : title;
+    const isRefreshing = () => props.isLeagueRefreshing(props.group.id);
     // firstPick and winner are stored as sides, so swapping which team is on
     // blue must flip them too to keep them pinned to the same team.
     const handleSwapSides = (draft: CanvasDraft) => {
-        if (!props.canEdit()) return;
+        if (!canEditGames()) return;
         const metadata: {
             blueSideTeam: 1 | 2;
             firstPick: "blue" | "red";
@@ -144,13 +158,13 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
         props.onUpdateDraftMetadata(draft.Draft.id, metadata);
     };
     const handleSetFirstPick = (draft: CanvasDraft, team: 1 | 2) => {
-        if (!props.canEdit()) return;
+        if (!canEditGames()) return;
         props.onUpdateDraftMetadata(draft.Draft.id, {
             firstPick: teamSide(draft, team)
         });
     };
     const handleToggleWinner = (draft: CanvasDraft, team: 1 | 2) => {
-        if (!props.canEdit()) return;
+        if (!canEditGames()) return;
         const winner = teamSide(draft, team);
         props.onUpdateDraftMetadata(draft.Draft.id, {
             winner: draft.Draft.winner === winner ? null : winner
@@ -213,6 +227,27 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                             {props.group.metadata.redTeamName ?? "Team 2"}
                         </span>
                     </div>
+
+                    {/*
+                      Sent from the league (S3 D7): one truncating chip on the
+                      header's single row. A second row would make the frame
+                      taller than getSeriesGroupDimensions says, and a bulk-sent
+                      column (rowStepFor) would overlap.
+                    */}
+                    <Show when={leagueImport()}>
+                        {(imported) => (
+                            <a
+                                href={imported().esclubUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                class="min-w-0 max-w-[18rem] shrink truncate rounded border border-darius-purple-bright/40 bg-darius-purple/20 px-2 py-0.5 text-xs text-darius-purple-bright transition-colors hover:bg-darius-purple/35 hover:text-darius-text-primary"
+                                title="Open this series on esclub"
+                            >
+                                {importedHeaderLabel(imported())}
+                            </a>
+                        )}
+                    </Show>
                 </div>
 
                 <div class="flex shrink-0 items-center gap-2">
@@ -276,6 +311,29 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
 
                     {/* Settings + Delete Buttons */}
                     <Show when={props.canEdit()}>
+                        <Show when={leagueImport()}>
+                            {(imported) => (
+                                <button
+                                    type="button"
+                                    disabled={isRefreshing()}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        props.onRefreshFromLeague(props.group.id);
+                                    }}
+                                    class="rounded p-1 text-darius-purple-bright transition-colors hover:bg-darius-card-hover hover:text-darius-text-primary disabled:cursor-wait disabled:opacity-70"
+                                    title={refreshButtonTitle(imported(), isRefreshing())}
+                                    aria-label={refreshButtonTitle(
+                                        imported(),
+                                        isRefreshing()
+                                    )}
+                                >
+                                    <RefreshCw
+                                        size={16}
+                                        class={isRefreshing() ? "animate-spin" : ""}
+                                    />
+                                </button>
+                            )}
+                        </Show>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -373,7 +431,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                     <div class="mt-0.5 flex gap-1">
                                         <button
                                             type="button"
-                                            disabled={!props.canEdit()}
+                                            disabled={!canEditGames()}
                                             onClick={() =>
                                                 handleSetFirstPick(draft, team)
                                             }
@@ -383,13 +441,15 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                                     ? "border-darius-crimson/70 bg-darius-crimson/15 text-darius-text-primary"
                                                     : "border-darius-border bg-darius-card/60 text-darius-text-secondary enabled:hover:border-darius-crimson/40"
                                             }`}
-                                            title={`${teamNameForTeam(team)} first pick`}
+                                            title={gameControlTitle(
+                                                `${teamNameForTeam(team)} first pick`
+                                            )}
                                         >
                                             1st pick
                                         </button>
                                         <button
                                             type="button"
-                                            disabled={!props.canEdit()}
+                                            disabled={!canEditGames()}
                                             onClick={() =>
                                                 handleToggleWinner(draft, team)
                                             }
@@ -399,7 +459,9 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                                     ? "border-darius-ember/70 bg-darius-ember/20 text-darius-ember"
                                                     : "border-darius-border bg-darius-card/60 text-darius-text-secondary enabled:hover:border-darius-ember/40"
                                             }`}
-                                            title={`Set ${teamNameForTeam(team)} as winner`}
+                                            title={gameControlTitle(
+                                                `Set ${teamNameForTeam(team)} as winner`
+                                            )}
                                         >
                                             <Trophy size={11} />
                                             Won
@@ -418,7 +480,7 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                     <div class="order-2 flex shrink-0 items-center">
                                         <button
                                             type="button"
-                                            disabled={!props.canEdit()}
+                                            disabled={!canEditGames()}
                                             onClick={() => {
                                                 setIsSwapHovered(false);
                                                 handleSwapSides(draft);
@@ -430,10 +492,10 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                                 e.preventDefault();
                                             }}
                                             onPointerEnter={() =>
-                                                setIsSwapHovered(props.canEdit())
+                                                setIsSwapHovered(canEditGames())
                                             }
                                             onPointerMove={() =>
-                                                setIsSwapHovered(props.canEdit())
+                                                setIsSwapHovered(canEditGames())
                                             }
                                             onPointerDown={() => setIsSwapHovered(false)}
                                             onPointerUp={() => setIsSwapHovered(false)}
@@ -444,9 +506,9 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
                                             class="cursor-pointer rounded-full border border-darius-border bg-darius-card p-1.5 text-darius-text-secondary transition-colors focus:outline-none focus-visible:border-darius-ember/60 focus-visible:text-darius-ember disabled:cursor-not-allowed disabled:opacity-50"
                                             classList={{
                                                 "border-darius-ember/60 text-darius-ember":
-                                                    isSwapHovered() && props.canEdit()
+                                                    isSwapHovered() && canEditGames()
                                             }}
-                                            title="Swap sides"
+                                            title={gameControlTitle("Swap sides")}
                                         >
                                             <ArrowLeftRight size={14} />
                                         </button>

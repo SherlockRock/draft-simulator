@@ -8,8 +8,11 @@ import {
 import { VersusDraftListItem } from "../utils/schemas";
 import toast from "solid-toast";
 import { JsonImportPanel } from "./JsonImportPanel";
+import { LeagueImportPanel } from "./LeagueImportPanel";
+import type { LeagueCanvasGroup } from "../utils/leagueImport";
+import type { CardLayout } from "../utils/canvasCardLayout";
 
-type ImportTab = "versus" | "json";
+type ImportTab = "versus" | "json" | "league";
 
 type Props = {
     canvasId: string;
@@ -17,8 +20,15 @@ type Props = {
     positionY: number;
     existingDraftNames: string[];
     existingGroupNames: string[];
+    /** "From league" (S3 Q1 A): false on local and anonymous canvases. */
+    showLeagueTab: boolean;
+    /** The canvas's groups, for the league tab (linked leagues, series already here). */
+    canvasGroups: LeagueCanvasGroup[];
+    cardLayout: CardLayout;
     onClose: () => void;
     onSuccess: () => void;
+    /** After a league send: refetch the canvas, then pan to this group. */
+    onFocusGroup: (groupId: string) => void;
 };
 
 export const ImportToCanvasDialog: Component<Props> = (props) => {
@@ -136,8 +146,35 @@ export const ImportToCanvasDialog: Component<Props> = (props) => {
                     >
                         Import Versus Series
                     </button>
+                    <Show when={props.showLeagueTab}>
+                        <button
+                            type="button"
+                            class="flex-1 rounded px-3 py-2 text-sm font-medium transition-colors"
+                            classList={{
+                                "bg-darius-purple text-darius-text-primary":
+                                    activeTab() === "league",
+                                "text-darius-text-secondary hover:bg-darius-card":
+                                    activeTab() !== "league"
+                            }}
+                            onClick={() => setActiveTab("league")}
+                        >
+                            From league
+                        </button>
+                    </Show>
                 </div>
             </div>
+
+            <Show when={props.showLeagueTab && activeTab() === "league"}>
+                <LeagueImportPanel
+                    canvasId={props.canvasId}
+                    positionX={props.positionX}
+                    positionY={props.positionY}
+                    cardLayout={props.cardLayout}
+                    canvasGroups={props.canvasGroups}
+                    onClose={props.onClose}
+                    onFocusGroup={props.onFocusGroup}
+                />
+            </Show>
 
             <Show when={activeTab() === "json"}>
                 <JsonImportPanel

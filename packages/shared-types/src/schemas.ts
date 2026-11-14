@@ -342,6 +342,43 @@ export const LeagueImportSchema = z.object({
 });
 export type LeagueImport = z.infer<typeof LeagueImportSchema>;
 
+// Why a league send skipped a series (S3 D3, D11). The wire value is read as a
+// plain string so a reason added later can't fail a send that did create
+// groups; the client words the known ones.
+export const LEAGUE_SEND_SKIP_REASONS = [
+  "not-found",
+  "no-teams",
+  "no-games",
+  "upcoming",
+  "unsupported-length",
+  "not-linkable",
+] as const;
+export type LeagueSendSkipReason = (typeof LEAGUE_SEND_SKIP_REASONS)[number];
+
+const LeagueSendPlacedSchema = z.object({
+  leagueSeriesId: z.string(),
+  groupId: z.string(),
+});
+
+// POST /api/canvas/:canvasId/import/league-series (S3 D5).
+export const LeagueSendResponseSchema = z.object({
+  created: z.array(LeagueSendPlacedSchema),
+  existing: z.array(LeagueSendPlacedSchema),
+  skipped: z.array(
+    z.object({ leagueSeriesId: z.string(), reason: z.string() }),
+  ),
+});
+export type LeagueSendResponse = z.infer<typeof LeagueSendResponseSchema>;
+
+// POST /api/canvas/:canvasId/group/:groupId/league-refresh (S3 D6). status
+// is a plain string, as every esclub read schema's.
+export const LeagueRefreshResponseSchema = z.object({
+  added: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  series: z.object({ status: z.string(), complete: z.boolean() }),
+});
+export type LeagueRefreshResponse = z.infer<typeof LeagueRefreshResponseSchema>;
+
 export const CanvasGroupSchema = z.object({
   id: z.string(),
   canvas_id: z.string(),
