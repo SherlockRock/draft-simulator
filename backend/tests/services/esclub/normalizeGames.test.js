@@ -130,6 +130,23 @@ describe("group Bo3", () => {
     }
     expect(g1.participants.Gnar.lane).toBe("top");
   });
+  it("every participant carries the side its picking roster was on, five a side", () => {
+    for (const g of r.series.games) {
+      const replaced = new Map(g.substitutions.map((s) => [s.slot, s.played]));
+      const expected = {};
+      for (const c of group.choices[g.externalMatchId].filter((x) => x.is_final && x.type_choice === "PickCharacter")) {
+        const slot = getPicksArrayIndex(c.number, g.firstPick);
+        const alias = replaced.get(slot) ?? championAliasForKey(byRes.get(c.id_game_resource).id_external);
+        const teamNumber = group.teams.findIndex((t) => t.externalId === c.id_team_roster_source) + 1;
+        expected[alias] = g.blueSideTeam === teamNumber ? "blue" : "red";
+      }
+      expect(Object.keys(g.participants).sort()).toEqual(Object.keys(expected).sort());
+      for (const [alias, p] of Object.entries(g.participants)) expect(p.side).toBe(expected[alias]);
+      const sides = Object.values(g.participants).map((p) => p.side);
+      expect(sides.filter((x) => x === "blue")).toHaveLength(5);
+      expect(sides.filter((x) => x === "red")).toHaveLength(5);
+    }
+  });
   it("participants come only from the picking roster's side", () => {
     // Swap the sides of two same-champion participants: no longer matched.
     const d = clone(group);

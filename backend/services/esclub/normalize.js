@@ -24,6 +24,7 @@ const { championAliasForKey } = require("../../utils/championKeys");
  * @property {string|null} playerKey  id_oauth_riot; stable, never shown
  * @property {string|null} gameName
  * @property {string|null} tagLine
+ * @property {"blue"|"red"} side      the side of the roster that picked the champion
  */
 
 /**
@@ -300,6 +301,7 @@ function buildParticipants(finals, sideOf, participants, byResource, matchId, pl
       playerKey: typeof p.id_oauth_riot === "string" && p.id_oauth_riot ? p.id_oauth_riot : null,
       gameName: named ? p.name_riot_game : null,
       tagLine: named ? p.tag_riot : null,
+      side,
     };
   }
   return { participants: out, unmatched: participants.length - used.size };
