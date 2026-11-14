@@ -257,6 +257,68 @@ describe("refreshLeagueGroup: locking and reads", () => {
   });
 });
 
+describe("refreshLeagueGroup: one retry on a deadlock or serialization failure", () => {
+  // A fresh transaction object per attempt, as Sequelize gives.
+  let transactions;
+  beforeEach(() => {
+    transactions = [];
+    Canvas.sequelize.transaction.mockImplementation(async () => {
+      calls.push("transaction");
+      const t = {
+        commit: vi.fn(async () => {
+          calls.push("commit");
+          t.finished = "commit";
+        }),
+        rollback: vi.fn(async () => {
+          calls.push("rollback");
+          t.finished = "rollback";
+        }),
+        finished: undefined,
+      };
+      transactions.push(t);
+      return t;
+    });
+  });
+  const failure = (where, code) =>
+    Object.assign(new Error("lock trouble"), { [where]: { code } });
+
+  it.each([
+    ["40P01 on error.parent", "parent", "40P01"],
+    ["40001 on error.original", "original", "40001"],
+  ])("%s: rolls back, retries in a new transaction, and succeeds", async (_label, where, code) => {
+    games = [gameRow(0), gameRow(1)];
+    VersusDraft.findOne.mockRejectedValueOnce(failure(where, code));
+    const out = await run();
+    expect(out.result.added).toBe(1);
+    expect(transactions).toHaveLength(2);
+    expect(transactions[0].rollback).toHaveBeenCalledTimes(1);
+    expect(transactions[0].commit).not.toHaveBeenCalled();
+    expect(transactions[1].commit).toHaveBeenCalledTimes(1);
+    expect(CanvasGroup.findOne).toHaveBeenCalledTimes(2);
+    expect(CanvasGroup.findOne.mock.calls[1][0]).toMatchObject({ lock: true, transaction: transactions[1] });
+    expect(Draft.create.mock.calls[0][1]).toEqual({ transaction: transactions[1] });
+  });
+
+  it("retries once only: a second deadlock is thrown", async () => {
+    VersusDraft.findOne
+      .mockRejectedValueOnce(failure("parent", "40P01"))
+      .mockRejectedValueOnce(failure("parent", "40P01"));
+    await expect(run()).rejects.toMatchObject({ parent: { code: "40P01" } });
+    expect(transactions).toHaveLength(2);
+    for (const t of transactions) expect(t.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["a plain error", () => new Error("boom")],
+    ["another SQL state", () => failure("parent", "23505")],
+    ["GroupNotFoundError", () => new GroupNotFoundError()],
+  ])("%s is not retried", async (_label, make) => {
+    CanvasGroup.findOne.mockRejectedValueOnce(make());
+    await expect(run()).rejects.toBeTruthy();
+    expect(transactions).toHaveLength(1);
+  });
+});
+
 describe("refreshLeagueGroup: appends", () => {
   it("appends each missing game after the last card by positionX, locked, in this group; never moves a card", async () => {
     drafts = [draftRow(D0, 0), draftRow(D1, 1)];
@@ -301,6 +363,21 @@ describe("refreshLeagueGroup: appends", () => {
     // Group position, name and layout never written.
     expect(CanvasGroup.update).not.toHaveBeenCalled();
     expect(transaction.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("the rightmost card is in the middle of three: appends follow it (max x, not first or last)", async () => {
+    const D2 = "dddddddd-0000-4000-8000-000000000002";
+    drafts = [draftRow(D0, 0), draftRow(D1, 1), draftRow(D2, 2)];
+    cards = [
+      { id: "cd-0", draft_id: D0, positionX: 0, positionY: FIRST_Y },
+      { id: "cd-2", draft_id: D2, positionX: 760, positionY: FIRST_Y + 40 },
+      { id: "cd-1", draft_id: D1, positionX: 380, positionY: FIRST_Y },
+    ];
+    games = [gameRow(0), gameRow(1), gameRow(2), gameRow(3)];
+    await run();
+    const origin = nextSeriesCardOrigin({ positionX: 760, positionY: FIRST_Y + 40 });
+    expect(CanvasDraft.create).toHaveBeenCalledTimes(1);
+    expect(CanvasDraft.create.mock.calls[0][0]).toMatchObject({ positionX: origin.x, positionY: origin.y });
   });
 
   it("a card dragged out of the group: its Draft is not re-added and is still updated", async () => {

@@ -235,11 +235,25 @@ describe("validateSendBody", () => {
     ["positionX missing", { leagueSeriesIds: [sid(1)], positionY: 1 }],
     ["positionY a string", { ...ok, positionY: "5" }],
     ["positionX NaN-like", { ...ok, positionX: null }],
-    ["rowStep a string", { ...ok, rowStep: "900" }],
   ])("refuses %s", (_label, body) => {
     const result = validateSendBody(body);
     expect(result.ok).toBe(false);
     expect(typeof result.error).toBe("string");
+  });
+
+  // D5: the server falls back to the default step when it has no usable one,
+  // like `columnPositions` does; a bad step never refuses the send.
+  it.each([
+    ["null", null],
+    ["a string", "900"],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["an object", { step: 900 }],
+  ])("treats rowStep %s as absent (default step)", (_label, rowStep) => {
+    expect(validateSendBody({ ...ok, rowStep })).toEqual({
+      ok: true,
+      value: { leagueSeriesIds: [sid(1)], positionX: 10, positionY: 20, rowStep: undefined },
+    });
   });
 
   it("accepts exactly 50 ids", () => {
@@ -256,6 +270,24 @@ describe("sendLeagueSeries", () => {
     expect(opts.where).toEqual({ id: CANVAS });
     expect(opts.lock).toBe(true);
     expect(opts.transaction).toBe(transaction);
+  });
+
+  it("loads the series and the games inside the transaction, after the lock", async () => {
+    await run();
+    expect(LeagueSeries.findAll).toHaveBeenCalledTimes(1);
+    expect(LeagueSeries.findAll.mock.calls[0][0].transaction).toBe(transaction);
+    expect(LeagueGame.findAll).toHaveBeenCalledTimes(1);
+    expect(LeagueGame.findAll.mock.calls[0][0].transaction).toBe(transaction);
+    const lock = calls.indexOf("Canvas.findOne");
+    expect(calls.indexOf("LeagueSeries.findAll")).toBeGreaterThan(lock);
+    expect(calls.indexOf("LeagueGame.findAll")).toBeGreaterThan(lock);
+  });
+
+  it("D5: rowStep null falls back to the default step", async () => {
+    seriesRows = [seriesRow(1), seriesRow(2)];
+    gameRows = [gameRow(sid(1), 0), gameRow(sid(2), 0)];
+    await run({ leagueSeriesIds: [sid(1), sid(2)], rowStep: null });
+    expect(CanvasGroup.create.mock.calls.map((c) => c[0].positionY)).toEqual([300, 300 + DEFAULT_ROW_STEP]);
   });
 
   it("throws CanvasNotFoundError and rolls back when the canvas is gone", async () => {

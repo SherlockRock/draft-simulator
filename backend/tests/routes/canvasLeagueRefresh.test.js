@@ -407,6 +407,51 @@ describe("POST /api/canvas/:canvasId/group/:groupId/league-refresh", () => {
     expect(payload).toBe(await canvasProjections.buildCanvasSnapshot.mock.results[0].value);
   });
 
+  it("the rightmost card is in the middle of the array: the append follows it, not the first or last card", async () => {
+    const D2 = "dddddddd-0000-4000-8000-000000000002";
+    db.drafts.push(draftRow(D1, 1), draftRow(D2, 2));
+    db.cards = [
+      { id: "cd-0", canvas_id: CANVAS, group_id: GROUP, draft_id: D0, positionX: 0, positionY: FIRST_Y },
+      { id: "cd-2", canvas_id: CANVAS, group_id: GROUP, draft_id: D2, positionX: 760, positionY: FIRST_Y + 40 },
+      { id: "cd-1", canvas_id: CANVAS, group_id: GROUP, draft_id: D1, positionX: 380, positionY: FIRST_Y },
+    ];
+    db.games = [gameRow(0), gameRow(1), gameRow(2), gameRow(3)];
+    const res = await press();
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ added: 1 });
+    const origin = nextSeriesCardOrigin({ positionX: 760, positionY: FIRST_Y + 40 });
+    expect(CanvasDraft.create).toHaveBeenCalledTimes(1);
+    expect(CanvasDraft.create.mock.calls[0][0]).toMatchObject({ positionX: origin.x, positionY: origin.y });
+  });
+
+  it("retries once on a deadlock (40P01): second attempt in a fresh transaction, 200 and one broadcast", async () => {
+    db.games = [gameRow(0), gameRow(1)];
+    const deadlock = Object.assign(new Error("deadlock detected"), { parent: { code: "40P01" } });
+    VersusDraft.findOne.mockRejectedValueOnce(deadlock);
+    const res = await press();
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ added: 1 });
+    expect(Canvas.sequelize.transaction).toHaveBeenCalledTimes(2);
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
+    expect(transaction.commit).toHaveBeenCalledTimes(1);
+    expect(calls.indexOf("rollback")).toBeLessThan(calls.lastIndexOf("transaction"));
+    expect(Draft.create).toHaveBeenCalledTimes(1);
+    expect(socketService.emitToRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it("a second deadlock in a row is not retried again: 500, both attempts rolled back", async () => {
+    const deadlock = () => Object.assign(new Error("deadlock detected"), { original: { code: "40P01" } });
+    VersusDraft.findOne.mockRejectedValueOnce(deadlock()).mockRejectedValueOnce(deadlock());
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await press();
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Failed to refresh league series" });
+    expect(Canvas.sequelize.transaction).toHaveBeenCalledTimes(2);
+    expect(transaction.rollback).toHaveBeenCalledTimes(2);
+    expect(socketService.emitToRoom).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
   it("a card dragged out of the group: not re-added, still updated", async () => {
     db.drafts.push(draftRow(D1, 1, { winner: null, completed: false }));
     // D1's card sits on the canvas outside the group.

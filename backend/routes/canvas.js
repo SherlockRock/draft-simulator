@@ -2380,8 +2380,16 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     await assertCanvasAccess({ userId: req.user.id, canvasId, level: "edit" });
     t = await Canvas.sequelize.transaction();
 
+    // Lock the group row first (FOR UPDATE), before the VersusDraft and the
+    // game Cards: group → VersusDraft is the order the league refresh and the
+    // group delete take, so none of them can deadlock with this save (the old
+    // unlocked read wrote the VersusDraft and locked the group last). It also
+    // means the metadata merged below is the committed one, not a stale copy
+    // a concurrent refresh is rewriting. Only this one group is locked, so it
+    // can't invert the id-ordered group sets of delete and draft-positions.
     const group = await CanvasGroup.findOne({
       where: { id: groupId, canvas_id: canvasId },
+      lock: true,
       transaction: t,
     });
 

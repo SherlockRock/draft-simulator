@@ -24,6 +24,7 @@ const UserTournament = require("../../models/UserTournament");
 const teamAccess = require("../../services/teamAccess");
 const canvasWriteGuards = require("../../services/canvasWriteGuards");
 const canvasProjections = require("../../routes/canvasProjections");
+const { DEFAULT_ROW_STEP } = require("../../services/leagueCanvas/plan");
 
 const CANVAS = "cccccccc-0000-4000-8000-000000000001";
 const USER = "eeeeeeee-0000-4000-8000-000000000001";
@@ -249,12 +250,24 @@ describe("POST /api/canvas/:canvasId/import/league-series", () => {
     ["duplicates", { leagueSeriesIds: [sid(1), sid(1)] }],
     ["positionX missing", { positionX: undefined }],
     ["positionY a string", { positionY: "300" }],
-    ["rowStep a string", { rowStep: "900" }],
   ])("400 for %s, before any query", async (_label, body) => {
     const res = await post(body);
     expect(res.status).toBe(400);
     expect(typeof res.body.error).toBe("string");
     expect(calls).toEqual([]);
+  });
+
+  // D5: no usable rowStep means the default step, never a 400.
+  it.each([
+    ["null", { rowStep: null }],
+    ["absent", {}],
+    ["a string", { rowStep: "900" }],
+  ])("rowStep %s falls back to the default step", async (_label, body) => {
+    seriesRows = [seriesRow(1), seriesRow(2)];
+    gameRows = [gameRow(sid(1), 0), gameRow(sid(2), 0)];
+    const res = await post({ leagueSeriesIds: [sid(1), sid(2)], ...body });
+    expect(res.status).toBe(201);
+    expect(CanvasGroup.create.mock.calls.map(([g]) => g.positionY)).toEqual([300, 300 + DEFAULT_ROW_STEP]);
   });
 
   it("404 when the canvas row is gone, rolled back", async () => {

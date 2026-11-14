@@ -62,8 +62,9 @@ const isFiniteNumber = (value) =>
 
 /**
  * Validate the send body before any query (D5): 1..50 UUID strings without
- * duplicates (compared lowercased), finite `positionX` / `positionY`, and an
- * optional finite `rowStep` (clamped later by `columnPositions`).
+ * duplicates (compared lowercased) and finite `positionX` / `positionY`.
+ * `rowStep` is optional: a finite number passes through (clamped later by
+ * `columnPositions`); anything else becomes `undefined`, the default step.
  * @param {object} body the request body
  * @returns {{ ok: true, value: { leagueSeriesIds: string[], positionX: number, positionY: number, rowStep: number|undefined } } | { ok: false, error: string }}
  */
@@ -95,12 +96,17 @@ function validateSendBody(body) {
   if (!isFiniteNumber(positionX) || !isFiniteNumber(positionY)) {
     return { ok: false, error: "positionX and positionY must be numbers" };
   }
-  if (rowStep !== undefined && !isFiniteNumber(rowStep)) {
-    return { ok: false, error: "rowStep must be a number" };
-  }
+  // D5: the server falls back to the default step when the client gives no
+  // usable one. Anything but a finite number (absent, null, a string, NaN)
+  // counts as absent, as in `columnPositions`; it never refuses the send.
   return {
     ok: true,
-    value: { leagueSeriesIds: ids, positionX, positionY, rowStep },
+    value: {
+      leagueSeriesIds: ids,
+      positionX,
+      positionY,
+      rowStep: isFiniteNumber(rowStep) ? rowStep : undefined,
+    },
   };
 }
 

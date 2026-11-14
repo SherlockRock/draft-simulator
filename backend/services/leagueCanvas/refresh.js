@@ -224,6 +224,18 @@ function changedNames(row, names) {
 }
 
 /**
+ * Postgres aborted the transaction for a lock cycle (40P01
+ * deadlock_detected) or a serialization failure (40001); same predicate as
+ * routes/canvas.js. The refresh is idempotent, so it is safe to run again.
+ * @param {Error} error
+ * @returns {boolean}
+ */
+function isRetryableTransactionError(error) {
+  const code = error?.parent?.code ?? error?.original?.code;
+  return code === "40P01" || code === "40001";
+}
+
+/**
  * Refresh one imported series group from the mirror (D6). One transaction:
  * lock the group (on this canvas) and its VersusDraft, read the series'
  * Drafts, the group's cards, the mirror games and series, apply planRefresh
@@ -231,12 +243,28 @@ function changedNames(row, names) {
  * team names on the group metadata and VersusDraft when the linked teams'
  * names changed. Access is the caller's job; so are the timestamp, snapshot
  * and broadcast (only when `changed`).
+ *
+ * Lock order is group, then VersusDraft, as in the group PUT and the group
+ * delete. Should Postgres still abort the transaction on a deadlock or a
+ * serialization failure (canvas delete takes VersusDraft before group), it is
+ * rolled back and run once more in a new transaction: the refresh re-reads
+ * everything and is idempotent.
  * @param {{ canvasId: string, groupId: string }} input
  * @returns {Promise<{ changed: boolean, result: { added: number, updated: number, series: { status: string, complete: boolean } } }>}
  * @throws {GroupNotFoundError} the group isn't on this canvas (rolled back)
  * @throws {NotImportedSeriesError} not a series sent from the mirror, or purged (rolled back)
  */
-async function refreshLeagueGroup({ canvasId, groupId }) {
+async function refreshLeagueGroup(input) {
+  try {
+    return await refreshOnce(input);
+  } catch (error) {
+    if (!isRetryableTransactionError(error)) throw error;
+    return refreshOnce(input);
+  }
+}
+
+// One attempt of refreshLeagueGroup, in its own transaction.
+async function refreshOnce({ canvasId, groupId }) {
   const transaction = await Canvas.sequelize.transaction();
   try {
     const group = await lockGroup(canvasId, groupId, transaction);
@@ -330,6 +358,7 @@ async function refreshLeagueGroup({ canvasId, groupId }) {
 module.exports = {
   GroupNotFoundError,
   NotImportedSeriesError,
+  isRetryableTransactionError,
   lockGroup,
   lockVersusDraft,
   loadSeriesDrafts,

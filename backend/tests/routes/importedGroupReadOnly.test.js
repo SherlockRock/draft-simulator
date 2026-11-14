@@ -660,6 +660,60 @@ describe("generated SQL of the imported-series count", () => {
   });
 });
 
+// S3 Task 5 review, MAJOR 1. The league refresh locks the group, then the
+// VersusDraft; the group delete locks the canvas's groups, then destroys the
+// VersusDraft last. The PUT used to read the group unlocked, write the
+// VersusDraft and only then lock the group in its UPDATE (VD → G), which can
+// deadlock against both. It now takes the group lock first, like they do.
+describe("PUT group: the group row is locked first (lock order G → VD)", () => {
+  const expectGroupLockedFirst = () => {
+    const [opts] = CanvasGroup.findOne.mock.calls[0];
+    expect(opts.where).toEqual({ id: "g-1", canvas_id: "c-1" });
+    expect(opts.lock).toBe(true);
+    expect(opts.transaction).toBe(transaction);
+    const lockOrder = CanvasGroup.findOne.mock.invocationCallOrder[0];
+    expect(Canvas.sequelize.transaction.mock.invocationCallOrder[0]).toBeLessThan(lockOrder);
+    for (const mock of [VersusDraft.findByPk, versusDraft.update, group.update]) {
+      expect(mock).toHaveBeenCalled();
+      expect(mock.mock.invocationCallOrder[0]).toBeGreaterThan(lockOrder);
+    }
+  };
+
+  it("on an imported series (a disabled-champions save writes the VersusDraft)", async () => {
+    const res = await putGroup(
+      dialogSave({ metadata: { disabledChampions: ["Ahri"] } }),
+    );
+    expect(res.status).toBe(200);
+    expectGroupLockedFirst();
+  });
+
+  it("on a manual series rename", async () => {
+    versusDraft.league_series_id = null;
+    const res = await putGroup({ name: "Renamed" });
+    expect(res.status).toBe(200);
+    expectGroupLockedFirst();
+  });
+
+  it("renders FOR UPDATE on the group read, pinned to the canvas (sequelize.query stubbed)", async () => {
+    CanvasGroup.findOne.mockRestore();
+    CanvasGroup.findAll.mockRestore();
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue(null);
+
+    const res = await putGroup({ name: "Renamed" });
+
+    expect(res.status).toBe(404);
+    expect(query).toHaveBeenCalledTimes(1);
+    const [sql, options] = query.mock.calls[0];
+    expect(typeof sql).toBe("string");
+    expect(sql).toMatch(/FROM "CanvasGroups" AS "CanvasGroup"/);
+    expect(sql).toContain(`"CanvasGroup"."id" = 'g-1'`);
+    expect(sql).toContain(`"CanvasGroup"."canvas_id" = 'c-1'`);
+    expect(sql).toMatch(/FOR UPDATE;$/);
+    // Sequelize copies the options object; the transaction's methods are ours.
+    expect(options.transaction.commit).toBe(transaction.commit);
+  });
+});
+
 describe("generated SQL of the imported-draft lookup", () => {
   it("is one query joining the draft's VersusDraft with league_series_id set", async () => {
     associateOnce();
