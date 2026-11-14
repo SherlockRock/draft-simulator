@@ -5,6 +5,8 @@ import {
     createSignal,
     For,
     JSX,
+    onCleanup,
+    onMount,
     Show
 } from "solid-js";
 import { Title } from "@solidjs/meta";
@@ -13,18 +15,34 @@ import toast from "solid-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import type {
     BulkTeamAction,
+    EsclubSyncView,
     ManagedTeamRow,
     TeamsManageResponse
 } from "@draft-sim/shared-types";
 import { useUser } from "../userProvider";
 import { AuthGuard } from "../components/AuthGuard";
+import { AddLeagueDialog } from "../components/AddLeagueDialog";
 import { TeamsGroup } from "../components/teams/TeamsGroup";
 import { TeamsRow } from "../components/teams/TeamsRow";
 import { TeamsBulkBar } from "../components/teams/TeamsBulkBar";
 import { DeleteTeamsDialog } from "../components/teams/DeleteTeamsDialog";
 import { NewTeamForm } from "../components/teams/NewTeamForm";
 import { invalidateTeams } from "../components/teams/invalidateTeams";
-import { bulkTeams, fetchTeamsManage, setTournamentArchived } from "../utils/actions";
+import {
+    bulkTeams,
+    fetchEsclubSync,
+    fetchEsclubTournament,
+    fetchTeamsManage,
+    refreshEsclubLeague,
+    setTournamentArchived
+} from "../utils/actions";
+import {
+    esclubActionMessage,
+    esclubActionSync,
+    esclubRefreshButton,
+    esclubSyncPollInterval,
+    type EsclubActionResult
+} from "../utils/esclubSync";
 import {
     PAGE_INTRO,
     allSelected,
@@ -74,6 +92,146 @@ const TeamsPage: Component = () => {
         // Wait for sign-in: a signed-out visit would 401 and retry.
         enabled: Boolean(user())
     }));
+
+    const [addLeagueOpen, setAddLeagueOpen] = createSignal(false);
+    const [syncs, setSyncs] = createSignal<EsclubSyncView[]>([]);
+    const syncIds = createMemo(() => syncs().map((sync) => sync.id));
+    const [now, setNow] = createSignal(Date.now());
+    onMount(() => {
+        const timer = setInterval(() => setNow(Date.now()), 15_000);
+        onCleanup(() => clearInterval(timer));
+    });
+
+    const trackSync = (sync: EsclubSyncView) => {
+        setSyncs((previous) =>
+            previous.some((item) => item.id === sync.id) ? previous : [...previous, sync]
+        );
+    };
+
+    const handleEsclubResult = (result: EsclubActionResult) => {
+        setNow(Date.now());
+        const sync = esclubActionSync(result);
+        if (sync) trackSync(sync);
+        if (result.status === 200 && "known" in result.body) {
+            void invalidateTeams(queryClient);
+        }
+        void queryClient.invalidateQueries({ queryKey: ["esclubTournament"] });
+    };
+
+    // Page-owned watchers survive closing Add league or collapsing Archived.
+    // Stable ids keep a watcher mounted through teamsManage refetches.
+    const SyncWatcher: Component<{ id: string }> = (props) => {
+        const statusQuery = useQuery(() => ({
+            queryKey: ["esclubSync", props.id],
+            queryFn: () => fetchEsclubSync(props.id),
+            enabled: Boolean(user()),
+            retry: false,
+            refetchInterval: (query) =>
+                esclubSyncPollInterval(
+                    query.state.data?.sync.status,
+                    query.state.error !== null
+                )
+        }));
+
+        createEffect(() => {
+            const sync = statusQuery.data?.sync;
+            if (!sync || sync.status === "running" || statusQuery.isFetching) return;
+            setNow(Date.now());
+            setSyncs((previous) => previous.filter((item) => item.id !== sync.id));
+            void invalidateTeams(queryClient);
+            void queryClient.invalidateQueries({ queryKey: ["esclubTournament"] });
+            if (sync.status === "succeeded") toast.success("League sync finished");
+            else
+                toast.error(
+                    "League sync failed. Saved teams have been refreshed; try again when available."
+                );
+        });
+
+        return (
+            <Show when={statusQuery.isError}>
+                <p role="status" class="mb-4 text-sm text-slate-200">
+                    Could not check the league sync.
+                    <button
+                        type="button"
+                        onClick={() => void statusQuery.refetch()}
+                        disabled={statusQuery.isFetching}
+                        class="ml-2 text-teal-400 underline disabled:opacity-50"
+                    >
+                        Retry status
+                    </button>
+                </p>
+            </Show>
+        );
+    };
+
+    const RefreshLeagueButton: Component<{ id: string }> = (props) => {
+        const tournamentQuery = useQuery(() => ({
+            queryKey: ["esclubTournament", props.id],
+            queryFn: () => fetchEsclubTournament(props.id),
+            enabled: Boolean(user()),
+            retry: false
+        }));
+
+        createEffect(() => {
+            // A cached running row may already have finished. Wait for fresh data.
+            if (tournamentQuery.isFetching) return;
+            const running = tournamentQuery.data?.sync.running;
+            if (running) trackSync(running);
+        });
+
+        const refreshMutation = useMutation(() => ({
+            mutationFn: () => refreshEsclubLeague(props.id),
+            retry: false,
+            onSuccess: (result) => {
+                handleEsclubResult(result);
+                const message = esclubActionMessage(result, Date.now());
+                if (result.status === 200 || result.status === 202)
+                    toast.success(message);
+                else toast.error(message);
+            },
+            onError: () => toast.error("Could not refresh the league. Please try again.")
+        }));
+
+        const state = createMemo(() => {
+            const data = tournamentQuery.data;
+            if (!data) return { label: "Refresh league", disabled: true };
+            const running = syncs().find((sync) => sync.tournamentId === props.id);
+            return esclubRefreshButton(
+                {
+                    ...data,
+                    sync: { ...data.sync, running: running ?? data.sync.running }
+                },
+                now()
+            );
+        });
+
+        return (
+            <>
+                <button
+                    type="button"
+                    onClick={() => refreshMutation.mutate()}
+                    disabled={
+                        refreshMutation.isPending ||
+                        state().disabled ||
+                        tournamentQuery.isError
+                    }
+                    class="rounded-md border border-teal-700 px-2.5 py-1 text-sm text-teal-400 transition-colors hover:bg-teal-700/20 disabled:opacity-50"
+                >
+                    {refreshMutation.isPending ? "Refreshing…" : state().label}
+                </button>
+                <Show when={tournamentQuery.isError}>
+                    <button
+                        type="button"
+                        onClick={() => void tournamentQuery.refetch()}
+                        disabled={tournamentQuery.isFetching}
+                        class="text-sm text-teal-400 underline disabled:opacity-50"
+                    >
+                        Retry sync status
+                    </button>
+                </Show>
+            </>
+        );
+    };
 
     // Everything below renders by stable string keys (team ids, league ids) and
     // looks the current object up in a Map. buildTeamsPageGroups returns fresh
@@ -282,23 +440,28 @@ const TeamsPage: Component = () => {
                         region={regionLabel(l().region)}
                         countLabel={teamCountLabel(l().teams.length)}
                         actions={
-                            <Show when={l().source !== "manual"}>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        leagueMutation.mutate({
-                                            id: l().id,
-                                            archived: props.archiveTarget
-                                        })
-                                    }
-                                    disabled={busy()}
-                                    class={SMALL_BUTTON}
-                                >
-                                    {props.archiveTarget
-                                        ? "Archive league"
-                                        : "Restore league"}
-                                </button>
-                            </Show>
+                            <>
+                                <Show when={l().source === "esclub"}>
+                                    <RefreshLeagueButton id={l().id} />
+                                </Show>
+                                <Show when={l().source !== "manual"}>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            leagueMutation.mutate({
+                                                id: l().id,
+                                                archived: props.archiveTarget
+                                            })
+                                        }
+                                        disabled={busy()}
+                                        class={SMALL_BUTTON}
+                                    >
+                                        {props.archiveTarget
+                                            ? "Archive league"
+                                            : "Restore league"}
+                                    </button>
+                                </Show>
+                            </>
                         }
                     >
                         <RowList
@@ -328,12 +491,23 @@ const TeamsPage: Component = () => {
                     }
                 >
                     <div class="mx-auto max-w-3xl p-4 pb-28 sm:p-8 sm:pb-28">
-                        <h1 class="mb-2 text-3xl font-bold text-darius-text-primary">
-                            Teams
-                        </h1>
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <h1 class="text-3xl font-bold text-darius-text-primary">
+                                Teams
+                            </h1>
+                            <button
+                                type="button"
+                                onClick={() => setAddLeagueOpen(true)}
+                                class="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-slate-50 transition-colors hover:bg-teal-600"
+                            >
+                                Add league
+                            </button>
+                        </div>
                         <p class="mb-8 text-sm text-darius-text-secondary">
                             {PAGE_INTRO}
                         </p>
+
+                        <For each={syncIds()}>{(id) => <SyncWatcher id={id} />}</For>
 
                         <Show when={teamsQuery.isError}>
                             <div class="mb-6 rounded-lg border border-darius-border bg-darius-card p-6">
@@ -464,6 +638,11 @@ const TeamsPage: Component = () => {
                 pending={bulkMutation.isPending}
                 onCancel={() => setDeleteRows([])}
                 onConfirm={confirmDelete}
+            />
+            <AddLeagueDialog
+                isOpen={addLeagueOpen()}
+                onClose={() => setAddLeagueOpen(false)}
+                onResult={handleEsclubResult}
             />
         </AuthGuard>
     );
