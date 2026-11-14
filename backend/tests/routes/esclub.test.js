@@ -42,6 +42,17 @@ const YID = "66666666-6666-4666-8666-666666666666";
 const STAGE = "77777777-7777-4777-8777-777777777777";
 const TEAM_A = "88888888-8888-4888-8888-888888888888";
 const TEAM_B = "99999999-9999-4999-8999-999999999999";
+const LOG_SENTINELS = ["PLAYERKEY-LOG", "Player99#T99", "esclub-user-log", "MEMBER-ROLE-LOG"];
+const privateError = () => {
+  const err = new TypeError(LOG_SENTINELS.join(" "));
+  // The mutable instance name is also untrusted; classify by the class.
+  err.name = "PLAYERKEY-LOG";
+  return err;
+};
+const expectPrivateLogs = () => {
+  const text = JSON.stringify(console.error.mock.calls);
+  for (const sentinel of LOG_SENTINELS) expect(text).not.toContain(sentinel);
+};
 
 const syncRow = (over = {}) => ({
   id: YID,
@@ -236,7 +247,8 @@ describe("POST /leagues", () => {
     addLeague.mockResolvedValue({ joined: syncRow() });
     const res = await post();
     expect(res.status).toBe(200);
-    expect(res.body.joined.id).toBe(YID);
+    expect(res.body.sync.id).toBe(YID);
+    expect(res.body).not.toHaveProperty("joined");
   });
 
   it("409 busy", async () => {
@@ -281,12 +293,15 @@ describe("POST /leagues", () => {
     });
   });
 
-  it("500 with a generic message and a log when it throws", async () => {
-    addLeague.mockRejectedValue(new Error("db password is hunter2"));
+  it("500 with a generic message and a safe error classification when it throws", async () => {
+    addLeague.mockRejectedValue(privateError());
     const res = await post();
     expect(res.status).toBe(500);
-    expect(JSON.stringify(res.body)).not.toContain("hunter2");
-    expect(console.error).toHaveBeenCalled();
+    expect(res.body).toEqual({ error: "Something went wrong" });
+    expectPrivateLogs();
+    expect(console.error).toHaveBeenCalledWith("esclub route failed", {
+      route: "POST /api/esclub/leagues", errorClass: "TypeError",
+    });
   });
 
   it("copes with no body", async () => {
@@ -338,14 +353,23 @@ describe("POST /tournaments/:id/refresh", () => {
     finish({});
   });
 
-  it("logs a background failure and still answers 202", async () => {
+  it.each(["reject", "throw", "late rejection"])("logs a safe background classification on %s and still answers 202", async (mode) => {
     vi.spyOn(Tournament, "findByPk").mockResolvedValue(esclubTournament());
     beginSync.mockResolvedValue({ sync: syncRow() });
-    runSync.mockRejectedValue(new Error("boom"));
+    let reject;
+    if (mode === "reject") runSync.mockRejectedValue(privateError());
+    else if (mode === "throw") runSync.mockImplementation(() => { throw privateError(); });
+    else runSync.mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
     const res = await post();
     expect(res.status).toBe(202);
+    if (reject) reject(privateError());
     await new Promise((r) => setImmediate(r));
-    expect(console.error).toHaveBeenCalled();
+    expectPrivateLogs();
+    expect(console.error).toHaveBeenCalledWith("esclub sync failed", {
+      route: "POST /api/esclub/tournaments/:id/refresh", id: TID,
+      errorClass: "TypeError", syncId: YID, tournamentId: TID,
+      stageId: null, seriesId: null,
+    });
   });
 
   it.each([
@@ -677,6 +701,49 @@ describe("SQL the routes make", () => {
     ensureAssociations();
     return vi.spyOn(sequelize, "query").mockResolvedValue([]);
   };
+
+  it.each(["refresh", "series"])("tournament id/source lookup for %s selects only its scope columns", async (action) => {
+    const query = capture().mockResolvedValue(Tournament.build(esclubTournament()));
+    beginSync.mockResolvedValue({ cooldown: { availableAt: new Date("2026-11-14T10:10:00Z") } });
+    vi.spyOn(LeagueSeries, "findAll").mockResolvedValue([]);
+    const app = request(buildApp());
+    const res = action === "refresh"
+      ? await app.post(`/api/esclub/tournaments/${TID}/refresh`)
+      : await app.get(`/api/esclub/tournaments/${TID}/series`);
+    expect(res.status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toBe(
+      `SELECT "id", "source" FROM "Tournaments" AS "Tournament" WHERE "Tournament"."id" = '${TID}';`,
+    );
+  });
+
+  it("tournament view selects only public tournament columns by primary key", async () => {
+    const query = capture().mockResolvedValue(Tournament.build(esclubTournament()));
+    vi.spyOn(LeagueStage, "findAll").mockResolvedValue([]);
+    vi.spyOn(EsclubSync, "findOne").mockResolvedValue(null);
+    vi.spyOn(syncState, "nextAvailableAt").mockResolvedValue(null);
+    vi.spyOn(syncState, "usageToday").mockResolvedValue({ used: 0, budget: 1 });
+    const res = await request(buildApp()).get(`/api/esclub/tournaments/${TID}`);
+    expect(res.status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toBe(
+      `SELECT "id", "name", "region", "source", "last_synced_at" FROM "Tournaments" AS "Tournament" WHERE "Tournament"."id" = '${TID}';`,
+    );
+  });
+
+  it("series-refresh lookup selects only id, tournament and stage by primary key", async () => {
+    const query = capture().mockResolvedValue(LeagueSeries.build(seriesRow()));
+    beginSync.mockResolvedValue({ cooldown: { availableAt: new Date("2026-11-14T10:10:00Z") } });
+    const res = await request(buildApp()).post(`/api/esclub/series/${SID}/refresh`);
+    expect(res.status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toBe(
+      `SELECT "id", "tournament_id", "stage_id" FROM "LeagueSeries" AS "LeagueSeries" WHERE "LeagueSeries"."id" = '${SID}';`,
+    );
+    expect(beginSync).toHaveBeenCalledWith(expect.objectContaining({
+      tournamentId: TID, stageId: STAGE, seriesId: SID,
+    }));
+  });
 
   it("series list: one filtered, ordered select with two team joins", async () => {
     const query = capture();

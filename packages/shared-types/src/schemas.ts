@@ -1601,20 +1601,26 @@ export type ScoutPlayersResponse = z.infer<typeof ScoutPlayersResponseSchema>;
 // expose picks, sides, winner and lanes (champion -> lane) only.
 
 // Counts only, as the sync engine's summary builds them. Every key optional so
-// a row written by an older or newer engine still parses (unknown keys are
-// stripped).
+// a row written by an older or newer engine still parses. The route projects
+// these fields before serialization, including nested lists and skip counts.
+const EsclubCountSchema = z.number().int().nonnegative();
 export const EsclubSyncSummarySchema = z.object({
-  listLengths: z.array(z.number()).optional(),
-  seriesListed: z.number().optional(),
-  seriesSkippedComplete: z.number().optional(),
-  seriesWritten: z.number().optional(),
-  seriesNoTeams: z.number().optional(),
-  gamesWritten: z.number().optional(),
-  pending: z.number().optional(),
-  failed: z.number().optional(),
-  unmatched: z.number().optional(),
-  teams: z.number().optional(),
-  skipped: z.record(z.string(), z.number()).optional(),
+  listLengths: z.array(EsclubCountSchema).optional(),
+  seriesListed: EsclubCountSchema.optional(),
+  seriesSkippedComplete: EsclubCountSchema.optional(),
+  seriesWritten: EsclubCountSchema.optional(),
+  seriesNoTeams: EsclubCountSchema.optional(),
+  gamesWritten: EsclubCountSchema.optional(),
+  pending: EsclubCountSchema.optional(),
+  failed: EsclubCountSchema.optional(),
+  unmatched: EsclubCountSchema.optional(),
+  teams: EsclubCountSchema.optional(),
+  // Unknown reasons can contain upstream text; expose their count only.
+  skipped: z.object({
+    "roster not in the stage's roster list": EsclubCountSchema.optional(),
+    "stored team not in the stage's roster list": EsclubCountSchema.optional(),
+    other: EsclubCountSchema.optional(),
+  }).optional(),
 });
 export type EsclubSyncSummary = z.infer<typeof EsclubSyncSummarySchema>;
 
@@ -1732,15 +1738,13 @@ export type EsclubSeriesDetailResponse = z.infer<
 >;
 
 // Action responses (POST /leagues, /tournaments/:id/refresh,
-// /series/:id/refresh). 202 { sync } a sync started; 200 { joined } joined the
+// /series/:id/refresh). 202 { sync } a sync started; 200 { sync } joined the
 // running one; 200 { cooldown } nothing to do yet; 200 { known } (add only) the
 // league was already mirrored; 409 / 429 { retryAfter } seconds; 503 { reason }.
 export const EsclubKnownResponseSchema = z.object({
   known: z.object({ tournamentId: z.string(), stageId: z.string() }),
 });
-export const EsclubJoinedResponseSchema = z.object({
-  joined: EsclubSyncViewSchema,
-});
+export const EsclubJoinedResponseSchema = EsclubSyncResponseSchema;
 export const EsclubCooldownResponseSchema = z.object({
   cooldown: z.object({ availableAt: z.string() }),
 });
@@ -1758,7 +1762,6 @@ export const EsclubInvalidResponseSchema = z.object({
 
 export const EsclubActionResponseSchema = z.union([
   EsclubSyncResponseSchema,
-  EsclubJoinedResponseSchema,
   EsclubCooldownResponseSchema,
   EsclubKnownResponseSchema,
 ]);

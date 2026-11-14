@@ -55,6 +55,47 @@ function teamIncludes() {
   }));
 }
 
+const SUMMARY_COUNTS = [
+  "seriesListed", "seriesSkippedComplete", "seriesWritten", "seriesNoTeams",
+  "gamesWritten", "pending", "failed", "unmatched", "teams",
+];
+const SKIP_REASONS = new Set([
+  "roster not in the stage's roster list",
+  "stored team not in the stage's roster list",
+]);
+const isCount = (value) => Number.isSafeInteger(value) && value >= 0;
+
+/** Project counts recursively; arbitrary skip-reason text stays private. */
+function summaryView(summary) {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return null;
+  const view = {};
+  for (const key of SUMMARY_COUNTS) {
+    if (isCount(summary[key])) view[key] = summary[key];
+  }
+  if (Array.isArray(summary.listLengths)) {
+    view.listLengths = summary.listLengths.filter(isCount);
+  }
+  if (summary.skipped && typeof summary.skipped === "object" && !Array.isArray(summary.skipped)) {
+    view.skipped = {};
+    for (const [reason, count] of Object.entries(summary.skipped)) {
+      if (!isCount(count)) continue;
+      const key = SKIP_REASONS.has(reason) ? reason : "other";
+      view.skipped[key] = (view.skipped[key] ?? 0) + count;
+    }
+  }
+  return view;
+}
+
+/** Only palette fields with scalar color values may cross the boundary. */
+function colorsView(colors) {
+  if (!colors || typeof colors !== "object" || Array.isArray(colors)) return null;
+  const view = {};
+  for (const key of ["primary", "secondary"]) {
+    if (colors[key] === null || typeof colors[key] === "string") view[key] = colors[key];
+  }
+  return view;
+}
+
 /**
  * A sync row as the client sees it. Never includes who asked, the error
  * message or how it was started.
@@ -72,7 +113,7 @@ function syncView(row) {
     finishedAt: row.finished_at ?? null,
     requestCount: row.request_count ?? 0,
     errorClass: row.error_class ?? null,
-    summary: row.summary ?? null,
+    summary: summaryView(row.summary),
   };
 }
 
@@ -82,7 +123,7 @@ function teamView(team) {
     id: team.id,
     name: team.name,
     acronym: team.acronym ?? null,
-    colors: team.colors ?? null,
+    colors: colorsView(team.colors),
   };
 }
 
@@ -142,12 +183,28 @@ function gameView(game) {
   };
 }
 
+/** Log class and route context only; error messages and instance names are private. */
+function logFailure(label, req, err, sync) {
+  const context = {
+    route: `${req.method} ${req.baseUrl}${req.route.path}`,
+    errorClass: err instanceof Error ? err.constructor.name : "NonError",
+  };
+  if (isUuid(req.params.id)) context.id = req.params.id;
+  if (sync) {
+    context.syncId = sync.id;
+    context.tournamentId = sync.tournament_id ?? null;
+    context.stageId = sync.stage_id ?? null;
+    context.seriesId = sync.series_id ?? null;
+  }
+  console.error(label, context);
+}
+
 /** Wrap a handler: a thrown error is logged and answered with a generic 500. */
 const handle = (fn) => async (req, res) => {
   try {
     await fn(req, res);
   } catch (err) {
-    console.error(`esclub route ${req.method} ${req.path}: ${err.message}`);
+    logFailure("esclub route failed", req, err);
     if (!res.headersSent) {
       res.status(500).json({ error: "Something went wrong" });
     }
@@ -162,7 +219,7 @@ const notFound = (res) => res.status(404).json({ error: "Not found" });
  */
 function answerRefusal(res, outcome) {
   if (outcome.joined) {
-    res.status(200).json({ joined: syncView(outcome.joined) });
+    res.status(200).json({ sync: syncView(outcome.joined) });
   } else if (outcome.busy) {
     res.status(409).json({ retryAfter: outcome.busy.retryAfter });
   } else if (outcome.cooldown) {
@@ -183,13 +240,13 @@ function answerRefusal(res, outcome) {
 }
 
 /** Start the work for a sync without waiting for it. */
-function startInBackground(sync, work) {
+function startInBackground(req, sync, work) {
   try {
     Promise.resolve(syncEngine.runSync(sync, work)).catch((err) => {
-      console.error(`esclub sync ${sync.id} failed to run: ${err.message}`);
+      logFailure("esclub sync failed", req, err, sync);
     });
   } catch (err) {
-    console.error(`esclub sync ${sync.id} failed to start: ${err.message}`);
+    logFailure("esclub sync failed", req, err, sync);
   }
 }
 
@@ -217,7 +274,14 @@ router.post(
         .status(400)
         .json({ error: "Choose a valid region", code: "INVALID_REGION" });
     }
-    if (outcome.known) return res.status(200).json({ known: outcome.known });
+    if (outcome.known) {
+      return res.status(200).json({
+        known: {
+          tournamentId: outcome.known.tournamentId,
+          stageId: outcome.known.stageId,
+        },
+      });
+    }
     if (outcome.sync) {
       return res.status(202).json({ sync: syncView(outcome.sync) });
     }
@@ -246,7 +310,7 @@ router.post(
       now: new Date(),
     });
     if (outcome.sync) {
-      startInBackground(outcome.sync, (client, summary) =>
+      startInBackground(req, outcome.sync, (client, summary) =>
         syncEngine.syncTournament(client, { tournamentId, summary }),
       );
       return res.status(202).json({ sync: syncView(outcome.sync) });
@@ -278,7 +342,7 @@ router.post(
       now: new Date(),
     });
     if (outcome.sync) {
-      startInBackground(outcome.sync, (client, summary) =>
+      startInBackground(req, outcome.sync, (client, summary) =>
         syncEngine.syncSerie(client, { seriesId, summary }),
       );
       return res.status(202).json({ sync: syncView(outcome.sync) });
