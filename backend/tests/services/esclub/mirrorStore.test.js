@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const sequelize = require("../../../config/database");
 const setupAssociations = require("../../../models/associations");
 const store = require("../../../services/esclub/mirrorStore");
+const { EsclubSyncAbandoned } = require("../../../services/esclub/errors");
 
 // setupAssociations throws when run twice.
 let associated = false;
@@ -310,6 +311,37 @@ describe("writeSeries SQL", () => {
     tournament: TOUR, stage: STAGE, serie, team1: { id: TEAM_A }, team2: { id: TEAM_B }, games, complete: false, now: T0,
   });
 
+  it("does not let an old upcoming plan alter a series completed by its successor", async () => {
+    const completed = { id: "ser-1", external_id: "x1", complete: true, status: "finished", draft_type: "fearless", team1_id: TEAM_A, team2_id: TEAM_B, finished_at: T0 };
+    const cap = captureSql((sql) => sql.includes('FROM "LeagueSeries"') ? [completed] : []);
+    const out = await store.writeSeries({ ...args([game("m3")]), serie: { ...serie, status: "upcoming", draftType: "standard" } }, TX);
+    expect(out.series).toMatchObject(completed);
+    expect(out.gamesWritten).toBe(0);
+    expect(cap.sqls().every((sql) => /^SELECT/.test(sql))).toBe(true);
+    expect(store.seriesAttributes(completed, { tournamentId: TOUR.id, stageId: STAGE.id, serie: { ...serie, status: "upcoming" }, complete: false, now: new Date() })).toEqual(completed);
+  });
+
+  it("suppresses the dialect SQL logger for participant inserts and updates", async () => {
+    const cap = captureSql((sql) => {
+      if (sql.includes('FROM "LeagueSeries"')) return [{ id: "ser-1", external_id: "x1", complete: false }];
+      if (sql.includes('FROM "LeagueGames"')) return [{ id: "g1", external_match_id: "m1", complete: false }];
+      return [];
+    });
+    const privateGame = (match) => ({ ...game(match), participants: { Ahri: { lane: "mid", side: "red", playerKey: "PRIVATE_KEY_SENTINEL", gameName: "Player99", tagLine: "T99" } } });
+    await store.writeSeries(args([privateGame("m1"), privateGame("m2")]), TX);
+    const sensitive = cap.calls.filter(({ sql }) => /^(INSERT INTO|UPDATE) "LeagueGames"/.test(sql));
+    expect(sensitive).toHaveLength(2);
+    const logger = vi.fn();
+    for (const { sql, options } of sensitive) {
+      const connection = { query: (_statement, callback) => callback(null, { rows: [], rowCount: 0 }) };
+      const query = new sequelize.dialect.Query(connection, sequelize, { ...options, type: "RAW", logging: options.logging ?? logger });
+      await query.run(sql);
+    }
+    expect(sensitive.every(({ sql }) => sql.includes("PRIVATE_KEY_SENTINEL") && sql.includes("Player99") && sql.includes("T99"))).toBe(true);
+    expect(logger.mock.calls.flat().join(" ")).not.toMatch(/PRIVATE_KEY_SENTINEL|Player99|T99/);
+    expect(sensitive.every(({ options }) => options.logging === false)).toBe(true);
+  });
+
   it("inserts a new series by external_id and its games, all in the given transaction", async () => {
     const cap = captureSql(() => []);
     const out = await store.writeSeries(args([game("m1")]), TX);
@@ -373,6 +405,25 @@ describe("rebuildRoster SQL", () => {
   const team = { id: TEAM_A };
   const participants = (suffix, side) => ({
     Ahri: { lane: "mid", playerKey: `k-${suffix}`, gameName: `Player${suffix}`, tagLine: "T01", side },
+  });
+
+  it("suppresses SQL logging for roster writes carrying Riot IDs", async () => {
+    const cap = captureSql((sql) => {
+      if (sql.includes('FROM "LeagueSeries"')) return [{ id: "ser-1", team1_id: TEAM_A }];
+      if (sql.includes('FROM "LeagueGames"')) return [{ series_id: "ser-1", blue_side_team: 1, participants: participants("99", "blue") }];
+      return [];
+    });
+    await store.rebuildRoster(team, TOUR.id, TX);
+    const writes = cap.calls.filter(({ sql }) => /^(INSERT INTO|DELETE FROM) "TeamPlayers"/.test(sql));
+    expect(writes).toHaveLength(2);
+    const logger = vi.fn();
+    for (const { sql, options } of writes) {
+      const connection = { query: (_statement, callback) => callback(null, { rows: [], rowCount: 0 }) };
+      await new sequelize.dialect.Query(connection, sequelize, { ...options, type: "RAW", logging: options.logging ?? logger }).run(sql);
+    }
+    expect(writes.some(({ sql }) => sql.includes("Player99") && sql.includes("T01"))).toBe(true);
+    expect(logger.mock.calls.flat().join(" ")).not.toMatch(/Player99|T01/);
+    expect(writes.every(({ options }) => options.logging === false)).toBe(true);
   });
 
   it("is scoped to one team: its series, their games, then delete and insert on that team_id only", async () => {
@@ -443,6 +494,29 @@ describe("touchSynced", () => {
 });
 
 describe("inTransaction", () => {
+  it.each(["failed", "succeeded", null])("fences a %s sync before any mirror write", async (status) => {
+    const cap = captureSql(() => status ? [{ status }] : []);
+    vi.spyOn(sequelize, "transaction").mockImplementation(async (callback) => callback(TX));
+    const write = vi.fn();
+    await expect(store.inTransaction(write, "00000000-0000-4000-8000-000000000003")).rejects.toBeInstanceOf(EsclubSyncAbandoned);
+    expect(write).not.toHaveBeenCalled();
+    expect(cap.calls).toHaveLength(1);
+    expect(cap.calls[0].sql).toBe('SELECT status FROM "EsclubSyncs" WHERE id = :syncId FOR UPDATE');
+    expect(cap.calls[0].options.transaction).toBe(TX);
+  });
+
+  it("locks the running sync row before the write callback, capturing rendered SQL", async () => {
+    const { injectReplacements } = require("sequelize/lib/utils/sql");
+    const cap = captureSql(() => [{ status: "running" }]);
+    vi.spyOn(sequelize, "transaction").mockImplementation(async (callback) => callback(TX));
+    const syncId = "00000000-0000-4000-8000-000000000003";
+    await store.inTransaction(async (transaction) => {
+      expect(transaction).toBe(TX);
+      expect(cap.calls).toHaveLength(1);
+    }, syncId);
+    const captured = cap.calls[0];
+    expect(injectReplacements(captured.sql, sequelize.dialect, captured.options.replacements)).toBe(`SELECT status FROM "EsclubSyncs" WHERE id = '${syncId}' FOR UPDATE`);
+  });
   it("hands the callback a transaction from sequelize", async () => {
     vi.spyOn(sequelize, "transaction").mockImplementation(async (cb) => cb(TX));
     expect(await store.inTransaction(async (t) => t)).toBe(TX);

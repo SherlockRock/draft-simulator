@@ -12,7 +12,7 @@
  * reuses, so they are tested once.
  */
 
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const sequelize = require("../../config/database");
 const Tournament = require("../../models/Tournament");
 const Team = require("../../models/Team");
@@ -21,6 +21,7 @@ const LeagueStage = require("../../models/LeagueStage");
 const LeagueSeries = require("../../models/LeagueSeries");
 const LeagueGame = require("../../models/LeagueGame");
 const { deriveRoster, teamRowFromRoster, gameIsComplete } = require("./derive");
+const { EsclubSyncAbandoned } = require("./errors");
 
 const opts = (transaction) => (transaction ? { transaction } : {});
 
@@ -39,10 +40,20 @@ const GAME_READ_ATTRIBUTES = [
  * Run `fn` in one database transaction.
  * @template T
  * @param {(transaction: object) => Promise<T>} fn
+ * @param {string} [syncId] lock and verify the owner before any mirror write
  * @returns {Promise<T>}
  */
-function inTransaction(fn) {
-  return sequelize.transaction(fn);
+function inTransaction(fn, syncId) {
+  return sequelize.transaction(async (transaction) => {
+    if (syncId !== undefined) {
+      const rows = await sequelize.query(
+        'SELECT status FROM "EsclubSyncs" WHERE id = :syncId FOR UPDATE',
+        { replacements: { syncId }, type: QueryTypes.SELECT, transaction },
+      );
+      if (rows[0]?.status !== "running") throw new EsclubSyncAbandoned("sync no longer running");
+    }
+    return fn(transaction);
+  });
 }
 
 /**
@@ -181,6 +192,7 @@ async function upsertStageTeams(tournament, refs, transaction) {
  * @returns {object}
  */
 function seriesAttributes(existing, { tournamentId, stageId, serie, team1Id, team2Id, complete, now }) {
+  if (existing?.complete) return { ...existing };
   const hadTeams = Boolean(existing && existing.team1_id && existing.team2_id);
   const gainTeams = !hadTeams && Boolean(team1Id && team2Id);
   const complete1 = Boolean(complete || (existing && existing.complete));
@@ -248,10 +260,13 @@ function partitionGames(seriesId, existing, games) {
  * @param {{ tournament: {id: string}, stage: {id: string}, serie: object, team1: {id: string}|null, team2: {id: string}|null, games: object[], complete: boolean, now: Date }} input
  *   `serie`: { externalId, parentType, number, esclubStatus, status, bestOf, draftType, startsAt }
  * @param {object} [transaction]
- * @returns {Promise<{ series: object, gamesWritten: number, gamesLeftAlone: number }>}
+ * @returns {Promise<{ series: object, gamesWritten: number, gamesLeftAlone: number, unchanged?: boolean }>}
  */
 async function writeSeries({ tournament, stage, serie, team1, team2, games = [], complete, now }, transaction) {
   const existing = await LeagueSeries.findOne({ where: { external_id: serie.externalId }, ...opts(transaction) });
+  if (existing?.complete) {
+    return { series: existing.get({ plain: true }), gamesWritten: 0, gamesLeftAlone: games.length, unchanged: true };
+  }
   const attrs = seriesAttributes(existing ? existing.get({ plain: true }) : null, {
     tournamentId: tournament.id,
     stageId: stage.id,
@@ -278,9 +293,9 @@ async function writeSeries({ tournament, stage, serie, team1, team2, games = [],
     for (const u of update) {
       // `complete: false` in the WHERE is a second guard: a game that completed
       // meanwhile is never overwritten.
-      await LeagueGame.update(u.row, { where: { id: u.id, complete: false }, ...opts(transaction) });
+      await LeagueGame.update(u.row, { where: { id: u.id, complete: false }, ...opts(transaction), logging: false });
     }
-    if (create.length > 0) await LeagueGame.bulkCreate(create, opts(transaction));
+    if (create.length > 0) await LeagueGame.bulkCreate(create, { ...opts(transaction), logging: false });
     gamesWritten = create.length + update.length;
     gamesLeftAlone = untouched.length;
   }
@@ -326,11 +341,11 @@ async function rebuildRoster(team, tournamentId, transaction) {
       })),
     );
   }
-  await TeamPlayer.destroy({ where: { team_id: team.id }, ...opts(transaction) });
+  await TeamPlayer.destroy({ where: { team_id: team.id }, ...opts(transaction), logging: false });
   if (players.length > 0) {
     await TeamPlayer.bulkCreate(
       players.map((p) => ({ team_id: team.id, role: p.role, gameName: p.gameName, tagLine: p.tagLine, ordinal: p.ordinal })),
-      opts(transaction),
+      { ...opts(transaction), logging: false },
     );
   }
   return players.length;

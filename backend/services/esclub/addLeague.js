@@ -167,6 +167,10 @@ async function writeLeague({ located, region, userId, syncId, store }) {
       where: { source: "esclub", external_id: season.externalId },
       transaction,
     });
+    let stageRow = await LeagueStage.findOne({ where: { external_id: stage.externalId }, transaction });
+    if (stageRow && (!tournament || stageRow.tournament_id !== tournament.id)) {
+      throw new EsclubProtocolChanged("stage belongs to a different season");
+    }
     const newSeason = !tournament;
     if (!tournament) {
       tournament = await Tournament.create(
@@ -180,7 +184,6 @@ async function writeLeague({ located, region, userId, syncId, store }) {
         { transaction },
       );
     }
-    let stageRow = await LeagueStage.findOne({ where: { external_id: stage.externalId }, transaction });
     const newStage = !stageRow;
     if (!stageRow) {
       stageRow = await LeagueStage.create(
@@ -210,7 +213,7 @@ async function writeLeague({ located, region, userId, syncId, store }) {
       },
       stage: { id: stageRow.id, external_id: stageRow.external_id, name: stageRow.name },
     };
-  });
+  }, syncId);
 }
 
 /**
@@ -218,6 +221,7 @@ async function writeLeague({ located, region, userId, syncId, store }) {
  *
  * Returns `{ invalid: "URL" | "REGION" }` before any request or row;
  * `{ known: { tournamentId, stageId } }` when the series is already mirrored
+ * and its stage's initial backfill succeeded
  * (the user's row is created or un-archived; no request, no sync row, no add
  * counted); a refusal of `beginSync` as is (`off`, `busy`, `joined`,
  * `cooldown`, `limited`); otherwise `{ sync }`, and with `background: false`
@@ -256,7 +260,10 @@ async function addLeague({
     attributes: ["tournament_id", "stage_id"],
     raw: true,
   });
-  if (knownSeries) {
+  const knownStage = knownSeries
+    ? await LeagueStage.findByPk(knownSeries.stage_id, { attributes: ["last_synced_at"], raw: true })
+    : null;
+  if (knownStage?.last_synced_at) {
     if (userId) {
       await store.inTransaction((transaction) => ensureUserTournament(userId, knownSeries.tournament_id, transaction));
     }
@@ -275,13 +282,13 @@ async function addLeague({
     summary.backfilled = written.newStage || !written.stageSynced;
     if (summary.backfilled) {
       await syncEngine.syncStage(client, { tournament: written.tournament, stage: written.stage, store, summary, now });
-      await store.touchSynced(written.stage, written.tournament, now());
+      await store.inTransaction((transaction) => store.touchSynced(written.stage, written.tournament, now(), transaction), sync.id);
     }
   };
 
   const running = syncEngine.runSync(sync, work, { env, session, now });
   if (background) {
-    running.catch((err) => console.error(`esclub add league ${sync.id}: ${err.message}`));
+    running.catch((err) => console.error(`esclub add league ${sync.id}: ${err instanceof Error ? err.constructor.name : "Error"}`));
     return { sync };
   }
   return { sync, result: await running };

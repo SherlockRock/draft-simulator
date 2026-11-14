@@ -69,6 +69,7 @@ function makeDb({ usage = null, syncs = [] } = {}) {
     );
     db.log.push({ sql: rendered, replacements: r });
     const s = rendered.replace(/\s+/g, " ").trim();
+    if (/^SELECT pg_advisory_xact_lock/.test(s)) return [];
     if (/^SELECT request_count FROM "EsclubDailyUsage"/.test(s)) {
       return db.usage === null ? [] : [{ request_count: db.usage }];
     }
@@ -189,7 +190,7 @@ const install = (init) => {
       return out;
     } catch (err) {
       db.usage = snapshot.usage;
-      db.syncs = snapshot.syncs;
+      if (!(err instanceof UniqueConstraintError)) db.syncs = snapshot.syncs;
       db.rolledBack = (db.rolledBack ?? 0) + 1;
       throw err;
     }
@@ -259,7 +260,7 @@ describe("beginSync order of checks", () => {
     expect(db.log).toHaveLength(0);
   });
 
-  it("budget spent -> off budget, before the stale sweep and the lock", async () => {
+  it("budget spent -> off budget, before the stale sweep and the running-row read", async () => {
     db.usage = 2000;
     db.add({ status: "running", finished_at: null, heartbeat_at: at(-10 * MIN) });
     const out = await begin();
@@ -272,7 +273,7 @@ describe("beginSync order of checks", () => {
     db.usage = 10;
     const out = await begin({ env: { ...ON, ESCLUB_DAILY_REQUEST_BUDGET: "10" } });
     expect(out).toEqual({ off: "budget" });
-    expect(db.log[0].sql).toMatch(/FROM "EsclubDailyUsage" WHERE day = '2026-11-14'/);
+    expect(sqlOf(/FROM "EsclubDailyUsage"/).sql).toMatch(/FROM "EsclubDailyUsage" WHERE day = '2026-11-14'/);
   });
 
   it("1999 of 2000 still starts", async () => {
@@ -556,6 +557,72 @@ describe("the CLI", () => {
 });
 
 describe("creating the row", () => {
+  it("captures the fixed transaction-scoped admission lock and keeps every decision and insert under it", async () => {
+    await begin();
+    const calls = sequelize.query.mock.calls;
+    expect(calls[0][0]).toBe("SELECT pg_advisory_xact_lock(1464025932, 2)");
+    expect(calls.every(([, options]) => options.transaction?.id === "tx")).toBe(true);
+    expect(db.log[0].sql).toBe("SELECT pg_advisory_xact_lock(1464025932, 2)");
+    expect(sequelize.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["league", "add", "serie"])("serializes the delayed-insert schedule for %s admission", async (kind) => {
+    const limit = kind === "add" ? 3 : kind === "serie" ? 20 : 6;
+    for (let index = 0; index < limit - 1; index += 1) db.add({ kind, requested_by: "u1", tournament_id: OTHER_TOUR, series_id: "other-series", started_at: at(-MIN), finished_at: at(-MIN) });
+    let releaseInsert;
+    let insertionReached;
+    let contenderReached;
+    const insertGate = new Promise((resolve) => { releaseInsert = resolve; });
+    const firstInsert = new Promise((resolve) => { insertionReached = resolve; });
+    const contender = new Promise((resolve) => { contenderReached = resolve; });
+    let locked = false;
+    let releaseLock;
+    let first = true;
+    sequelize.transaction.mockImplementation(async (callback) => {
+      const transaction = { id: Symbol("transaction"), unlock: null };
+      try { return await callback(transaction); }
+      finally { transaction.unlock?.(); }
+    });
+    sequelize.query.mockImplementation(async (sql, options) => {
+      if (/pg_advisory_xact_lock/.test(sql)) {
+        if (locked) {
+          contenderReached("blocked");
+          await new Promise((resolve) => { releaseLock = resolve; });
+        }
+        locked = true;
+        options.transaction.unlock = () => { locked = false; releaseLock?.(); };
+      }
+      if (/INSERT INTO "EsclubSyncs"/.test(sql) && first) {
+        first = false;
+        insertionReached();
+        await insertGate;
+      }
+      return db.query(sql, options);
+    });
+    const args = { kind, seriesId: "series-1", tournamentId: kind === "add" ? null : TOUR };
+    const delayed = begin(args);
+    await firstInsert;
+    const competing = begin(args);
+    const observed = await Promise.race([contender, competing.then(() => "admitted")]);
+    if (observed === "admitted") {
+      const earlier = await competing;
+      earlier.sync.status = "succeeded";
+      earlier.sync.finished_at = T0;
+    }
+    releaseInsert();
+    const admitted = await delayed;
+    if (admitted.sync) {
+      admitted.sync.status = "succeeded";
+      admitted.sync.finished_at = T0;
+    }
+    const rejected = await competing;
+    expect(observed).toBe("blocked");
+    expect(admitted).toHaveProperty("sync");
+    expect(rejected).not.toHaveProperty("sync");
+    expect(db.syncs.filter((row) => row.requested_by === "u1" && row.kind === kind)).toHaveLength(limit);
+    if (kind === "add") expect(rejected).toHaveProperty("limited");
+    else expect(rejected.cooldown?.availableAt).toEqual(at(kind === "league" ? 10 * MIN : 2 * MIN));
+  });
   it("inserts a running row with the given ids and zero requests", async () => {
     const out = await begin({ kind: "serie", seriesId: "A", stageId: "st", userId: "u9" });
     expect(out.sync).toMatchObject({

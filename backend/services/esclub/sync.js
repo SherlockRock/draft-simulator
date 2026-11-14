@@ -25,7 +25,7 @@ const { createTtlCache } = require("../ttlCache");
 const debug = require("../../utils/logger").debug;
 const { normalizeSeries, normalizeStatus, normalizeTeamRoster } = require("./normalize");
 const { planSeries, seriesCompleteness } = require("./derive");
-const { EsclubNotFound, EsclubUnsupported } = require("./errors");
+const { EsclubNotFound, EsclubUnsupported, EsclubProtocolChanged } = require("./errors");
 
 /** esclub's id for League of Legends (the stage's `id_game`). */
 const LOL_GAME_ID = "11ef4074-4f9a-9045-9bae-cf64589d421f";
@@ -132,17 +132,22 @@ function serieFacts(listed, draftType = null) {
 async function writeOne(ctx, { team1 = null, team2 = null, games = [], complete = false, draftType = null }) {
   const { store, tournament, stage, listed, summary, now } = ctx;
   const when = now();
-  await store.inTransaction(async (transaction) => {
-    await store.writeSeries(
+  const result = await store.inTransaction(async (transaction) => {
+    const written = await store.writeSeries(
       { tournament, stage, serie: serieFacts(listed, draftType), team1, team2, games, complete, now: when },
       transaction,
     );
-    if (games.length > 0) {
+    if (!written.unchanged && games.length > 0) {
       for (const team of [team1, team2]) await store.rebuildRoster(team, tournament.id, transaction);
     }
-  });
+    return written;
+  }, summary.syncId);
+  if (result.unchanged) {
+    summary.seriesSkippedComplete += 1;
+    return;
+  }
   summary.seriesWritten += 1;
-  summary.gamesWritten += games.length;
+  summary.gamesWritten += result.gamesWritten;
 }
 
 /** The mirrored complete games, in the shape seriesCompleteness reads. */
@@ -201,6 +206,9 @@ async function fetchAndWrite(client, ctx, team1, team2) {
   }
 
   const { series, pending, failed } = normalized;
+  if (mirrored?.draft_type && mirrored.games?.some((game) => game.complete) && series.draftType && series.draftType !== mirrored.draft_type) {
+    throw new EsclubProtocolChanged("series draft type differs from its complete games");
+  }
   summary.pending += pending.length;
   summary.failed += failed.length;
   summary.unmatched += series.games.reduce((n, g) => n + g.unmatchedParticipants, 0);
@@ -293,7 +301,10 @@ async function syncStage(client, { tournament, stage, store = defaultStore, summ
   const resources = await getResources(client, requests);
   const listed = await walkStage(client, stage, requests, summary);
   const { items: rosterRows } = await requests.fetchTeamRosters(client, { id_event_stage: stage.external_id });
-  const teamsByExternal = await store.upsertStageTeams(tournament, rosterRows.map(normalizeTeamRoster));
+  const teamsByExternal = await store.inTransaction(
+    (transaction) => store.upsertStageTeams(tournament, rosterRows.map(normalizeTeamRoster), transaction),
+    summary.syncId,
+  );
   summary.teams = teamsByExternal.size;
   const teamsById = mapBy([...teamsByExternal.values()], "id");
   const mirrored = await store.loadSeriesByExternalIds(listed.map((s) => s.id_serie));
@@ -333,7 +344,7 @@ async function syncTournament(client, { tournamentId, store = defaultStore, summ
   const { stages, ...tournament } = found;
   for (const stage of stages) {
     await syncStage(client, { tournament, stage, store, summary, requests, now });
-    await store.touchSynced(stage, tournament, now());
+    await store.inTransaction((transaction) => store.touchSynced(stage, tournament, now(), transaction), summary.syncId);
   }
   return summary;
 }
@@ -388,6 +399,8 @@ async function syncSerie(client, { seriesId, store = defaultStore, summary = new
  * sent, then close the sync row as succeeded or failed. Never throws.
  * Any stop (protocol change, unavailable, budget, cap, abandoned lock, kill
  * switch) ends the work; what was written before it stays.
+ * The shared summary carries a non-enumerable syncId to fence every mirror
+ * transaction without putting ownership metadata in the stored summary.
  *
  * @param {{ id: string, kind?: string }} syncRow
  * @param {(client: object, summary: object) => Promise<unknown>} work
@@ -401,6 +414,7 @@ async function syncSerie(client, { seriesId, store = defaultStore, summary = new
  */
 async function runSync(syncRow, work, { env = process.env, session = withEsclubSession, clientOptions = {}, now = () => new Date(), state = defaultState } = {}) {
   const summary = newSummary();
+  Object.defineProperty(summary, "syncId", { value: syncRow.id });
   const { budget, cap } = state.limitsFromEnv(env);
   let requestCount = 0;
   let error = null;
@@ -421,7 +435,7 @@ async function runSync(syncRow, work, { env = process.env, session = withEsclubS
   try {
     await state.finishSync(syncRow.id, { status, error, summary, now: now() });
   } catch (err) {
-    console.error(`esclub sync ${syncRow.id}: could not record the result: ${err.message}`);
+    console.error(`esclub sync ${syncRow.id}: could not record the result (${err instanceof Error ? err.constructor.name : "Error"})`);
   }
   const counts = [
     `listed ${summary.seriesListed}`,

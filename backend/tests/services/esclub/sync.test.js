@@ -432,6 +432,22 @@ describe("games: incomplete is rewritten, complete is never fetched again", () =
   const noDraftForGame1 = (name, ctx, reply) =>
     name === "fetch-draft-by-match" && ctx.id_match === GAME1 ? { drafts: [] } : reply;
 
+  it("rejects a new standard game against frozen fearless games before opening its transaction", async () => {
+    const store = makeFakeStore();
+    await runStage(store, makeStub({ patch: noWinnerForGame1 }));
+    const before = { ...store.seriesRow(GROUP_BO3) };
+    const transaction = vi.spyOn(store, "inTransaction");
+    const second = makeStub({ patch: (name, context, reply) => {
+      if (name === "fetch-draft-by-match" && context.id_match === GAME1) reply.drafts[0].type_fearless = "None";
+      return reply;
+    } });
+    await expect(sync.syncSerie(second, { seriesId: before.id, store, now: () => T0 })).rejects.toBeInstanceOf(EsclubProtocolChanged);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(second.calls.some((call) => call.context.id_match === GAME0)).toBe(false);
+    expect(second.calls.filter((call) => call.name === "fetch-draft-by-match").map((call) => call.context.id_match)).toEqual([GAME1]);
+    expect(store.seriesRow(GROUP_BO3)).toEqual(before);
+  });
+
   it("rewrites a game without a winner until it has one, then freezes it", async () => {
     const store = makeFakeStore();
     await runStage(store, makeStub({ patch: noWinnerForGame1 }));
@@ -596,6 +612,71 @@ describe("a stop ends the sync; the series in hand writes nothing", () => {
 describe("runSync", () => {
   const syncRow = { id: "sync-1", kind: "league" };
   const ENV = { ESCLUB_SYNC_ENABLED: "true" };
+
+  it("passes ownership to a delayed series transaction and fences A after B completes it", async () => {
+    const store = makeFakeStore();
+    await runStage(store, makeStub({ patch: (name, context, reply) => {
+      if (name === "fetch-matches-by-number-next" && context.id_serie === GROUP_BO3) {
+        const integration = reply.matches[1].config.integrations.find((item) => item.LeagueOfLegends).LeagueOfLegends;
+        integration.winner_side = null;
+        integration.is_done = false;
+      }
+      return reply;
+    } }));
+    const target = GROUP_BO3;
+    const before = { ...store.seriesRow(target) };
+    const transact = store.inTransaction.bind(store);
+    let release;
+    let paused;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const reached = new Promise((resolve) => { paused = resolve; });
+    let abandoned = false;
+    store.inTransaction = async (callback, syncId) => {
+      if (syncId !== "sync-B") {
+        paused();
+        await gate;
+        if (abandoned && syncId === "sync-A") throw new EsclubSyncAbandoned("sync no longer running");
+      }
+      return transact(callback);
+    };
+    const resultPromise = sync.runSync({ id: "sync-A" }, async (client, summary) => {
+      await sync.syncOneSeries(client, {
+        ...ROUND_TRIP(store),
+        listed: { ...fx("group-bo3/serie.json").reply.series[0], awaiting_status: upcoming[0].awaiting_status },
+        mirrored: before,
+        teamsByExternal: store.state.teams,
+        teamsById: new Map([...store.state.teams.values()].map((team) => [team.id, team])),
+        requests: {},
+        store,
+        summary,
+        now: () => T0,
+      });
+    }, { env: ENV, session: async (work) => work(makeStub()), state: { limitsFromEnv: () => ({ budget: 2000, cap: 400 }), finishSync: vi.fn().mockResolvedValue(false) } });
+    await reached;
+    abandoned = true;
+    const successorResult = await sync.runSync({ id: "sync-B" }, async (client, summary) => {
+      await sync.syncSerie(client, { seriesId: before.id, store, summary, now: () => T0 });
+    }, { env: ENV, session: async (work) => work(makeStub()), state: { limitsFromEnv: () => ({ budget: 2000, cap: 400 }), finishSync: vi.fn().mockResolvedValue(true) } });
+    expect(successorResult.status).toBe("succeeded");
+    const successor = { ...store.seriesRow(target) };
+    expect(successor).toMatchObject({ complete: true, status: "finished" });
+    const writesBefore = store.state.ops.length;
+    release();
+    const result = await resultPromise;
+    expect(result.error).toBeInstanceOf(EsclubSyncAbandoned);
+    expect(result.status).toBe("failed");
+    expect(store.seriesRow(target)).toEqual(successor);
+    expect(store.state.ops).toHaveLength(writesBefore);
+    expect(JSON.stringify(result.summary)).not.toContain("sync-A");
+  });
+
+  it("logs a finish failure's class and sync id, never its raw message", async () => {
+    const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+    await sync.runSync(syncRow, async () => {}, { env: ENV, session: async (work) => work({}), state: { limitsFromEnv: () => ({ budget: 2000, cap: 400 }), finishSync: vi.fn().mockRejectedValue(new TypeError("PRIVATE_ERROR_SENTINEL Player99#T99")) } });
+    expect(logger.mock.calls.flat().join(" ")).toContain("TypeError");
+    expect(logger.mock.calls.flat().join(" ")).toContain(syncRow.id);
+    expect(logger.mock.calls.flat().join(" ")).not.toMatch(/PRIVATE_ERROR_SENTINEL|Player99/);
+  });
 
   function harness({ countRequest, stubOptions = {} } = {}) {
     const store = makeFakeStore();

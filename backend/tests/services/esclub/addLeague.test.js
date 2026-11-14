@@ -228,6 +228,7 @@ describe("validateAndLocate", () => {
 
 /** In-memory models behind spies: what exists, what was written. */
 function makeWorld({ series = null, tournament = null, stage = null, userRow = null } = {}) {
+  if (series && !stage) stage = { id: series.stage_id, tournament_id: series.tournament_id, external_id: STAGE_ID, last_synced_at: T0 };
   const w = { tournaments: tournament ? [tournament] : [], stages: stage ? [stage] : [], series, userRow, writes: [], syncRows: [], target: null, order: [] };
   vi.spyOn(LeagueSeries, "findOne").mockImplementation(async () => w.series);
   vi.spyOn(Tournament, "findOne").mockImplementation(async ({ where }) => w.tournaments.find((t) => t.external_id === where.external_id) ?? null);
@@ -238,6 +239,7 @@ function makeWorld({ series = null, tournament = null, stage = null, userRow = n
     return row;
   });
   vi.spyOn(LeagueStage, "findOne").mockImplementation(async ({ where }) => w.stages.find((s) => s.external_id === where.external_id) ?? null);
+  vi.spyOn(LeagueStage, "findByPk").mockImplementation(async (id) => w.stages.find((row) => row.id === id) ?? null);
   vi.spyOn(LeagueStage, "create").mockImplementation(async (values) => {
     const row = { id: "stage-new", ...values };
     w.stages.push(row);
@@ -254,6 +256,7 @@ function makeWorld({ series = null, tournament = null, stage = null, userRow = n
     return values;
   });
   vi.spyOn(sequelize, "query").mockImplementation(async (sql, o) => {
+    if (/SELECT status FROM "EsclubSyncs"/.test(sql)) return [{ status: "running" }];
     w.target = o.replacements;
     w.writes.push(["syncTarget", o.replacements]);
     return [[], 1];
@@ -357,6 +360,25 @@ describe("addLeague: refusals before any request", () => {
 describe("addLeague: a series already in the mirror", () => {
   const known = { id: "ser-1", tournament_id: "tour-1", stage_id: "stage-1" };
 
+  it("admits and recovers the same known link when its initial stage backfill is partial", async () => {
+    makeWorld({ series: known, tournament: { id: "tour-1", external_id: SEASON_ID, region: "na1" }, stage: { id: "stage-1", external_id: STAGE_ID, tournament_id: "tour-1", last_synced_at: null } });
+    const out = await run().done;
+    expect(begin).toHaveBeenCalledTimes(1);
+    expect(syncStage).toHaveBeenCalledTimes(1);
+    expect(mirrorStore.touchSynced).toHaveBeenCalledTimes(1);
+    expect(out).not.toHaveProperty("known");
+    expect(out.result.summary.backfilled).toBe(true);
+  });
+
+  it("keeps admission refusals for partial known links instead of claiming success", async () => {
+    makeWorld({ series: known, stage: { id: "stage-1", external_id: STAGE_ID, last_synced_at: null } });
+    begin.mockResolvedValue({ busy: { retryAfter: 60 } });
+    const { client, done } = run();
+    expect(await done).toEqual({ busy: { retryAfter: 60 } });
+    expect(client.calls).toHaveLength(0);
+    expect(UserTournament.create).not.toHaveBeenCalled();
+  });
+
   it("creates the user row, sends nothing, writes no sync row and counts no add", async () => {
     const w = makeWorld({ series: known });
     const { client, session, done } = run();
@@ -401,7 +423,7 @@ describe("addLeague: a new season and stage", () => {
     expect(begin).toHaveBeenCalledWith({ kind: "add", tournamentId: null, userId: "u1", via: "api", now: T0, env: ON });
     expect(client.names()).toEqual(["fetch-serie", "fetch-group", "fetch-round", "fetch-event-stage", "fetch-event-active"]);
     expect(count).toHaveBeenCalledTimes(5);
-    expect(sequelize.transaction).toHaveBeenCalledTimes(1);
+    expect(sequelize.transaction).toHaveBeenCalledTimes(2);
 
     expect(w.writes.map(([k]) => k)).toEqual(["tournament", "stage", "userUpdate", "userCreate", "syncTarget", "touched"]);
     expect(w.writes[0][1]).toMatchObject({ name: "NA Premier Season 1", source: "esclub", external_id: SEASON_ID, region: "euw1", created_by: "u1" });
@@ -482,6 +504,13 @@ describe("addLeague: no user (the CLI)", () => {
 });
 
 describe("addLeague: rejections write nothing", () => {
+  it.each([true, false])("rejects a stage of a different season without writes (season exists: %s)", async (exists) => {
+    const w = makeWorld({ tournament: exists ? { id: "tour-1", external_id: SEASON_ID, region: "na1" } : null, stage: { id: "stage-1", external_id: STAGE_ID, tournament_id: "other-tour", last_synced_at: T0 } });
+    const out = await run().done;
+    expect(out.result.error).toBeInstanceOf(EsclubProtocolChanged);
+    expect(w.writes).toHaveLength(0);
+    expect(syncStage).not.toHaveBeenCalled();
+  });
   it.each([
     ["NOT_LOL", (s) => (s.id_game = "11ef0000-0000-0000-0000-000000000000")],
     ["NO_DRAFT", (s) => (s.config.default_draft = null)],
@@ -519,6 +548,16 @@ describe("addLeague: rejections write nothing", () => {
 });
 
 describe("addLeague: background mode", () => {
+  it("logs background rejection classes and ids without raw error messages", async () => {
+    makeWorld();
+    vi.spyOn(syncEngine, "runSync").mockRejectedValue(new TypeError("PRIVATE_ERROR_SENTINEL Player99#T99"));
+    await run({ background: true }).done;
+    await Promise.resolve();
+    const logs = console.error.mock.calls.flat().join(" ");
+    expect(logs).toContain("TypeError");
+    expect(logs).toContain("sync-1");
+    expect(logs).not.toMatch(/PRIVATE_ERROR_SENTINEL|Player99/);
+  });
   it("returns { sync } at once and finishes the work afterwards", async () => {
     makeWorld();
     let release;
@@ -567,6 +606,22 @@ describe("rendered SQL", () => {
     expect(a).toBe(`SELECT "tournament_id", "stage_id" FROM "LeagueSeries" AS "LeagueSeries" WHERE "LeagueSeries"."external_id" = '${SERIE_ID}' LIMIT 1;`);
     expect(b).toMatch(/FROM "Tournaments" AS "Tournament" WHERE "Tournament"\."source" = 'esclub' AND "Tournament"\."external_id" = '[0-9a-f-]+' LIMIT 1;$/);
     expect(c).toMatch(/FROM "LeagueStages" AS "LeagueStage" WHERE "LeagueStage"\."external_id" = '[0-9a-f-]+' LIMIT 1;$/);
+  });
+
+  it("captures the known series' stage stamp lookup", async () => {
+    sequelize.query.mockImplementation(async (sql, options) => {
+      const statement = injectReplacements(sql, sequelize.dialect, options.replacements ?? {});
+      rendered.push(statement);
+      const rows = statement.includes('FROM "LeagueSeries"')
+        ? [{ tournament_id: "00000000-0000-4000-8000-000000000001", stage_id: "00000000-0000-4000-8000-000000000002" }]
+        : [{ last_synced_at: T0 }];
+      return options.plain ? rows[0] : rows;
+    });
+    const out = await A.addLeague({ url: URL_OK, userId: null, env: {} });
+    expect(out).toEqual({ known: { tournamentId: "00000000-0000-4000-8000-000000000001", stageId: "00000000-0000-4000-8000-000000000002" } });
+    expect(normalized()).toHaveLength(2);
+    expect(normalized()[1]).toBe('SELECT "last_synced_at" FROM "LeagueStages" AS "LeagueStage" WHERE "LeagueStage"."id" = \'00000000-0000-4000-8000-000000000002\';');
+    expect(begin).not.toHaveBeenCalled();
   });
 
   it("un-archive update", async () => {

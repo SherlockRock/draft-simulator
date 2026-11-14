@@ -75,6 +75,10 @@ function utcDay(now) {
  * @returns {Promise<number>} how many rows were marked failed
  */
 async function markStale(now) {
+  return sweepStale(now);
+}
+
+async function sweepStale(now, transaction) {
   const rows = await select(
     `UPDATE "EsclubSyncs"
         SET status = 'failed', finished_at = heartbeat_at, error_class = 'Abandoned',
@@ -82,14 +86,16 @@ async function markStale(now) {
       WHERE status = 'running' AND heartbeat_at <= :cutoff
       RETURNING id`,
     { now, cutoff: new Date(now.getTime() - STALE_MS) },
+    transaction,
   );
   return rows.length;
 }
 
-async function readRunning() {
+async function readRunning(transaction) {
   const rows = await select(
     `SELECT * FROM "EsclubSyncs" WHERE status = 'running' LIMIT 1`,
     {},
+    transaction,
   );
   return rows[0] ?? null;
 }
@@ -112,7 +118,7 @@ function answerForRunning(running, { kind, tournamentId, seriesId }) {
 }
 
 /** The end of the cooldown for this press, or null when none applies. */
-async function cooldownEnd({ kind, tournamentId, seriesId }) {
+async function cooldownEnd({ kind, tournamentId, seriesId }, transaction) {
   let rows;
   let ms;
   if (kind === "league") {
@@ -122,6 +128,7 @@ async function cooldownEnd({ kind, tournamentId, seriesId }) {
         WHERE tournament_id = :tournamentId AND kind IN ('league', 'add')
           AND finished_at IS NOT NULL`,
       { tournamentId },
+      transaction,
     );
   } else if (kind === "serie") {
     ms = SERIE_COOLDOWN_MS;
@@ -130,6 +137,7 @@ async function cooldownEnd({ kind, tournamentId, seriesId }) {
         WHERE kind = 'serie' AND series_id = :seriesId
           AND finished_at IS NOT NULL`,
       { seriesId },
+      transaction,
     );
   } else {
     return null;
@@ -154,7 +162,7 @@ function limitFor(kind) {
 }
 
 /** Seconds until the user is under the limit again, or null if they are. */
-async function limitRetryAfter({ kind, userId, now }) {
+async function limitRetryAfter({ kind, userId, now }, transaction) {
   const rule = limitFor(kind);
   if (!rule) return null;
   const rows = await select(
@@ -162,6 +170,7 @@ async function limitRetryAfter({ kind, userId, now }) {
       WHERE requested_by = :userId AND kind = :kind AND started_at > :since
       ORDER BY started_at ASC`,
     { userId, kind, since: new Date(now.getTime() - rule.windowMs) },
+    transaction,
   );
   if (rows.length < rule.limit) return null;
   // The start that must leave the window for the count to drop below the
@@ -175,7 +184,8 @@ async function limitRetryAfter({ kind, userId, now }) {
  * Decide what a press does and, when it starts a sync, take the lock. Checks
  * run in this order and a refusal creates no row: kill switch, daily budget,
  * stale sweep, running sync (join or busy), cooldown, per-user limit, insert.
- * The CLI (via "cli") skips the cooldown and the limits.
+ * The CLI (via "cli") skips the cooldown and the limits. All database checks
+ * and the insert hold the same transaction-scoped advisory lock.
  *
  * @param {object} args
  * @param {"add" | "league" | "serie"} args.kind
@@ -213,49 +223,50 @@ async function beginSync({
   const { enabled, budget } = limitsFromEnv(env);
   if (!enabled) return { off: "disabled" };
 
-  const { used } = await readUsage(now);
-  if (used >= budget) return { off: "budget" };
-
-  await markStale(now);
-
   const press = { kind, tournamentId, seriesId };
-  const running = await readRunning();
-  if (running) return answerForRunning(running, press);
-
-  if (via === "api") {
-    const end = await cooldownEnd(press);
-    if (end && end.getTime() > now.getTime()) {
-      return { cooldown: { availableAt: end } };
-    }
-    const retryAfter = await limitRetryAfter({ kind, userId, now });
-    if (retryAfter !== null) return { limited: { retryAfter } };
-  }
-
   try {
-    const rows = await select(
-      `INSERT INTO "EsclubSyncs"
-         (id, kind, tournament_id, stage_id, series_id, requested_by, via,
-          status, started_at, heartbeat_at, request_count,
-          "createdAt", "updatedAt")
-       VALUES
-         (:id, :kind, :tournamentId, :stageId, :seriesId, :userId, :via,
-          'running', :now, :now, 0, :now, :now)
-       RETURNING *`,
-      {
-        id: crypto.randomUUID(),
-        kind,
-        tournamentId,
-        stageId,
-        seriesId,
-        userId,
-        via,
-        now,
-      },
-    );
-    return { sync: rows[0] };
+    return await sequelize.transaction(async (transaction) => {
+      await select("SELECT pg_advisory_xact_lock(1464025932, 2)", {}, transaction);
+      const { used } = await readUsage(now, transaction);
+      if (used >= budget) return { off: "budget" };
+      await sweepStale(now, transaction);
+      const running = await readRunning(transaction);
+      if (running) return answerForRunning(running, press);
+      if (via === "api") {
+        const end = await cooldownEnd(press, transaction);
+        if (end && end.getTime() > now.getTime()) {
+          return { cooldown: { availableAt: end } };
+        }
+        const retryAfter = await limitRetryAfter({ kind, userId, now }, transaction);
+        if (retryAfter !== null) return { limited: { retryAfter } };
+      }
+      const rows = await select(
+        `INSERT INTO "EsclubSyncs"
+           (id, kind, tournament_id, stage_id, series_id, requested_by, via,
+            status, started_at, heartbeat_at, request_count,
+            "createdAt", "updatedAt")
+         VALUES
+           (:id, :kind, :tournamentId, :stageId, :seriesId, :userId, :via,
+            'running', :now, :now, 0, :now, :now)
+         RETURNING *`,
+        {
+          id: crypto.randomUUID(),
+          kind,
+          tournamentId,
+          stageId,
+          seriesId,
+          userId,
+          via,
+          now,
+        },
+        transaction,
+      );
+      return { sync: rows[0] };
+    });
   } catch (err) {
     if (!(err instanceof UniqueConstraintError)) throw err;
-    // Another process took the lock between our read and insert.
+    // The partial unique index remains a backstop for other writers. Read
+    // only after the failed transaction has rolled back.
     const winner = await readRunning();
     if (!winner) return { busy: { retryAfter: BUSY_RETRY_SECONDS } };
     return answerForRunning(winner, press);
@@ -363,11 +374,12 @@ async function getSync(id) {
   return rows[0] ?? null;
 }
 
-async function readUsage(now) {
+async function readUsage(now, transaction) {
   const day = utcDay(now);
   const rows = await select(
     `SELECT request_count FROM "EsclubDailyUsage" WHERE day = :day`,
     { day },
+    transaction,
   );
   return { day, used: rows[0]?.request_count ?? 0 };
 }
