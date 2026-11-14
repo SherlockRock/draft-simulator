@@ -13,6 +13,10 @@ const Team = require("../models/Team.js");
 const TeamPlayer = require("../models/TeamPlayer.js");
 const Tournament = require("../models/Tournament.js");
 const Pool = require("../models/Pool.js");
+const VersusDraft = require("../models/VersusDraft.js");
+const LeagueSeries = require("../models/LeagueSeries.js");
+const LeagueStage = require("../models/LeagueStage.js");
+const { esclubSerieUrl } = require("../utils/esclubLinks");
 
 // Single source of truth for the canvas payload shape. Fourteen call sites
 // used to re-declare these by hand and two drifted, dropping blueSideTeam so
@@ -77,6 +81,79 @@ const TEAM_INCLUDE = [
   },
 ];
 
+// Everything a serialized group carries: the linked teams plus, for a series
+// sent from the league mirror (S3 D8), the provenance needed for its header
+// line and refresh button. LEFT joins only (a custom group has no
+// VersusDraft, a manual series no LeagueSeries) and public columns only: no
+// games, no participants, no roster ids. The raw rows never leave the server;
+// `projectGroup` turns them into `LeagueImport`.
+const GROUP_INCLUDE = [
+  ...TEAM_INCLUDE,
+  {
+    model: VersusDraft,
+    attributes: ["id", "league_series_id"],
+    required: false,
+    include: [
+      {
+        model: LeagueSeries,
+        as: "LeagueSeries",
+        attributes: [
+          "id",
+          "external_id",
+          "tournament_id",
+          "starts_at",
+          "status",
+          "complete",
+        ],
+        required: false,
+        include: [
+          {
+            model: LeagueStage,
+            as: "Stage",
+            attributes: ["name"],
+            required: false,
+          },
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * The `LeagueImport` view of a group's VersusDraft (as loaded by
+ * GROUP_INCLUDE), or null when the group is not an imported series: no
+ * VersusDraft, no `league_series_id` (manual, or purged), or no series row.
+ * @param {object|null|undefined} versusDraft  plain VersusDraft JSON
+ * @returns {{leagueSeriesId: string, tournamentId: string, stageName: string|null,
+ *   startsAt: string|null, status: string, complete: boolean, esclubUrl: string}|null}
+ */
+function leagueImportView(versusDraft) {
+  const series = versusDraft?.LeagueSeries;
+  if (!versusDraft?.league_series_id || !series) return null;
+  return {
+    leagueSeriesId: series.id,
+    tournamentId: series.tournament_id,
+    stageName: series.Stage?.name ?? null,
+    startsAt: series.starts_at ? new Date(series.starts_at).toISOString() : null,
+    status: series.status,
+    complete: Boolean(series.complete),
+    esclubUrl: esclubSerieUrl(series.external_id),
+  };
+}
+
+/**
+ * A group as the client sees it: plain JSON with the raw `VersusDraft`
+ * include removed and `LeagueImport` added (null unless imported). Every
+ * path that hands out a group loaded with GROUP_INCLUDE goes through here.
+ * @param {object} group  a CanvasGroup instance or its toJSON()
+ * @returns {object}
+ */
+function projectGroup(group) {
+  const json = typeof group.toJSON === "function" ? group.toJSON() : group;
+  const { VersusDraft: versusDraft, ...rest } = json;
+  return { ...rest, LeagueImport: leagueImportView(versusDraft) };
+}
+
 /**
  * THE canvas payload. Every `canvasUpdate` broadcast and the REST snapshot
  * come from here — there is no second way to build one.
@@ -101,7 +178,7 @@ async function buildCanvasSnapshot(canvasId) {
       CanvasConnection.findAll({ where: { canvas_id: canvasId }, raw: true }),
       CanvasGroup.findAll({
         where: { canvas_id: canvasId },
-        include: TEAM_INCLUDE,
+        include: GROUP_INCLUDE,
       }),
       CanvasAnnotation.findAll({ where: { canvas_id: canvasId } }),
       CanvasPoolPlacement.findAll({
@@ -114,7 +191,7 @@ async function buildCanvasSnapshot(canvasId) {
     canvas: canvas ? canvas.toJSON() : null,
     drafts,
     connections,
-    groups: groups.map((group) => group.toJSON()),
+    groups: groups.map(projectGroup),
     annotations: annotations.map((annotation) => annotation.toJSON()),
     pools: poolPlacements.map((p) => p.toJSON()),
   };
@@ -124,5 +201,7 @@ module.exports = {
   CANVAS_DRAFT_ATTRIBUTES,
   DRAFT_ATTRIBUTES,
   TEAM_INCLUDE,
+  GROUP_INCLUDE,
+  projectGroup,
   buildCanvasSnapshot,
 };

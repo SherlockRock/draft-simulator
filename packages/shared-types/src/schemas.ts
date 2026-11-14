@@ -328,6 +328,20 @@ export type UpdateTeamRosterPayload = z.infer<
   typeof UpdateTeamRosterPayloadSchema
 >;
 
+// A series group sent from the league mirror (S3 D8): where it came from, for
+// the group header and "Refresh from league". Null (or absent) on every other
+// group, and after the mirror is purged. Public data only.
+export const LeagueImportSchema = z.object({
+  leagueSeriesId: z.string(),
+  tournamentId: z.string(),
+  stageName: z.string().nullable(),
+  startsAt: z.string().nullable(),
+  status: z.enum(["upcoming", "in_progress", "finished"]),
+  complete: z.boolean(),
+  esclubUrl: z.string(),
+});
+export type LeagueImport = z.infer<typeof LeagueImportSchema>;
+
 export const CanvasGroupSchema = z.object({
   id: z.string(),
   canvas_id: z.string(),
@@ -342,6 +356,8 @@ export const CanvasGroupSchema = z.object({
   team2_id: z.string().nullable().optional(),
   Team1: TeamSchema.nullable().optional(),
   Team2: TeamSchema.nullable().optional(),
+  // .catch(null): one bad value must not fail the whole canvas load (as gameType).
+  LeagueImport: LeagueImportSchema.nullable().optional().catch(null),
   parent_group_id: z.string().nullable().optional(),
   metadata: CanvasGroupMetadataSchema,
   isInProgress: z.boolean().optional(),

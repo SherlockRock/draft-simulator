@@ -13,7 +13,8 @@ const Draft = require("../models/Draft.js");
 const {
   CANVAS_DRAFT_ATTRIBUTES,
   DRAFT_ATTRIBUTES,
-  TEAM_INCLUDE,
+  GROUP_INCLUDE,
+  projectGroup,
   buildCanvasSnapshot,
 } = require("./canvasProjections");
 const User = require("../models/User.js");
@@ -441,7 +442,7 @@ router.get("/:canvasId", async (req, res) => {
 
     const groups = await CanvasGroup.findAll({
       where: { canvas_id: canvas.id },
-      include: TEAM_INCLUDE,
+      include: GROUP_INCLUDE,
     });
 
     const annotations = await CanvasAnnotation.findAll({
@@ -460,7 +461,7 @@ router.get("/:canvasId", async (req, res) => {
         groupDrafts.length > 0 &&
         !groupDrafts.every((cd) => cd.Draft.completed);
       return {
-        ...g.toJSON(),
+        ...projectGroup(g),
         isInProgress,
       };
     });
@@ -1854,7 +1855,7 @@ router.post(
       // back rather than stranding a converted group behind a 500.
       const groupWithTeams = await CanvasGroup.findOne({
         where: { id: groupId },
-        include: TEAM_INCLUDE,
+        include: GROUP_INCLUDE,
         transaction: t,
       });
 
@@ -1866,7 +1867,7 @@ router.post(
       res.status(201).json({
         success: true,
         group: {
-          ...(groupWithTeams ?? group).toJSON(),
+          ...projectGroup(groupWithTeams ?? group),
           CanvasDrafts: convertedCanvasDrafts.map((cd) => ({
             ...cd.toJSON(),
             Draft: cd.Draft.toJSON(),
@@ -2365,7 +2366,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
 
     const groupWithTeams = await CanvasGroup.findOne({
       where: { id: groupId },
-      include: TEAM_INCLUDE,
+      include: GROUP_INCLUDE,
     });
 
     // A length change creates or destroys game Cards server-side. The saving
@@ -2373,7 +2374,7 @@ router.put("/:canvasId/group/:groupId", protect, async (req, res) => {
     // the canvasUpdate broadcast below reaches every editor and names no group,
     // so reflowing from it would have N clients each commit (design §6.1).
     // Same shape as convertGroupToSeries, which the client already consumes.
-    let responseGroup = groupWithTeams.toJSON();
+    let responseGroup = projectGroup(groupWithTeams);
     if (lengthChanged) {
       const groupCanvasDrafts = await CanvasDraft.findAll({
         where: { canvas_id: canvasId, group_id: groupId },
