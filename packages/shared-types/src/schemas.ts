@@ -1593,3 +1593,178 @@ export const ScoutPlayersResponseSchema = z.object({
   results: z.array(PlayerScoutResultSchema),
 });
 export type ScoutPlayersResponse = z.infer<typeof ScoutPlayersResponseSchema>;
+
+// =============================================================================
+// esclub league mirror (S2) — /api/esclub
+// =============================================================================
+// Dates are ISO strings on the wire. No schema here carries player data: games
+// expose picks, sides, winner and lanes (champion -> lane) only.
+
+// Counts only, as the sync engine's summary builds them. Every key optional so
+// a row written by an older or newer engine still parses (unknown keys are
+// stripped).
+export const EsclubSyncSummarySchema = z.object({
+  listLengths: z.array(z.number()).optional(),
+  seriesListed: z.number().optional(),
+  seriesSkippedComplete: z.number().optional(),
+  seriesWritten: z.number().optional(),
+  seriesNoTeams: z.number().optional(),
+  gamesWritten: z.number().optional(),
+  pending: z.number().optional(),
+  failed: z.number().optional(),
+  unmatched: z.number().optional(),
+  teams: z.number().optional(),
+  skipped: z.record(z.string(), z.number()).optional(),
+});
+export type EsclubSyncSummary = z.infer<typeof EsclubSyncSummarySchema>;
+
+export const EsclubSyncViewSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["add", "league", "serie"]),
+  status: z.enum(["running", "succeeded", "failed"]),
+  tournamentId: z.string().nullable(),
+  stageId: z.string().nullable(),
+  seriesId: z.string().nullable(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  requestCount: z.number().int(),
+  errorClass: z.string().nullable(),
+  summary: EsclubSyncSummarySchema.nullable(),
+});
+export type EsclubSyncView = z.infer<typeof EsclubSyncViewSchema>;
+
+export const EsclubSyncResponseSchema = z.object({
+  sync: EsclubSyncViewSchema,
+});
+export type EsclubSyncResponse = z.infer<typeof EsclubSyncResponseSchema>;
+
+export const EsclubTournamentViewSchema = z.object({
+  tournament: z.object({
+    id: z.string(),
+    name: z.string(),
+    region: z.string(),
+    lastSyncedAt: z.string().nullable(),
+  }),
+  stages: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      lastSyncedAt: z.string().nullable(),
+    }),
+  ),
+  sync: z.object({
+    running: EsclubSyncViewSchema.nullable(),
+    availableAt: z.string().nullable(),
+    syncEnabled: z.boolean(),
+    budgetPaused: z.boolean(),
+  }),
+});
+export type EsclubTournamentView = z.infer<typeof EsclubTournamentViewSchema>;
+
+export const EsclubTeamViewSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  acronym: z.string().nullable(),
+  colors: z
+    .object({
+      primary: z.string().nullable().optional(),
+      secondary: z.string().nullable().optional(),
+    })
+    .nullable(),
+});
+export type EsclubTeamView = z.infer<typeof EsclubTeamViewSchema>;
+
+export const ESCLUB_SERIES_STATUSES = [
+  "upcoming",
+  "in_progress",
+  "finished",
+] as const;
+
+export const EsclubSeriesItemSchema = z.object({
+  id: z.string(),
+  externalId: z.string(),
+  stageId: z.string(),
+  number: z.number().int(),
+  startsAt: z.string().nullable(),
+  // z.string(), not the enum: a read schema must not break on a new status.
+  status: z.string(),
+  complete: z.boolean(),
+  bestOf: z.number().int(),
+  draftType: z.string().nullable(),
+  team1: EsclubTeamViewSchema.nullable(),
+  team2: EsclubTeamViewSchema.nullable(),
+  gameCount: z.number().int(),
+  wins: z.object({ team1: z.number().int(), team2: z.number().int() }),
+});
+export type EsclubSeriesItem = z.infer<typeof EsclubSeriesItemSchema>;
+
+export const EsclubSeriesListResponseSchema = z.object({
+  series: z.array(EsclubSeriesItemSchema),
+});
+export type EsclubSeriesListResponse = z.infer<
+  typeof EsclubSeriesListResponseSchema
+>;
+
+export const EsclubGameSchema = z.object({
+  number: z.number().int(),
+  playedAt: z.string().nullable(),
+  picks: z.array(z.string()),
+  firstPick: z.enum(["blue", "red"]),
+  blueSideTeam: z.union([z.literal(1), z.literal(2)]),
+  winner: z.enum(["blue", "red"]).nullable(),
+  complete: z.boolean(),
+  // champion -> lane; champions with no known lane are absent.
+  lanes: z.record(z.string(), z.string()),
+});
+export type EsclubGame = z.infer<typeof EsclubGameSchema>;
+
+export const EsclubSeriesDetailSchema = EsclubSeriesItemSchema.extend({
+  esclubUrl: z.string(),
+  games: z.array(EsclubGameSchema),
+});
+export type EsclubSeriesDetail = z.infer<typeof EsclubSeriesDetailSchema>;
+
+export const EsclubSeriesDetailResponseSchema = z.object({
+  series: EsclubSeriesDetailSchema,
+});
+export type EsclubSeriesDetailResponse = z.infer<
+  typeof EsclubSeriesDetailResponseSchema
+>;
+
+// Action responses (POST /leagues, /tournaments/:id/refresh,
+// /series/:id/refresh). 202 { sync } a sync started; 200 { joined } joined the
+// running one; 200 { cooldown } nothing to do yet; 200 { known } (add only) the
+// league was already mirrored; 409 / 429 { retryAfter } seconds; 503 { reason }.
+export const EsclubKnownResponseSchema = z.object({
+  known: z.object({ tournamentId: z.string(), stageId: z.string() }),
+});
+export const EsclubJoinedResponseSchema = z.object({
+  joined: EsclubSyncViewSchema,
+});
+export const EsclubCooldownResponseSchema = z.object({
+  cooldown: z.object({ availableAt: z.string() }),
+});
+export const EsclubRetryAfterResponseSchema = z.object({
+  retryAfter: z.number().int(),
+});
+export const EsclubOffResponseSchema = z.object({
+  reason: z.enum(["disabled", "budget"]),
+  error: z.string(),
+});
+export const EsclubInvalidResponseSchema = z.object({
+  error: z.string(),
+  code: z.enum(["INVALID_URL", "INVALID_REGION"]),
+});
+
+export const EsclubActionResponseSchema = z.union([
+  EsclubSyncResponseSchema,
+  EsclubJoinedResponseSchema,
+  EsclubCooldownResponseSchema,
+  EsclubKnownResponseSchema,
+]);
+export type EsclubActionResponse = z.infer<typeof EsclubActionResponseSchema>;
+export type EsclubOffResponse = z.infer<typeof EsclubOffResponseSchema>;
+export type EsclubRetryAfterResponse = z.infer<
+  typeof EsclubRetryAfterResponseSchema
+>;
+export type EsclubInvalidResponse = z.infer<typeof EsclubInvalidResponseSchema>;

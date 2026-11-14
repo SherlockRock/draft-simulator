@@ -24,6 +24,7 @@ const versusRoutes = require("./routes/versus");
 const navigatorRoutes = require("./routes/navigator");
 const savedPoolsRoutes = require("./routes/savedPools");
 const teamsRoutes = require("./routes/teams");
+const esclubRoutes = require("./routes/esclub");
 const { router: scoutingRouter } = require("./routes/scouting");
 const User = require("./models/User");
 const Draft = require("./models/Draft");
@@ -116,6 +117,7 @@ async function main() {
   app.use("/api/navigator", navigatorRoutes);
   app.use("/api/saved-pools", savedPoolsRoutes);
   app.use("/api/teams", teamsRoutes);
+  app.use("/api/esclub", esclubRoutes);
   app.use("/api/scouting", scoutingRouter);
 
   let server;
