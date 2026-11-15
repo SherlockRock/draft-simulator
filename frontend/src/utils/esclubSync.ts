@@ -7,11 +7,11 @@ import type {
     EsclubTournamentView
 } from "@draft-sim/shared-types";
 
-export const ACCEPTED_LINK_EXAMPLE = "https://esclub.gg/multimedia/serie/<series id>";
+export const ACCEPTED_LINK_EXAMPLE = "https://esclub.gg/serie/<series id>";
 
-// Ported from backend/services/esclub/addLeague.js. Keep both rules in sync.
+// Ported from backend/utils/esclubLinks.js. Keep both rules in sync.
 const SERIE_LINK =
-    /^https?:\/\/(?:www\.)?esclub\.gg\/multimedia\/serie\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/[^?#\s]*)?(?:\?[^#\s]*)?(?:#\S*)?$/i;
+    /^https?:\/\/(?:www\.)?esclub\.gg\/(?:multimedia\/)?serie\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/[^?#\s]*)?(?:\?[^#\s]*)?(?:#\S*)?$/i;
 
 export function parseEsclubUrl(text: string): { kind: "serie"; id: string } | null {
     const id = SERIE_LINK.exec(text.trim())?.[1];

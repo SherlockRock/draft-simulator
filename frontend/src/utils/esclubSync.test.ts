@@ -138,13 +138,13 @@ describe("esclub refresh button", () => {
 
 describe("esclub series URL pre-check", () => {
     it("shows the backend's accepted form", () => {
-        expect(ACCEPTED_LINK_EXAMPLE).toBe(
-            "https://esclub.gg/multimedia/serie/<series id>"
-        );
+        expect(ACCEPTED_LINK_EXAMPLE).toBe("https://esclub.gg/serie/<series id>");
     });
 
     it.each([
         LINK,
+        LINK.replace("/multimedia", ""),
+        `http://www.esclub.gg/serie/${ID}/match/2?x=1#top`,
         `${LINK}/`,
         `${LINK}/draft?match_number=2`,
         `${LINK}?match_number=2#draft`,
@@ -158,14 +158,14 @@ describe("esclub series URL pre-check", () => {
 
     it.each([
         "",
-        "https://esclub.gg/multimedia/serie/<series id>",
+        "https://esclub.gg/serie/<series id>",
         "https://esclub.gg/multimedia/serie/not-a-uuid",
         LINK.replace("esclub.gg", "esclub.gg.example.com"),
         LINK.replace("esclub.gg", "example.com"),
         LINK.replace("esclub.gg", "user@esclub.gg"),
         LINK.replace("esclub.gg", "esclub.gg:443"),
         LINK.replace("/serie/", "/stage/"),
-        LINK.replace("/multimedia", ""),
+
         LINK.replace("https:", "ftp:"),
         LINK.replace("https://", ""),
         `${LINK}extra`,
@@ -239,7 +239,7 @@ describe("add league outcome messages", () => {
         {
             result: { status: 400, body: { code: "INVALID_URL", error: "invalid" } },
             message:
-                "Paste an esclub series link, like https://esclub.gg/multimedia/serie/<series id>."
+                "Paste an esclub series link, like https://esclub.gg/serie/<series id>."
         },
         {
             result: { status: 400, body: { code: "INVALID_REGION", error: "invalid" } },

@@ -38,7 +38,7 @@ const LEAGUE_IMPORT = {
   startsAt: "2026-11-11T18:00:00.000Z",
   status: "finished",
   complete: true,
-  esclubUrl: "https://esclub.gg/multimedia/serie/9876",
+  esclubUrl: "https://esclub.gg/serie/9876",
 };
 
 const importedVersusDraft = () => ({

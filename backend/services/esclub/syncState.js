@@ -31,7 +31,6 @@ const BUSY_RETRY_SECONDS = 60;
 
 const DEFAULT_BUDGET = 2000;
 const DEFAULT_CAP = 400;
-const ERROR_MESSAGE_MAX = 500;
 
 const select = (sql, replacements, transaction) =>
   sequelize.query(sql, {
@@ -353,9 +352,8 @@ async function finishSync(
       status,
       now,
       errorClass: error?.name ?? null,
-      errorMessage: error
-        ? String(error.message ?? "").slice(0, ERROR_MESSAGE_MAX)
-        : null,
+      // Diagnostics belong only in safe logs, never in persisted error text.
+      errorMessage: null,
       summary: summary === null ? null : JSON.stringify(summary),
     },
   );

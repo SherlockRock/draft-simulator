@@ -576,3 +576,12 @@ describe("an async onRequest", () => {
     expect(ws.sent).toHaveLength(1);
   });
 });
+
+
+it("does not include frame exception text in a protocol error", () => {
+  const client = new EsclubClient({ env: ENABLED });
+  client._handle = () => { throw new Error("FAKE_PRIVATE_PLAYER#TAG"); };
+  client._fail = vi.fn();
+  client._safeHandle("fake-frame");
+  expect(client._fail.mock.calls[0][0].message).toBe("unreadable frame");
+});

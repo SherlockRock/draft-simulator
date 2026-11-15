@@ -730,7 +730,7 @@ describe("GET /series/:id", () => {
     const res = await get();
     expect(res.status).toBe(200);
     const s = res.body.series;
-    expect(s.esclubUrl).toBe("https://esclub.gg/multimedia/serie/ext-serie-1");
+    expect(s.esclubUrl).toBe("https://esclub.gg/serie/ext-serie-1");
     expect(s.gameCount).toBe(1);
     expect(s.wins).toEqual({ team1: 1, team2: 0 });
     expect(s.games).toEqual([

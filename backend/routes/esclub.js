@@ -56,10 +56,12 @@ function teamIncludes() {
 }
 
 const SUMMARY_COUNTS = [
-  "seriesListed", "seriesSkippedComplete", "seriesWritten", "seriesNoTeams",
+  "seriesListed", "seriesSkippedComplete", "seriesWritten", "seriesNoTeams", "seriesFailed",
   "gamesWritten", "pending", "failed", "unmatched", "teams",
 ];
 const SKIP_REASONS = new Set([
+  "EsclubProtocolChanged",
+  "EsclubNotFound",
   "roster not in the stage's roster list",
   "stored team not in the stage's roster list",
 ]);

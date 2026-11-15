@@ -2,7 +2,7 @@
 const { isValidRegion } = require("../utils/teamRegions");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SERIE_URL = /^https?:\/\/(?:www\.)?esclub\.gg\/multimedia\/serie\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\/[^?#\s]*)?(?:\?[^#\s]*)?(?:#\S*)?$/i;
+const { parseEsclubUrl, ACCEPTED_LINK_EXAMPLE } = require("../utils/esclubLinks");
 const USAGE = "Usage: node scripts/esclub.js status | list | add <series-url> [--region <region>] | refresh <tournament-uuid> | refresh-serie <series-uuid> | purge <tournament-uuid> [--yes] | unlock";
 
 /**
@@ -15,7 +15,7 @@ function parseArgs(args) {
   const [command, value, flag, option] = args;
   if (["status", "list", "unlock"].includes(command) && args.length === 1) return { command };
   if (command === "add" && (args.length === 2 || (args.length === 4 && flag === "--region"))) {
-    if (!SERIE_URL.test(value)) throw new Error("Expected an esclub series link: https://esclub.gg/multimedia/serie/<series id>");
+    if (!parseEsclubUrl(value)) throw new Error(`Expected an esclub series link: ${ACCEPTED_LINK_EXAMPLE}`);
     const region = option ?? "na1";
     if (!isValidRegion(region)) throw new Error("Invalid region");
     return { command, url: value, region };

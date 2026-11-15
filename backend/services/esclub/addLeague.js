@@ -27,14 +27,10 @@ const defaultState = require("./syncState");
 const syncEngine = require("./sync");
 const { EsclubError, EsclubProtocolChanged } = require("./errors");
 
-/** What the UI and messages show as the one accepted link form. */
-const ACCEPTED_LINK_EXAMPLE = "https://esclub.gg/multimedia/serie/<series id>";
+const { ACCEPTED_LINK_EXAMPLE, parseEsclubUrl } = require("../../utils/esclubLinks");
 
 const NAME_MAX = 200;
 const SUPPORTED_FEARLESS = new Set(["HardPick", "None"]);
-
-const SERIE_LINK =
-  /^https?:\/\/(?:www\.)?esclub\.gg\/multimedia\/serie\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/[^?#\s]*)?(?:\?[^#\s]*)?(?:#\S*)?$/i;
 
 /**
  * A league was understood and refused. `code` is stable:
@@ -49,19 +45,6 @@ class EsclubLeagueRejected extends EsclubError {
     super(message);
     this.code = code;
   }
-}
-
-/**
- * The esclub series link in `text`, or null. Only
- * `esclub.gg/multimedia/serie/<id>` (http or https, optional www, optional
- * further path, query and fragment) is accepted.
- * @param {unknown} text
- * @returns {{ kind: "serie", id: string } | null}
- */
-function parseEsclubUrl(text) {
-  if (typeof text !== "string") return null;
-  const match = SERIE_LINK.exec(text.trim());
-  return match ? { kind: "serie", id: match[1].toLowerCase() } : null;
 }
 
 const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -89,7 +72,7 @@ async function validateAndLocate(client, { serieId }, requests = defaultRequests
   } else if (serie.type_parent === "Round") {
     roundId = serie.id_parent;
   } else {
-    throw new EsclubProtocolChanged(`esclub add league: unknown series parent type ${JSON.stringify(serie.type_parent)}`);
+    throw new EsclubProtocolChanged("esclub add league: unknown series type_parent");
   }
   const round = await requests.fetchRound(client, { id_round: roundId });
   const stage = await requests.fetchEventStage(client, { id_event_stage: round.id_event_stage });

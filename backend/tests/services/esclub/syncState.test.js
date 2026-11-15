@@ -765,7 +765,7 @@ describe("finishSync", () => {
     expect(r.summary).toBe(JSON.stringify({ series: 3 }));
   });
 
-  it("records the error class and a message cut to 500 chars", async () => {
+  it("records only the error class, never the upstream message", async () => {
     const r = running();
     class EsclubUnavailable extends Error {
       constructor(m) { super(m); this.name = "EsclubUnavailable"; }
@@ -773,7 +773,7 @@ describe("finishSync", () => {
     await S.finishSync(r.id, { status: "failed", error: new EsclubUnavailable("x".repeat(900)), now: at(MIN) });
     expect(r.status).toBe("failed");
     expect(r.error_class).toBe("EsclubUnavailable");
-    expect(r.error_message).toHaveLength(500);
+    expect(r.error_message).toBeNull();
     expect(r.summary).toBeNull();
   });
 
