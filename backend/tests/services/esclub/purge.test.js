@@ -7,7 +7,7 @@ const { injectReplacements } = require("sequelize/lib/utils/sql");
 const { previewPurge, purgeTournament } = require("../../../services/esclub/purge");
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
-const counts = { games: 4, series: 2, stages: 1, teamPlayers: 10, teams: 2, userTournaments: 3, tournaments: 1 };
+const counts = { games: 4, series: 2, stages: 1, teamPlayers: 10, leaguePlayerNames: 3, teams: 2, userTournaments: 3, tournaments: 1 };
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -67,7 +67,7 @@ describe("esclub purge SQL (no database)", () => {
     const sql = db.log[0].sql;
     expect(sql).toContain(`t.id = '${ID}'`);
     expect(sql).toContain("t.source = 'esclub'");
-    for (const table of ["LeagueGames", "LeagueSeries", "LeagueStages", "TeamPlayers", "Teams", "UserTournaments"]) {
+    for (const table of ["LeagueGames", "LeagueSeries", "LeagueStages", "TeamPlayers", "LeaguePlayerNames", "Teams", "UserTournaments"]) {
       expect(sql).toContain(`"${table}"`);
     }
     expect(sql).toMatch(/g.series_id IN \(SELECT id FROM "LeagueSeries" WHERE tournament_id =/);
@@ -104,15 +104,15 @@ describe("esclub purge SQL (no database)", () => {
     expect(db.log.every(({ options }) => options.transaction === db.transaction)).toBe(true);
     const deletes = db.log.filter(({ sql }) => sql.startsWith("DELETE"));
     expect(deletes.map(({ sql }) => /^DELETE FROM "([^"]+)"/.exec(sql)[1])).toEqual([
-      "LeagueGames", "LeagueSeries", "LeagueStages", "TeamPlayers", "Teams", "Tournaments",
+      "LeagueGames", "LeagueSeries", "LeagueStages", "TeamPlayers", "LeaguePlayerNames", "Teams", "Tournaments",
     ]);
     for (const { sql } of db.log.filter(({ sql }) => !sql.startsWith("LOCK"))) {
       expect(sql).toContain(`'${ID}'`);
     }
     expect(deletes[0].sql).toContain(`series_id IN (SELECT id FROM "LeagueSeries" WHERE tournament_id = '${ID}')`);
     expect(deletes[3].sql).toContain(`team_id IN (SELECT id FROM "Teams" WHERE tournament_id = '${ID}')`);
-    for (const i of [1, 2, 4]) expect(deletes[i].sql).toContain(`WHERE tournament_id = '${ID}'`);
-    expect(deletes[5].sql).toContain(`WHERE id = '${ID}' AND source = 'esclub'`);
+    for (const i of [1, 2, 4, 5]) expect(deletes[i].sql).toContain(`WHERE tournament_id = '${ID}'`);
+    expect(deletes[6].sql).toContain(`WHERE id = '${ID}' AND source = 'esclub'`);
     // UserTournaments cascade, canvas team links SET NULL, and sync-log FKs
     // SET NULL in the existing schema; none of those tables is deleted here.
     expect(deletes.some(({ sql }) => /EsclubSyncs|EsclubDailyUsage|Canvas|VersusDraft|UserTournaments/.test(sql))).toBe(false);

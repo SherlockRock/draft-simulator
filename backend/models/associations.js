@@ -18,6 +18,7 @@ const UserTournament = require("./UserTournament");
 const LeagueStage = require("./LeagueStage");
 const LeagueSeries = require("./LeagueSeries");
 const LeagueGame = require("./LeagueGame");
+const LeaguePlayerName = require("./LeaguePlayerName");
 
 const setupAssociations = () => {
   User.hasMany(UserToken);
@@ -105,6 +106,8 @@ const setupAssociations = () => {
 
   // League mirror (S2). Deleting a tournament removes its stages, series and
   // games; a Team a series points at cannot be deleted (RESTRICT).
+  Tournament.hasMany(LeaguePlayerName, { foreignKey: "tournament_id", onDelete: "CASCADE" });
+  LeaguePlayerName.belongsTo(Tournament, { foreignKey: "tournament_id", onDelete: "CASCADE" });
   Tournament.hasMany(LeagueStage, {
     foreignKey: "tournament_id",
     onDelete: "CASCADE",
