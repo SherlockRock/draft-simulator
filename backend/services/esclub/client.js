@@ -222,8 +222,8 @@ class EsclubClient {
   _safeHandle(text) {
     try {
       this._handle(text);
-    } catch (err) {
-      this._fail(new EsclubProtocolChanged(`unreadable frame: ${err.message}`));
+    } catch {
+      this._fail(new EsclubProtocolChanged("unreadable frame"));
     }
   }
 

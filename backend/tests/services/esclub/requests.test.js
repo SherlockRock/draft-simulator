@@ -343,3 +343,16 @@ describe("fetchSerieTeamOrder", () => {
     await expect(R.fetchSerieTeamOrder(client, { id_serie: "s" })).rejects.toBeInstanceOf(EsclubProtocolChanged);
   });
 });
+
+
+it("protocol shape errors reveal only paths and types, never field values", async () => {
+  const secret = "FAKE_PRIVATE_PLAYER#TAG";
+  await expect(R.fetchSerieTeamOrder({ request: async () => ({ members: [{ id_parent: secret, type_parent: secret }] }) }, { id_serie: "fake-series" }))
+    .rejects.toThrow('members[0].type_parent is not "TeamRoster"');
+  try {
+    await R.fetchSerieTeamOrder({ request: async () => ({ members: [{ id_parent: { name_riot_game: secret }, type_parent: "TeamRoster" }] }) }, { id_serie: "fake-series" });
+  } catch (error) {
+    expect(error.message).toBe("esclub fetch-members-by-serie: members[0].id_parent is not a string (got object)");
+    expect(error.message).not.toContain(secret);
+  }
+});

@@ -117,7 +117,7 @@ function normalizeTeamRoster(row) {
  */
 function normalizeStatus(awaitingStatus) {
   if (typeof awaitingStatus === "string" && has(STATUS, awaitingStatus)) return STATUS[awaitingStatus];
-  throw new EsclubProtocolChanged(`esclub: unknown series awaiting_status ${JSON.stringify(awaitingStatus)}`);
+  throw new EsclubProtocolChanged("esclub: unknown series awaiting_status");
 }
 
 /**
@@ -291,7 +291,7 @@ function buildParticipants(finals, sideOf, participants, byResource, matchId, pl
     let lane = null;
     if (p.lane_team != null) {
       if (!has(LANES, p.lane_team)) {
-        throw new EsclubProtocolChanged(`esclub: match ${matchId}: unknown lane ${JSON.stringify(p.lane_team)}`);
+        throw new EsclubProtocolChanged(`esclub: match ${matchId}: unknown lane_team`);
       }
       lane = LANES[p.lane_team];
     }
@@ -344,7 +344,7 @@ function normalizeGame(match, draft, choices, teams, byResource) {
     throw fail(`rosters ${JSON.stringify(rosterIds)} are not the series' two teams`);
   }
   for (const c of finals) {
-    if (c.type_choice !== "BanCharacter" && c.type_choice !== "PickCharacter") throw fail(`unknown choice type ${c.type_choice}`);
+    if (c.type_choice !== "BanCharacter" && c.type_choice !== "PickCharacter") throw fail("unknown choice type_choice");
   }
 
   const sideOf = rosterSides(rosterIds, finals, choices, participants, byResource, id);

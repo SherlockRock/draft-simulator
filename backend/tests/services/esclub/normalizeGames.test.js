@@ -619,3 +619,27 @@ describe("ambiguous final draft slots", () => {
     expect(result.pending).toEqual([{ externalMatchId: "fake-upcoming", number: 1, reason: "no draft yet" }]);
   });
 });
+
+
+it("protocol errors never echo unrecognised status, lane or choice values", () => {
+  const secret = "FAKE_PRIVATE_PLAYER#TAG";
+  expect(() => N.normalizeStatus(secret)).toThrow("unknown series awaiting_status");
+  try { N.normalizeStatus(secret); } catch (error) { expect(error.message).not.toContain(secret); }
+  for (const field of ["lane_team", "type_choice"]) {
+    const d = clone(group);
+    if (field === "lane_team") {
+      for (const match of d.matches) for (const integration of match.config.integrations) {
+        for (const player of integration.LeagueOfLegends?.participants || []) player.lane_team = secret;
+      }
+    } else {
+      for (const choices of Object.values(d.choices)) for (const choice of choices) {
+        if (choice.is_final && choice.type_choice !== "PickSide") choice.type_choice = secret;
+      }
+    }
+    let caught;
+    try { N.normalizeSeries(input(d)); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(EsclubProtocolChanged);
+    expect(caught.message).toContain(field);
+    expect(caught.message).not.toContain(secret);
+  }
+});

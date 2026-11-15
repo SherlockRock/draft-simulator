@@ -332,7 +332,7 @@ async function syncStage(client, { tournament, stage, store = defaultStore, summ
       if (!(err instanceof EsclubProtocolChanged) && !(err instanceof EsclubNotFound)) throw err;
       summary.seriesFailed += 1;
       skip(summary, err.name);
-      console.error(`esclub series ${item.id_serie}: ${err.name}`);
+      console.error(`esclub series ${item.id_serie}: ${err.name}${err instanceof EsclubProtocolChanged ? `: ${err.message}` : ""}`);
     }
   }
   if (listed.length > 0 && summary.seriesFailed - failedBefore === listed.length) {
@@ -444,6 +444,9 @@ async function runSync(syncRow, work, { env = process.env, session = withEsclubS
     });
   } catch (err) {
     error = err instanceof Error ? err : new Error(String(err));
+  }
+  if (error instanceof EsclubProtocolChanged) {
+    console.error(`esclub sync ${syncRow.id}: ${error.name}: ${error.message}`);
   }
   const status = error ? "failed" : "succeeded";
   try {

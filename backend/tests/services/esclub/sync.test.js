@@ -916,3 +916,15 @@ describe("series isolation boundaries", () => {
     await expect(runStage(makeFakeStore(), makeStub({ failOn: (name) => name === request ? new EsclubProtocolChanged("global shape") : undefined }))).rejects.toThrow("global shape");
   });
 });
+
+
+it("logs protocol messages without putting them into the summary", async () => {
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  const state = { limitsFromEnv: () => ({ budget: 100, cap: 25 }), finishSync: vi.fn() };
+  const error = new EsclubProtocolChanged("esclub: fake-field is not an array (got null)");
+  const result = await sync.runSync({ id: "fake-sync" }, async () => { throw error; }, {
+    session: async (work) => work({}), state,
+  });
+  expect(errorLog).toHaveBeenCalledWith(`esclub sync fake-sync: EsclubProtocolChanged: ${error.message}`);
+  expect(JSON.stringify(result.summary)).not.toContain(error.message);
+});

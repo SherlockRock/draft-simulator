@@ -89,7 +89,7 @@ async function validateAndLocate(client, { serieId }, requests = defaultRequests
   } else if (serie.type_parent === "Round") {
     roundId = serie.id_parent;
   } else {
-    throw new EsclubProtocolChanged(`esclub add league: unknown series parent type ${JSON.stringify(serie.type_parent)}`);
+    throw new EsclubProtocolChanged("esclub add league: unknown series type_parent");
   }
   const round = await requests.fetchRound(client, { id_round: roundId });
   const stage = await requests.fetchEventStage(client, { id_event_stage: round.id_event_stage });
