@@ -21,7 +21,7 @@ import {
     playersLabel,
     regionLabel,
     teamDisplayName,
-    useCountLabel
+    teamRecordLabel
 } from "../../utils/teamsPage";
 import { TeamRosterEditor } from "../TeamRosterEditor";
 import { invalidateTeams } from "./invalidateTeams";
@@ -103,7 +103,7 @@ export const TeamsRow: Component<{
                                 <div class="flex flex-wrap gap-x-2 text-xs text-darius-text-secondary">
                                     <span>{playersLabel(props.team)}</span>
                                     <span>{regionLabel(props.team.region)}</span>
-                                    <span>{useCountLabel(props.team.useCounts)}</span>
+                                    <span>{teamRecordLabel(props.team)}</span>
                                 </div>
                             </div>
                             <div class="ml-auto flex flex-wrap items-center">

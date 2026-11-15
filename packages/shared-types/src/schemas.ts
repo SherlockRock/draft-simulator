@@ -263,6 +263,11 @@ export type ManagedTournament = z.infer<typeof ManagedTournamentSchema>;
 
 export const ManagedTeamRowSchema = TeamListRowSchema.extend({
   useCounts: TeamUseCountsSchema,
+  // Shared esclub mirror record; null for teams outside an imported league.
+  leagueRecord: z.object({
+    series: z.object({ won: z.number().int().nonnegative(), lost: z.number().int().nonnegative() }),
+    games: z.object({ won: z.number().int().nonnegative(), lost: z.number().int().nonnegative() }),
+  }).nullable(),
   canArchive: z.boolean(),
   canDelete: z.boolean(),
 });

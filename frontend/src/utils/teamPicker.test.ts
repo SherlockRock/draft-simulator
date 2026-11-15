@@ -57,6 +57,7 @@ const managed = (
     over: Partial<ManagedTeamRow> = {}
 ): ManagedTeamRow => ({
     ...listRow(id, name, { archived_at: "2026-11-01T00:00:00.000Z" }),
+    leagueRecord: null,
     useCounts: { official: 0, scrim: 0, scratch: 0, total: 0 },
     canArchive: true,
     canDelete: true,

@@ -17,6 +17,7 @@ const {
   assertTeamInvariants,
 } = require("../services/teamAccess");
 const teamUsage = require("../services/teamUsage");
+const leagueRecord = require("../services/leagueRecord");
 
 const { isValidRegion } = require("../utils/teamRegions");
 const { isPlaceholderTeamName } = require("../utils/teamPlaceholders");
@@ -194,6 +195,7 @@ router.get("/manage", protect, async (req, res) => {
       teams.map((team) => team.id),
       userId,
     );
+    const leagueRecords = await leagueRecord.teamLeagueRecords(teams.map((team) => team.id));
     res.json({
       tournaments: memberships.map((row) => ({
         id: row.Tournament.id,
@@ -204,6 +206,7 @@ router.get("/manage", protect, async (req, res) => {
       })),
       teams: teams.map((team) => ({
         ...serializeTeam(team, userId),
+        leagueRecord: leagueRecords[team.id] ?? null,
         useCounts: useCounts[team.id] ?? {
           official: 0,
           scrim: 0,
