@@ -103,7 +103,9 @@ export const TeamsRow: Component<{
                                 <div class="flex flex-wrap gap-x-2 text-xs text-darius-text-secondary">
                                     <span>{playersLabel(props.team)}</span>
                                     <span>{regionLabel(props.team.region)}</span>
-                                    <span>{teamRecordLabel(props.team)}</span>
+                                    <Show when={teamRecordLabel(props.team)}>
+                                        {(label) => <span>{label()}</span>}
+                                    </Show>
                                 </div>
                             </div>
                             <div class="ml-auto flex flex-wrap items-center">
