@@ -257,11 +257,13 @@ describe("synthetic variants", () => {
     expect(r.pending).toEqual([{ externalMatchId: id1, number: 1, reason: "draft incomplete" }]);
     expect(r.series.games.map((g) => g.number)).toEqual([0]);
   });
-  it("two final choices with the same number -> EsclubProtocolChanged", () => {
-    expect(() => run((d) => {
+  it("two final choices with the same number fail only that game", () => {
+    const result = run((d) => {
       const dup = clone(d.choices[id1].find((c) => c.is_final && c.number === 18));
       d.choices[id1].push(dup);
-    })).toThrow(EsclubProtocolChanged);
+    });
+    expect(result.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+    expect(result.series.games.map((g) => g.number)).toEqual([0]);
   });
   it("a final choice numbered above 19 -> EsclubProtocolChanged", () => {
     expect(() => run((d) => {
@@ -595,5 +597,25 @@ describe("synthetic variants", () => {
     expect(g0.picks[xinSlot]).toBe("Vi");
     expect(g0.picks).not.toContain("XinZhao");
     expect(g0.substitutions.map((s) => s.slot)).toEqual([xinSlot]);
+  });
+});
+
+
+describe("ambiguous final draft slots", () => {
+  it("fails only the duplicate-slot game and continues to the next game", () => {
+    // Hand-made anonymous shape: no players, account keys or wire replies.
+    const choice = { number: 12, is_final: true, type_choice: "PickCharacter",
+      id_game_resource: "fake-resource", id_team_roster_source: "fake-roster" };
+    const result = N.normalizeGames({
+      teams: [], resources: [],
+      matches: [{ id_match: "fake-ambiguous", number: 0 }, { id_match: "fake-upcoming", number: 1 }],
+      drafts: { "fake-ambiguous": { is_blind: false } },
+      choices: { "fake-ambiguous": [choice, { ...choice, id_game_resource: "fake-other" }] },
+    });
+    expect(result.games).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+    expect(result.failed[0].reason).toContain("two final choices numbered 12");
+    expect(result.pending).toEqual([{ externalMatchId: "fake-upcoming", number: 1, reason: "no draft yet" }]);
   });
 });

@@ -326,7 +326,10 @@ function normalizeGame(match, draft, choices, teams, byResource) {
   const byNumber = new Map();
   for (const c of finals) {
     if (!Number.isInteger(c.number) || c.number < 0 || c.number > 19) throw fail(`final choice number ${c.number} out of range`);
-    if (byNumber.has(c.number)) throw fail(`two final choices numbered ${c.number}`);
+    if (byNumber.has(c.number)) {
+      // Multiple final rows leave the slot ambiguous; never choose one by order.
+      throw new EsclubDraftMismatch(`esclub: match ${id}: two final choices numbered ${c.number}`);
+    }
     byNumber.set(c.number, c);
   }
   if (byNumber.size < 20) return note("pending", "draft incomplete");
