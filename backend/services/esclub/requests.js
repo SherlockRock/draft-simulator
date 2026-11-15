@@ -351,6 +351,11 @@ function fetchGameResources(client, { id_game }) {
 async function fetchSerieTeamOrder(client, { id_serie }) {
   const request = "fetch-members-by-serie";
   const members = arrayOf(request, await client.request(request, { id_serie }), "members", MEMBER);
+  return { rosterIds: memberRosterIds(members, request) };
+}
+
+// Shared parent/type/count validation; the team-order request still reads only MEMBER.
+function memberRosterIds(members, request) {
   const rosterIds = [];
   members.forEach((m, i) => {
     if (m.type_parent !== "TeamRoster") {
@@ -361,7 +366,61 @@ async function fetchSerieTeamOrder(client, { id_serie }) {
   if (rosterIds.length > 2) {
     throw new EsclubProtocolChanged(`esclub ${request}: members belong to ${rosterIds.length} rosters, expected at most 2`);
   }
-  return { rosterIds };
+  return rosterIds;
+}
+
+/**
+ * Player members of each series roster, including ended memberships. Private:
+ * only the in-memory name step consumes these rows; nothing persists them.
+ * @param {import("./client").EsclubClient} client
+ * @param {{id_serie: string}} ids
+ * @returns {Promise<{members: {id_parent: string, type_parent: string, id_user: string, type_member: string, time_start: number|null, time_end: number|null}[]}>}
+ */
+async function fetchSerieRosterPlayers(client, { id_serie }) {
+  const request = "fetch-members-by-serie";
+  const spec = { ...MEMBER, id_user: S, type_member: S, time_start: NN, time_end: NN };
+  const members = arrayOf(request, await client.request(request, { id_serie }), "members", spec);
+  const rosterIds = memberRosterIds(members, request);
+  const out = [];
+  for (const rosterId of rosterIds) {
+    const seen = new Set();
+    const players = members.filter((m) => m.id_parent === rosterId && ["Starter", "Substitute"].includes(m.type_member));
+    players.sort((a, b) => Number(a.time_end !== null) - Number(b.time_end !== null) || (b.time_start ?? -Infinity) - (a.time_start ?? -Infinity));
+    for (const m of players) {
+      if (seen.has(m.id_user)) continue;
+      seen.add(m.id_user);
+      out.push({ id_parent: m.id_parent, type_parent: m.type_parent, id_user: m.id_user,
+        type_member: m.type_member, time_start: m.time_start, time_end: m.time_end });
+    }
+  }
+  return { members: out };
+}
+
+/**
+ * Project linked Riot accounts immediately; non-Riot data never leaves here.
+ * Empty replies are normal. Errors describe paths/types, never context/values.
+ * @param {import("./client").EsclubClient} client
+ * @param {{id_user: string}} ids
+ * @returns {Promise<{accounts: {accountKey: string, gameName: string, tagLine: string}[], dropped: number}>}
+ */
+async function fetchRiotAccounts(client, { id_user }) {
+  const request = "fetch-oauths-by-user";
+  const oauths = arrayOf(request, await client.request(request, { id_user }), "oauths", { type_oauth: S });
+  const accounts = [];
+  let dropped = 0;
+  oauths.forEach((item, i) => {
+    if (item.type_oauth !== "Riot") return;
+    check(request, `oauths[${i}]`, item, { id_oauth_external: S, name: S });
+    const split = item.name.lastIndexOf("#");
+    const gameName = split < 0 ? "" : item.name.slice(0, split).trim();
+    const tagLine = split < 0 ? "" : item.name.slice(split + 1).trim();
+    if (!gameName || !tagLine || gameName.length > 64 || tagLine.length > 16) {
+      dropped++;
+      return;
+    }
+    accounts.push({ accountKey: item.id_oauth_external, gameName, tagLine });
+  });
+  return { accounts, dropped };
 }
 
 module.exports = {
@@ -382,4 +441,6 @@ module.exports = {
   fetchTeamRosters,
   fetchGameResources,
   fetchSerieTeamOrder,
+  fetchSerieRosterPlayers,
+  fetchRiotAccounts,
 };
