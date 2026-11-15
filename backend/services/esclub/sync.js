@@ -43,7 +43,7 @@ function resetResourcesCache() {
 /**
  * The counts a sync keeps (stored in EsclubSyncs.summary: counts only).
  * @returns {{ listLengths: number[], seriesListed: number, seriesSkippedComplete: number,
- *   seriesWritten: number, seriesNoTeams: number, gamesWritten: number, pending: number,
+ *   seriesWritten: number, seriesFailed: number, seriesNoTeams: number, gamesWritten: number, pending: number,
  *   failed: number, unmatched: number, teams: number, skipped: Record<string, number> }}
  */
 function newSummary() {
@@ -52,6 +52,7 @@ function newSummary() {
     seriesListed: 0,
     seriesSkippedComplete: 0,
     seriesWritten: 0,
+    seriesFailed: 0,
     seriesNoTeams: 0,
     gamesWritten: 0,
     pending: 0,
@@ -309,20 +310,33 @@ async function syncStage(client, { tournament, stage, store = defaultStore, summ
   const teamsById = mapBy([...teamsByExternal.values()], "id");
   const mirrored = await store.loadSeriesByExternalIds(listed.map((s) => s.id_serie));
 
+  const failedBefore = summary.seriesFailed;
   for (const item of listed) {
-    await syncOneSeries(client, {
-      listed: item,
-      mirrored: mirrored.get(item.id_serie) || null,
-      tournament,
-      stage,
-      teamsByExternal,
-      teamsById,
-      getResources: async () => resources,
-      store,
-      requests,
-      summary,
-      now,
-    });
+    try {
+      await syncOneSeries(client, {
+        listed: item,
+        mirrored: mirrored.get(item.id_serie) || null,
+        tournament,
+        stage,
+        teamsByExternal,
+        teamsById,
+        getResources: async () => resources,
+        store,
+        requests,
+        summary,
+        now,
+      });
+    } catch (err) {
+      // Resources, stage walk and rosters are outside this series boundary.
+      // Transport, budget, fencing and database errors still propagate.
+      if (!(err instanceof EsclubProtocolChanged) && !(err instanceof EsclubNotFound)) throw err;
+      summary.seriesFailed += 1;
+      skip(summary, err.name);
+      console.error(`esclub series ${item.id_serie}: ${err.name}`);
+    }
+  }
+  if (listed.length > 0 && summary.seriesFailed - failedBefore === listed.length) {
+    throw new EsclubProtocolChanged("all listed series failed");
   }
   return summary;
 }
@@ -440,6 +454,7 @@ async function runSync(syncRow, work, { env = process.env, session = withEsclubS
   const counts = [
     `listed ${summary.seriesListed}`,
     `written ${summary.seriesWritten}`,
+    `series-failed ${summary.seriesFailed}`,
     `unchanged ${summary.seriesSkippedComplete}`,
     `no-teams ${summary.seriesNoTeams}`,
     `games ${summary.gamesWritten}`,

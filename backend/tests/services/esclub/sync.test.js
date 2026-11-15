@@ -12,6 +12,7 @@ const N = require("../../../services/esclub/normalize");
 const syncState = require("../../../services/esclub/syncState");
 const {
   EsclubProtocolChanged,
+  EsclubNotFound,
   EsclubUnavailable,
   EsclubBudgetExhausted,
   EsclubRequestCapReached,
@@ -582,13 +583,14 @@ describe("a stop ends the sync; the series in hand writes nothing", () => {
     };
   };
 
-  it("EsclubProtocolChanged on the third fetched series: the two before are written, the third and later are not", async () => {
+  it("EsclubProtocolChanged on the third fetched series: skips it and continues", async () => {
     const store = makeFakeStore();
     const stub = makeStub({ failOn: thirdMatchesCall() });
-    await expect(runStage(store, stub)).rejects.toBeInstanceOf(EsclubProtocolChanged);
+    const summary = await runStage(store, stub);
+    expect(summary.seriesFailed).toBe(1);
+    expect(summary.skipped.EsclubProtocolChanged).toBe(1);
     const thirdFinished = finished[2].id_serie;
-    const idx = SERIES_OF_GROUP.findIndex((s) => s.id_serie === thirdFinished);
-    expect([...store.state.series.keys()]).toEqual(SERIES_OF_GROUP.slice(0, idx).map((s) => s.id_serie));
+    expect([...store.state.series.keys()]).toEqual(SERIES_OF_GROUP.filter((s) => s.id_serie !== thirdFinished).map((s) => s.id_serie));
     expect(store.seriesRow(thirdFinished)).toBeUndefined();
   });
 
@@ -733,11 +735,11 @@ describe("runSync", () => {
     expect(arg.summary.seriesWritten).toBe(1);
   });
 
-  it("EsclubProtocolChanged from the third fetched series fails the sync with the class and the counts so far", async () => {
+  it("some failed series finish succeeded with counts and no writes for those series", async () => {
     const h = harness({ stubOptions: { failOn: (name) => (name === "fetch-draft-by-match" ? new EsclubProtocolChanged("bad draft") : undefined) } });
     const result = await h.run();
-    expect(result).toMatchObject({ status: "failed" });
-    expect(result.error).toBeInstanceOf(EsclubProtocolChanged);
+    expect(result).toMatchObject({ status: "succeeded", error: null });
+    expect(result.summary.seriesFailed).toBeGreaterThan(0);
     expect(h.state.finishSync.mock.calls[0][1].error).toBe(result.error);
     expect(h.store.seriesRow(GROUP_BO3)).toBeUndefined();
   });
@@ -888,5 +890,29 @@ describe("resources", () => {
     const c = makeStub();
     await runStage(makeFakeStore(), c);
     expect(c.count("fetch-game-resources")).toBe(1);
+  });
+});
+
+
+describe("series isolation boundaries", () => {
+  it.each([EsclubProtocolChanged, EsclubNotFound])("retries a skipped series after %s", async (ErrorClass) => {
+    const store = makeFakeStore();
+    const stub = makeStub({ failOn: (name, ctx) => name === "fetch-members-by-serie" && ctx.id_serie === GROUP_BO3 ? new ErrorClass("series unavailable shape") : undefined });
+    const summary = await runStage(store, stub);
+    expect(summary.seriesFailed).toBe(1);
+    expect(store.seriesRow(GROUP_BO3)).toBeUndefined();
+    const retry = await runStage(store, makeStub());
+    expect(retry.seriesFailed).toBe(0);
+    expect(store.seriesRow(GROUP_BO3)).toBeDefined();
+  });
+  it("fails when every listed series fails", async () => {
+    const store = makeFakeStore();
+    const summary = sync.newSummary();
+    await expect(runStage(store, makeStub({ failOn: (name) => name === "fetch-members-by-serie" ? new EsclubNotFound("no series") : undefined }), { summary })).rejects.toThrow("all listed series failed");
+    expect(summary.seriesFailed).toBe(SERIES_OF_GROUP.length);
+    expect(store.state.series.size).toBe(0);
+  });
+  it.each(["fetch-game-resources", "fetch-rounds-by-number-next", "fetch-team-rosters-by-event-stage-next"])("keeps %s protocol failures fatal", async (request) => {
+    await expect(runStage(makeFakeStore(), makeStub({ failOn: (name) => name === request ? new EsclubProtocolChanged("global shape") : undefined }))).rejects.toThrow("global shape");
   });
 });

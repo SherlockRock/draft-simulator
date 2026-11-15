@@ -1661,6 +1661,7 @@ export const EsclubSyncSummarySchema = z.object({
   listLengths: z.array(EsclubCountSchema).optional(),
   seriesListed: EsclubCountSchema.optional(),
   seriesSkippedComplete: EsclubCountSchema.optional(),
+  seriesFailed: EsclubCountSchema.optional(),
   seriesWritten: EsclubCountSchema.optional(),
   seriesNoTeams: EsclubCountSchema.optional(),
   gamesWritten: EsclubCountSchema.optional(),
@@ -1670,6 +1671,8 @@ export const EsclubSyncSummarySchema = z.object({
   teams: EsclubCountSchema.optional(),
   // Unknown reasons can contain upstream text; expose their count only.
   skipped: z.object({
+    EsclubProtocolChanged: EsclubCountSchema.optional(),
+    EsclubNotFound: EsclubCountSchema.optional(),
     "roster not in the stage's roster list": EsclubCountSchema.optional(),
     "stored team not in the stage's roster list": EsclubCountSchema.optional(),
     other: EsclubCountSchema.optional(),
