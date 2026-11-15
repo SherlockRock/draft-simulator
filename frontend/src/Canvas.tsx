@@ -1672,16 +1672,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         });
     });
 
+    // Every Import opener drops at the centre of the current view. The sidebar
+    // button used to open the dialog without this, so a send landed at the
+    // previous position (or the world origin).
+    const openImportAtViewportCenter = () => {
+        const vp = props.viewport();
+        const centerX = vp.x + window.innerWidth / 2 / vp.zoom;
+        const centerY = vp.y + window.innerHeight / 2 / vp.zoom;
+        setImportPosition({ x: centerX, y: centerY });
+        setIsImportDialogOpen(true);
+    };
+
     // Set the import callback in the context
     createEffect(() => {
-        canvasContext.setImportCallback(() => () => {
-            // Calculate center of viewport
-            const vp = props.viewport();
-            const centerX = vp.x + window.innerWidth / 2 / vp.zoom;
-            const centerY = vp.y + window.innerHeight / 2 / vp.zoom;
-            setImportPosition({ x: centerX, y: centerY });
-            setIsImportDialogOpen(true);
-        });
+        canvasContext.setImportCallback(() => openImportAtViewportCenter);
 
         onCleanup(() => {
             canvasContext.setImportCallback(null);
@@ -7384,7 +7388,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     onZoomOut={zoomOut}
                     cardLayout={props.cardLayout()}
                     onSelectCardLayout={props.setCardLayout}
-                    onImport={() => setIsImportDialogOpen(true)}
+                    onImport={openImportAtViewportCenter}
                     isConnectionMode={isConnectionMode()}
                     onToggleConnectionMode={toggleConnectionMode}
                     hasEditPermissions={canEdit()}
