@@ -50,6 +50,11 @@ import {
     applyLeagueRefresh
 } from "./utils/actions";
 import { runLeagueRefresh } from "./utils/leagueRefreshFlow";
+import { leagueImportAfterApply } from "./utils/leagueImport";
+import {
+    groupSettingsMetadata,
+    groupSettingsUpdateBody
+} from "./utils/groupSettingsSave";
 import { useNavigate, useParams } from "@solidjs/router";
 import { toast } from "solid-toast";
 import {
@@ -4681,24 +4686,19 @@ const CanvasComponent = (props: CanvasComponentProps) => {
          */
         // S3 D9: esclub owns an imported series' teams, names, length and
         // draft mode (the server refuses a change), so the save leaves them
-        // out entirely rather than echoing them back.
-        const isImportedSeries =
-            !data.convertToSeries && editing?.type === "series" && !!editing.LeagueImport;
-        const editedMetadata: CanvasGroupMetadataUpdate = {
-            disabledChampions: data.disabledChampions,
-            gameType: data.gameType,
-            ...(isImportedSeries
-                ? {}
-                : { draftMode: staysSeries ? data.draftMode : null }),
-            // The counts and the manual floor are two views of one thing: a
-            // resize writes the counts, and a count change re-writes the floor.
-            // Without this half, a container that had ever been resized could
-            // never be made SMALLER from the dialog — the stale floor won.
-            ...(layoutDims
-                ? { manualWidth: layoutDims.width, manualHeight: layoutDims.height }
-                : {}),
-            ...(layoutChange && !layoutChange.reflow ? layoutChange.metadata : {})
-        };
+        // out entirely rather than echoing them back (groupSettingsSave.ts).
+        // The counts and the manual floor are two views of one thing: a
+        // resize writes the counts, and a count change re-writes the floor.
+        // Without this half, a container that had ever been resized could
+        // never be made SMALLER from the dialog — the stale floor won.
+        const editedMetadata = groupSettingsMetadata({
+            editing,
+            data,
+            staysSeries,
+            layoutDims,
+            layoutMetadata:
+                layoutChange && !layoutChange.reflow ? layoutChange.metadata : null
+        });
 
         if (isLocalMode()) {
             const group = editing;
@@ -4753,32 +4753,17 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 ...(data.gameType !== null ? { gameType: data.gameType } : {})
             });
         } else {
-            const isManualSeries =
-                editing?.type === "series" &&
-                editing.metadata.origin === "manual" &&
-                !isImportedSeries;
+            // Names, length, series type and team links ride on manual series
+            // groups only, never on an imported one.
             updateGroupMutation.mutate({
                 canvasId: canvasId(),
                 groupId,
-                name: data.name || undefined,
-                metadata: {
-                    ...editedMetadata,
-                    ...(isManualSeries
-                        ? {
-                              blueTeamName: data.blueTeamName,
-                              redTeamName: data.redTeamName,
-                              length: data.length,
-                              seriesType: data.draftMode
-                          }
-                        : {})
-                },
-                ...(layoutDims
-                    ? { width: layoutDims.width, height: layoutDims.height }
-                    : {}),
-                // Team linking persists on manual series groups only.
-                ...(isManualSeries
-                    ? { team1_id: data.team1_id, team2_id: data.team2_id }
-                    : {})
+                ...groupSettingsUpdateBody({
+                    editing,
+                    data,
+                    metadata: editedMetadata,
+                    layoutDims
+                })
             });
             // The one layout change that cannot ride along: re-arranging
             // members writes POSITIONS, which only the draft-positions route
@@ -5994,13 +5979,20 @@ const CanvasComponent = (props: CanvasComponentProps) => {
 
     // After a league send (S3): refetch, then "Go to" the first created or
     // existing group. The fresh payload has the new group even before the
-    // send's canvasUpdate broadcast lands in the stores.
+    // send's canvasUpdate broadcast lands in the stores. A failed refetch
+    // still pans when the group is already in the store, and says so only
+    // when it can't.
     const handleFocusSentGroup = async (groupId: string) => {
-        const fresh = await Promise.resolve(canvasContext.refetchCanvas());
+        const refetched = await Promise.resolve(canvasContext.refetchCanvas()).then(
+            (data) => ({ data, failed: false }),
+            () => ({ data: undefined, failed: true })
+        );
         const group =
-            fresh?.groups?.find((g) => g.id === groupId) ??
+            refetched.data?.groups?.find((g) => g.id === groupId) ??
             canvasGroups.find((g) => g.id === groupId);
         if (group && !group.parent_group_id) goToGroup(group);
+        else if (!group && refetched.failed)
+            toast.error("Couldn't reload the canvas to show the sent series");
     };
 
     // "Refresh from league" (S3 D6): one run per group at a time; the
@@ -6009,6 +6001,39 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         new Set()
     );
     const isLeagueRefreshing = (groupId: string) => leagueRefreshing().has(groupId);
+    // A run outlives no canvas: leaving it stops the polling, the apply and
+    // the toast (leagueRefreshFlow checks the signal).
+    const leagueRefreshAbort = new AbortController();
+    onCleanup(() => leagueRefreshAbort.abort());
+    // The apply broadcasts only when games changed, so a status-only change
+    // (the series just finished) is patched in here, in the store and in the
+    // query cache: later presses then skip esclub and the chip updates.
+    const patchLeagueImport = (
+        groupId: string,
+        series: { status: string; complete: boolean }
+    ) => {
+        // Functional updates: the current value is read by the setters, so
+        // a broadcast that landed during the run is the one patched.
+        const patched = (current: CanvasGroup["LeagueImport"]) =>
+            current ? leagueImportAfterApply(current, series) : null;
+        setCanvasGroups(
+            (g) => g.id === groupId,
+            "LeagueImport",
+            (current) => patched(current) ?? current
+        );
+        canvasContext.mutateCanvas((prev: CanvasResposnse | undefined) => {
+            const next = patched(
+                prev?.groups.find((g) => g.id === groupId)?.LeagueImport
+            );
+            if (!prev || !next) return prev;
+            return {
+                ...prev,
+                groups: prev.groups.map((group) =>
+                    group.id === groupId ? { ...group, LeagueImport: next } : group
+                )
+            };
+        });
+    };
     const handleRefreshFromLeague = (groupId: string) => {
         if (!canEdit() || isLocalMode() || isLeagueRefreshing(groupId)) return;
         const group = canvasGroups.find((g) => g.id === groupId);
@@ -6025,9 +6050,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                     applyLeagueRefresh({ canvasId: forCanvas, groupId: id }),
                 sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
                 now: () => Date.now()
-            }
+            },
+            signal: leagueRefreshAbort.signal
         })
             .then((run) => {
+                if (!run) return;
+                if (run.applied) patchLeagueImport(groupId, run.applied.series);
                 if (run.ok) toast.success(run.message);
                 else toast.error(run.message);
             })

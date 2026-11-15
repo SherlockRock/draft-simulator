@@ -12,7 +12,12 @@ import {
     RefreshCw
 } from "lucide-solid";
 import { buildScoutLink, scoutLinkPath } from "../utils/scoutLink";
-import { importedHeaderLabel, refreshButtonTitle } from "../utils/leagueImport";
+import {
+    canEditSeriesGames,
+    importedHeaderLabel,
+    refreshButtonTitle,
+    seriesGameControlTitle
+} from "../utils/leagueImport";
 import { CanvasDraft, CanvasGroup, AnchorType } from "../utils/schemas";
 import {
     getSeriesGroupDimensions,
@@ -138,9 +143,9 @@ export const SeriesGroupContainer = (props: SeriesGroupContainerProps) => {
     // sides, first pick and winner (the server refuses edits); they show
     // read-only. Lifts when LeagueImport goes null (purge).
     const leagueImport = () => props.group.LeagueImport ?? null;
-    const canEditGames = () => props.canEdit() && leagueImport() === null;
+    const canEditGames = () => canEditSeriesGames(props.canEdit(), leagueImport());
     const gameControlTitle = (title: string) =>
-        leagueImport() ? `${title} · set by esclub` : title;
+        seriesGameControlTitle(title, leagueImport());
     const isRefreshing = () => props.isLeagueRefreshing(props.group.id);
     // firstPick and winner are stored as sides, so swapping which team is on
     // blue must flip them too to keep them pinned to the same team.

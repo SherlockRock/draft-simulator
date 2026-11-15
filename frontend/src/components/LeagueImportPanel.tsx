@@ -16,7 +16,7 @@ import {
     sendLeagueSeriesToCanvas
 } from "../utils/actions";
 import {
-    checkedIds,
+    finishedIds,
     focusGroupId,
     leagueOptions,
     leagueSendErrorMessage,
@@ -24,8 +24,10 @@ import {
     onCanvasSeriesIds,
     sendButtonLabel,
     sendResultToast,
+    seedSelection,
     seriesPickerRows,
-    type LeagueCanvasGroup
+    type LeagueCanvasGroup,
+    type SeriesSelection
 } from "../utils/leagueImport";
 import { rowStepFor } from "../utils/leagueSendLayout";
 import type { CardLayout } from "../utils/canvasCardLayout";
@@ -54,7 +56,10 @@ type Props = {
 export const LeagueImportPanel: Component<Props> = (props) => {
     const [leagueId, setLeagueId] = createSignal("");
     const [teamChoice, setTeamChoice] = createSignal("");
-    const [checked, setChecked] = createSignal<Set<string>>(new Set());
+    const [selection, setSelection] = createSignal<SeriesSelection>({
+        seededFor: null,
+        checked: new Set()
+    });
 
     const manageQuery = useQuery(() => ({
         queryKey: ["teamsManage"],
@@ -94,14 +99,19 @@ export const LeagueImportPanel: Component<Props> = (props) => {
         seriesPickerRows(seriesQuery.data?.series ?? [], onCanvas())
     );
 
-    // Re-seed the selection when a new list arrives, not when the canvas
-    // changes under an open dialog (that would drop the user's picks).
+    // Seed the selection once per league and team, when its list arrives:
+    // neither a background refetch of the same list nor a canvas change under
+    // the open dialog drops the user's picks.
     createEffect(
-        on(
-            () => seriesQuery.data,
-            () => setChecked(checkedIds(rows()))
+        on([() => seriesQuery.data, leagueId, teamChoice], ([data, league, team]) =>
+            setSelection((prev) =>
+                seedSelection(prev, `${league}|${team}`, data ? rows() : null)
+            )
         )
     );
+    const checked = () => selection().checked;
+    const setChecked = (next: Set<string>) =>
+        setSelection((prev) => ({ ...prev, checked: next }));
 
     const selectedIds = createMemo(() =>
         rows()
@@ -109,6 +119,9 @@ export const LeagueImportPanel: Component<Props> = (props) => {
             .map((r) => r.id)
     );
     const button = createMemo(() => sendButtonLabel(selectedIds().length));
+    // "Check all finished" is uncapped on purpose (the Send button then
+    // names the 50 cap); the default selection is capped (checkedIds).
+    const finished = createMemo(() => finishedIds(rows()));
 
     const toggle = (id: string) => {
         const next = new Set(checked());
@@ -273,7 +286,25 @@ export const LeagueImportPanel: Component<Props> = (props) => {
                 </Show>
             </div>
 
-            <div class="flex justify-end gap-2">
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <div class="mr-auto flex gap-2">
+                    <button
+                        type="button"
+                        class="rounded-md px-2 py-1 text-sm text-darius-text-secondary transition-colors hover:text-darius-purple-bright disabled:opacity-50 disabled:hover:text-darius-text-secondary"
+                        disabled={selectedIds().length === 0}
+                        onClick={() => setChecked(new Set())}
+                    >
+                        Check none
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md px-2 py-1 text-sm text-darius-text-secondary transition-colors hover:text-darius-purple-bright disabled:opacity-50 disabled:hover:text-darius-text-secondary"
+                        disabled={finished().size === 0}
+                        onClick={() => setChecked(finished())}
+                    >
+                        Check all finished
+                    </button>
+                </div>
                 <button
                     type="button"
                     class="rounded-md bg-darius-card px-4 py-2 text-sm text-darius-text-primary transition-colors hover:bg-darius-card-hover"

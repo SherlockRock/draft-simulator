@@ -98,7 +98,10 @@ describe("runLeagueRefresh", () => {
         expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
         expect(deps.applyLeagueRefresh).toHaveBeenCalledWith("group-1");
-        expect(result).toEqual({ message: "Up to date · series finished", ok: true });
+        expect(result).toMatchObject({
+            message: "Up to date · series finished",
+            ok: true
+        });
     });
 
     it("presses the series refresh once, polls every 3 s while running, stops when the sync ends", async () => {
@@ -114,7 +117,7 @@ describe("runLeagueRefresh", () => {
         }
         expect(LEAGUE_REFRESH_POLL_MS).toBe(3000);
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({ message: "Up to date", ok: true });
+        expect(result).toMatchObject({ message: "Up to date", ok: true });
     });
 
     it("doesn't poll a sync that already finished (200 joined)", async () => {
@@ -125,7 +128,7 @@ describe("runLeagueRefresh", () => {
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
         expect(deps.sleep).not.toHaveBeenCalled();
-        expect(result).toEqual({ message: "2 new games", ok: true });
+        expect(result).toMatchObject({ message: "2 new games", ok: true });
     });
 
     it("applies the mirror only after the sync ended", async () => {
@@ -147,23 +150,113 @@ describe("runLeagueRefresh", () => {
         const deps = fakeDeps({ polls: ["failed"], apply: async () => applied(1) });
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({
+        expect(result).toMatchObject({
             message: "1 new game · esclub refresh failed",
             ok: true
         });
     });
 
-    it("gives up polling at the cap (about 3 minutes) and treats it as an error", async () => {
+    it("stops polling at the cap (about 3 minutes), says the sync is still running, and applies", async () => {
         const deps = fakeDeps({ polls: ["running"] });
         const result = await runLeagueRefresh({ group: group(), deps });
         const polls = vi.mocked(deps.fetchEsclubSync).mock.calls.length;
         expect(polls).toBe(LEAGUE_REFRESH_POLL_CAP_MS / LEAGUE_REFRESH_POLL_MS);
         expect(LEAGUE_REFRESH_POLL_CAP_MS).toBe(180_000);
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({
-            message: "Couldn't reach esclub refresh · Up to date",
+        expect(result).toMatchObject({
+            message: "Up to date · esclub refresh still running",
             ok: true
         });
+    });
+
+    it("returns the apply's answer, for the caller to update the group", async () => {
+        const answer: LeagueRefreshResponse = {
+            added: 0,
+            updated: 0,
+            series: { status: "finished", complete: true }
+        };
+        const deps = fakeDeps({ apply: async () => answer });
+        const result = await runLeagueRefresh({ group: group(), deps });
+        expect(result?.applied).toEqual(answer);
+        const failed = await runLeagueRefresh({
+            group: group(),
+            deps: fakeDeps({
+                apply: async () => {
+                    throw new Error("API error: 500");
+                }
+            })
+        });
+        expect(failed?.applied).toBeNull();
+    });
+
+    it("stops polling and doesn't apply once the run is aborted (canvas left)", async () => {
+        const controller = new AbortController();
+        const deps = fakeDeps({ polls: ["running"] });
+        let polls = 0;
+        deps.fetchEsclubSync = vi.fn(async (): Promise<EsclubSyncResponse> => {
+            polls += 1;
+            if (polls === 2) controller.abort();
+            return { sync: syncView("running") };
+        });
+        const result = await runLeagueRefresh({
+            group: group(),
+            deps,
+            signal: controller.signal
+        });
+        expect(result).toBeNull();
+        expect(deps.fetchEsclubSync).toHaveBeenCalledTimes(2);
+        expect(deps.sleep).toHaveBeenCalledTimes(2);
+        expect(deps.applyLeagueRefresh).not.toHaveBeenCalled();
+    });
+
+    it("doesn't poll again when aborted while waiting between polls", async () => {
+        const controller = new AbortController();
+        const deps = fakeDeps({ polls: ["running"] });
+        let sleeps = 0;
+        deps.sleep = vi.fn(async () => {
+            sleeps += 1;
+            if (sleeps === 2) controller.abort();
+        });
+        const result = await runLeagueRefresh({
+            group: group(),
+            deps,
+            signal: controller.signal
+        });
+        expect(result).toBeNull();
+        expect(deps.fetchEsclubSync).toHaveBeenCalledTimes(1);
+        expect(deps.applyLeagueRefresh).not.toHaveBeenCalled();
+    });
+
+    it("doesn't poll or apply when aborted during the esclub call", async () => {
+        const controller = new AbortController();
+        const deps = fakeDeps({
+            esclub: async () => {
+                controller.abort();
+                return { status: 202, body: { sync: syncView("running") } };
+            }
+        });
+        const result = await runLeagueRefresh({
+            group: group(),
+            deps,
+            signal: controller.signal
+        });
+        expect(result).toBeNull();
+        expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
+        expect(deps.applyLeagueRefresh).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when already aborted", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const deps = fakeDeps({});
+        const result = await runLeagueRefresh({
+            group: group({ complete: true, status: "finished" }),
+            deps,
+            signal: controller.signal
+        });
+        expect(result).toBeNull();
+        expect(deps.refreshEsclubSeries).not.toHaveBeenCalled();
+        expect(deps.applyLeagueRefresh).not.toHaveBeenCalled();
     });
 
     it("treats a poll that throws as an error and stops polling", async () => {
@@ -171,7 +264,7 @@ describe("runLeagueRefresh", () => {
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.fetchEsclubSync).toHaveBeenCalledTimes(1);
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result.message).toBe("Couldn't reach esclub refresh · Up to date");
+        expect(result?.message).toBe("Couldn't reach esclub refresh · Up to date");
     });
 
     it("applies the mirror on a cooldown", async () => {
@@ -184,7 +277,7 @@ describe("runLeagueRefresh", () => {
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result.message).toBe("Up to date · esclub refresh available in 2 min");
+        expect(result?.message).toBe("Up to date · esclub refresh available in 2 min");
     });
 
     it.each([
@@ -232,7 +325,7 @@ describe("runLeagueRefresh", () => {
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({ message, ok: true });
+        expect(result).toMatchObject({ message, ok: true });
     });
 
     it("asks to sign in when both steps are signed out", async () => {
@@ -244,7 +337,7 @@ describe("runLeagueRefresh", () => {
         });
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({ message: "Sign in again", ok: false });
+        expect(result).toMatchObject({ message: "Sign in again", ok: false });
     });
 
     it("treats a thrown esclub call as an error and still applies", async () => {
@@ -256,7 +349,7 @@ describe("runLeagueRefresh", () => {
         });
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({
+        expect(result).toMatchObject({
             message: "Couldn't reach esclub refresh · 1 new game",
             ok: true
         });
@@ -272,7 +365,7 @@ describe("runLeagueRefresh", () => {
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.fetchEsclubSync).not.toHaveBeenCalled();
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result.message).toBe("Couldn't reach esclub refresh · Up to date");
+        expect(result?.message).toBe("Couldn't reach esclub refresh · Up to date");
     });
 
     it("reports an apply that failed, without throwing", async () => {
@@ -283,7 +376,10 @@ describe("runLeagueRefresh", () => {
             }
         });
         const result = await runLeagueRefresh({ group: group(), deps });
-        expect(result).toEqual({ message: "Couldn't update the series", ok: false });
+        expect(result).toMatchObject({
+            message: "Couldn't update the series",
+            ok: false
+        });
     });
 
     it("applies even when the esclub call and the apply both fail", async () => {
@@ -297,7 +393,7 @@ describe("runLeagueRefresh", () => {
         });
         const result = await runLeagueRefresh({ group: group(), deps });
         expect(deps.applyLeagueRefresh).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({
+        expect(result).toMatchObject({
             message: "Couldn't reach esclub refresh · Couldn't update the series",
             ok: false
         });

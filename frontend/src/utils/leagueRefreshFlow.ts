@@ -13,7 +13,7 @@ import {
 
 /** Same cadence as the Teams page's sync polling (esclubSyncPollInterval). */
 export const LEAGUE_REFRESH_POLL_MS = 3000;
-/** A sync still running after this long is reported as an error (no endless loop). */
+/** Polling stops after this long (no endless loop); the toast says the sync is still running. */
 export const LEAGUE_REFRESH_POLL_CAP_MS = 180_000;
 
 export type LeagueRefreshDeps = {
@@ -32,18 +32,27 @@ export type LeagueRefreshRun = {
     message: string;
     /** False when the mirror apply failed. */
     ok: boolean;
+    /** The apply's answer (null when it failed), for patching the group. */
+    applied: LeagueRefreshResponse | null;
 };
 
-/** Poll a running sync until it ends; null when the poll failed or hit the cap. */
+/**
+ * Poll a running sync until it ends. At the cap (or once aborted) it returns
+ * the last view, still `running`, so the toast says the sync is still
+ * running; a poll that throws throws (an error outcome).
+ */
 async function pollSync(
     first: EsclubSyncView,
-    deps: LeagueRefreshDeps
-): Promise<EsclubSyncView | null> {
+    deps: LeagueRefreshDeps,
+    aborted: () => boolean
+): Promise<EsclubSyncView> {
     const startedAt = deps.now();
     let sync = first;
     while (sync.status === "running") {
-        if (deps.now() - startedAt >= LEAGUE_REFRESH_POLL_CAP_MS) return null;
+        if (aborted() || deps.now() - startedAt >= LEAGUE_REFRESH_POLL_CAP_MS)
+            return sync;
         await deps.sleep(LEAGUE_REFRESH_POLL_MS);
+        if (aborted()) return sync;
         sync = (await deps.fetchEsclubSync(sync.id)).sync;
     }
     return sync;
@@ -52,7 +61,8 @@ async function pollSync(
 /** Step 1 (D6): S2's serie refresh, only for a series that can still change. */
 async function esclubStep(
     view: LeagueImport,
-    deps: LeagueRefreshDeps
+    deps: LeagueRefreshDeps,
+    aborted: () => boolean
 ): Promise<LeagueRefreshEsclubOutcome> {
     if (!shouldCallEsclubRefresh(view)) return { kind: "skipped-complete" };
     try {
@@ -65,8 +75,7 @@ async function esclubStep(
         if ("cooldown" in body)
             return { kind: "cooldown", availableAt: body.cooldown.availableAt };
         if (!("sync" in body)) return { kind: "error" };
-        const sync = await pollSync(body.sync, deps);
-        return sync ? { kind: "synced", sync } : { kind: "error" };
+        return { kind: "synced", sync: await pollSync(body.sync, deps, aborted) };
     } catch {
         return { kind: "error" };
     }
@@ -76,22 +85,29 @@ async function esclubStep(
  * "Refresh from league" for one imported group (plan D6): step 1 asks esclub
  * (S2's limits apply) unless the series is complete, and waits for its sync;
  * step 2 ALWAYS applies the mirror to the group, whatever step 1 answered.
- * Never throws.
+ * Never throws. Once `signal` is aborted (the canvas went away) it stops
+ * polling, skips the apply and returns null: nothing to toast or patch.
  */
 export async function runLeagueRefresh(input: {
     group: { id: string; LeagueImport: LeagueImport };
     deps: LeagueRefreshDeps;
-}): Promise<LeagueRefreshRun> {
-    const { group, deps } = input;
-    const outcome = await esclubStep(group.LeagueImport, deps);
+    signal?: AbortSignal;
+}): Promise<LeagueRefreshRun | null> {
+    const { group, deps, signal } = input;
+    const aborted = () => signal?.aborted === true;
+    if (aborted()) return null;
+    const outcome = await esclubStep(group.LeagueImport, deps, aborted);
+    if (aborted()) return null;
     let applied: LeagueRefreshResponse | null = null;
     try {
         applied = await deps.applyLeagueRefresh(group.id);
     } catch {
         applied = null;
     }
+    if (aborted()) return null;
     return {
         message: refreshToast(outcome, applied, deps.now()),
-        ok: applied !== null
+        ok: applied !== null,
+        applied
     };
 }

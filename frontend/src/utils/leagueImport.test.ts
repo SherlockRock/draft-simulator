@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { EsclubSeriesItem, EsclubSyncView } from "@draft-sim/shared-types";
 import {
+    canEditSeriesGames,
     checkedIds,
+    finishedIds,
     focusGroupId,
+    leagueImportAfterApply,
+    seedSelection,
+    seriesGameControlTitle,
     importedHeaderLabel,
     leagueOptions,
     leagueSendErrorMessage,
@@ -654,6 +659,124 @@ describe("checkedIds", () => {
             new Set(["c"])
         );
         expect(checkedIds(rows)).toEqual(new Set(["a"]));
+    });
+
+    it("pre-checks at most the newest 50", () => {
+        const many = Array.from({ length: 60 }, (_, i) =>
+            series({
+                id: `s${i}`,
+                number: i,
+                startsAt: `2026-10-${String((i % 28) + 1).padStart(2, "0")}T18:00:00Z`
+            })
+        );
+        const rows = seriesPickerRows(many, new Set());
+        const ids = checkedIds(rows);
+        expect(ids.size).toBe(50);
+        expect([...ids]).toEqual(rows.slice(0, 50).map((r) => r.id));
+    });
+});
+
+describe("finishedIds", () => {
+    it("is every pre-checkable row, uncapped, without in-progress or disabled ones", () => {
+        const many = Array.from({ length: 55 }, (_, i) =>
+            series({ id: `f${i}`, number: i })
+        );
+        const rows = seriesPickerRows(
+            [
+                ...many,
+                series({ id: "live", status: "in_progress", complete: false }),
+                series({ id: "here" })
+            ],
+            new Set(["here"])
+        );
+        const ids = finishedIds(rows);
+        expect(ids.size).toBe(55);
+        expect(ids.has("live")).toBe(false);
+        expect(ids.has("here")).toBe(false);
+    });
+});
+
+describe("seedSelection", () => {
+    const rows = seriesPickerRows(
+        [
+            series({ id: "a" }),
+            series({ id: "b", status: "in_progress", complete: false })
+        ],
+        new Set()
+    );
+
+    it("seeds from the pre-checked rows when a new list (league or team) arrives", () => {
+        expect(
+            seedSelection({ seededFor: null, checked: new Set() }, "tour-1|team-1", rows)
+        ).toEqual({ seededFor: "tour-1|team-1", checked: new Set(["a"]) });
+        expect(
+            seedSelection(
+                { seededFor: "tour-1|team-1", checked: new Set(["b"]) },
+                "tour-1|team-2",
+                rows
+            )
+        ).toEqual({ seededFor: "tour-1|team-2", checked: new Set(["a"]) });
+    });
+
+    it("keeps the user's picks on a background refetch of the same list", () => {
+        const state = { seededFor: "tour-1|team-1", checked: new Set(["b"]) };
+        expect(seedSelection(state, "tour-1|team-1", rows)).toBe(state);
+    });
+
+    it("waits while the list is loading", () => {
+        const state = { seededFor: "tour-1|team-1", checked: new Set(["b"]) };
+        expect(seedSelection(state, "tour-1|team-2", null)).toBe(state);
+    });
+});
+
+describe("leagueImportAfterApply", () => {
+    it("is null when the apply's series matches the group", () => {
+        expect(
+            leagueImportAfterApply(view({ status: "in_progress", complete: false }), {
+                status: "in_progress",
+                complete: false
+            })
+        ).toBeNull();
+    });
+
+    it("takes the new status and complete flag from the apply", () => {
+        expect(
+            leagueImportAfterApply(view({ status: "in_progress", complete: false }), {
+                status: "finished",
+                complete: true
+            })
+        ).toEqual(view({ status: "finished", complete: true }));
+    });
+
+    it("keeps the known status when the server sends one it doesn't know", () => {
+        expect(
+            leagueImportAfterApply(view({ status: "in_progress", complete: false }), {
+                status: "forfeited",
+                complete: true
+            })
+        ).toEqual(view({ status: "in_progress", complete: true }));
+        expect(
+            leagueImportAfterApply(view({ status: "finished", complete: true }), {
+                status: "forfeited",
+                complete: true
+            })
+        ).toBeNull();
+    });
+});
+
+describe("canEditSeriesGames", () => {
+    it("is read-only on an imported series and without edit access", () => {
+        expect(canEditSeriesGames(true, null)).toBe(true);
+        expect(canEditSeriesGames(true, undefined)).toBe(true);
+        expect(canEditSeriesGames(true, view())).toBe(false);
+        expect(canEditSeriesGames(false, null)).toBe(false);
+    });
+
+    it("marks the controls of an imported series as set by esclub", () => {
+        expect(seriesGameControlTitle("Swap sides", view())).toBe(
+            "Swap sides · set by esclub"
+        );
+        expect(seriesGameControlTitle("Swap sides", null)).toBe("Swap sides");
     });
 });
 

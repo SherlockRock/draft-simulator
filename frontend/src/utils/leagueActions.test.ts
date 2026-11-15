@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, resetAuthExpired } from "./apiClient";
+import { ApiError, resetAuthExpired, setAuthExpiredHandler } from "./apiClient";
 import {
     applyLeagueRefresh,
     fetchEsclubTournamentSeries,
@@ -11,6 +11,7 @@ import {
 
 afterEach(() => {
     resetAuthExpired();
+    setAuthExpiredHandler(() => {});
     vi.unstubAllGlobals();
 });
 
@@ -81,6 +82,49 @@ describe("league canvas actions", () => {
             expect(refreshes).toBe(1);
         }
     );
+
+    it.each([
+        { name: "send", run: send },
+        {
+            name: "refresh apply",
+            run: () => applyLeagueRefresh({ canvasId: "canvas-1", groupId: "g-1" })
+        }
+    ])(
+        "marks the session expired when the refresh after a 401 fails ($name)",
+        async ({ run }) => {
+            const expired = vi.fn();
+            setAuthExpiredHandler(expired);
+            vi.stubGlobal(
+                "fetch",
+                vi.fn((url: string) =>
+                    Promise.resolve(
+                        new Response("Sign in", {
+                            status: url === "/api/auth/refresh-token" ? 403 : 401
+                        })
+                    )
+                )
+            );
+            await expect(run()).rejects.toEqual(new ApiError(401));
+            expect(expired).toHaveBeenCalledTimes(1);
+        }
+    );
+
+    it("doesn't mark the session expired when the refresh after a 401 works", async () => {
+        const expired = vi.fn();
+        setAuthExpiredHandler(expired);
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    new Response("{}", {
+                        status: url === "/api/auth/refresh-token" ? 200 : 401
+                    })
+                )
+            )
+        );
+        await expect(send()).rejects.toEqual(new ApiError(401));
+        expect(expired).not.toHaveBeenCalled();
+    });
 
     it("throws ApiError with the status on a refusal", async () => {
         vi.stubGlobal(

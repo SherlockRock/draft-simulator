@@ -355,9 +355,76 @@ export function onCanvasSeriesIds(groups: LeagueCanvasGroup[]): Set<string> {
     return ids;
 }
 
-/** The checklist's starting selection: the pre-checked rows (Q4 A). */
-export function checkedIds(rows: SeriesPickerRow[]): Set<string> {
+/** Every pre-checkable (finished, enabled) row: "Check all finished". */
+export function finishedIds(rows: SeriesPickerRow[]): Set<string> {
     return new Set(rows.filter((r) => r.checked && !r.disabled).map((r) => r.id));
+}
+
+/**
+ * The checklist's starting selection (Q4 A): the pre-checked rows, at most
+ * the newest `MAX_SERIES_PER_SEND` (rows come newest first), so a default
+ * send is never over the server's cap.
+ */
+export function checkedIds(rows: SeriesPickerRow[]): Set<string> {
+    return new Set([...finishedIds(rows)].slice(0, MAX_SERIES_PER_SEND));
+}
+
+export type SeriesSelection = {
+    /** The list (league and team) the selection was seeded for. */
+    seededFor: string | null;
+    checked: Set<string>;
+};
+
+/**
+ * Seed the checklist once per list (league and team): a background refetch
+ * of the same list keeps the user's picks, and nothing changes while the
+ * list is still loading (`rows` null). Returns `state` itself when unchanged.
+ */
+export function seedSelection(
+    state: SeriesSelection,
+    listKey: string,
+    rows: SeriesPickerRow[] | null
+): SeriesSelection {
+    if (rows === null || state.seededFor === listKey) return state;
+    return { seededFor: listKey, checked: checkedIds(rows) };
+}
+
+const SERIES_STATUSES: readonly LeagueSeriesStatus[] = [
+    "upcoming",
+    "in_progress",
+    "finished"
+];
+
+/**
+ * After a refresh's apply: the group's LeagueImport with the mirror's status
+ * and complete flag, or null when they already match (the apply broadcasts
+ * only when games changed, so a status-only change must be patched in by the
+ * caller). A status this client doesn't know keeps the current one.
+ */
+export function leagueImportAfterApply(
+    current: LeagueImportView,
+    series: LeagueRefreshResult["series"]
+): LeagueImportView | null {
+    const status =
+        SERIES_STATUSES.find((known) => known === series.status) ?? current.status;
+    if (status === current.status && series.complete === current.complete) return null;
+    return { ...current, status, complete: series.complete };
+}
+
+/** Per-game sides, first pick and winner: read-only on an imported series (Q3 A). */
+export function canEditSeriesGames(
+    canEdit: boolean,
+    leagueImport: LeagueImportView | null | undefined
+): boolean {
+    return canEdit && !leagueImport;
+}
+
+/** A per-game control's tooltip, marked "set by esclub" on an imported series. */
+export function seriesGameControlTitle(
+    title: string,
+    leagueImport: LeagueImportView | null | undefined
+): string {
+    return leagueImport ? `${title} · set by esclub` : title;
 }
 
 /** "Send N series", disabled at 0 and above the server's cap. */
