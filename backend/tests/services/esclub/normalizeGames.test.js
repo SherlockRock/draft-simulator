@@ -257,13 +257,77 @@ describe("synthetic variants", () => {
     expect(r.pending).toEqual([{ externalMatchId: id1, number: 1, reason: "draft incomplete" }]);
     expect(r.series.games.map((g) => g.number)).toEqual([0]);
   });
-  it("two final choices with the same number fail only that game", () => {
+  it("a repeated final row for the same champion is one choice", () => {
     const result = run((d) => {
       const dup = clone(d.choices[id1].find((c) => c.is_final && c.number === 18));
       d.choices[id1].push(dup);
     });
-    expect(result.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
-    expect(result.series.games.map((g) => g.number)).toEqual([0]);
+    expect(result.failed).toEqual([]);
+    expect(result.series.games.map((g) => g.number)).toEqual([0, 1]);
+    expect(result.series.games[1].picks).toEqual(N.normalizeSeries(input(group)).series.games[1].picks);
+  });
+
+  describe("request change: the latest final row of a slot wins", () => {
+    const ref = N.normalizeSeries(input(group)).series.games[0];
+    const finalRow = (d, n) => d.choices[id0].find((c) => c.is_final && c.number === n);
+    const aliasOf = (r) => championAliasForKey(r.id_external);
+    const resourceFor = (alias) => resources.find((r) => r.type_resource === "Character" && aliasOf(r) === alias);
+    // A champion this game neither drafted nor played.
+    const unused = resources.find((r) =>
+      r.type_resource === "Character" && r.id_external !== "-1" && aliasOf(r) &&
+      !ref.picks.includes(aliasOf(r)) && !ref.substitutions.some((s) => s.drafted === aliasOf(r)));
+    const changed = (d, n, resource, shift) => {
+      const row = clone(finalRow(d, n));
+      row.id_game_resource = resource.id_game_resource;
+      row.time_start += shift;
+      row.id_draft_choice = `fake-change-${n}`;
+      return row;
+    };
+    const game0 = (r) => r.series.games.find((g) => g.number === 0);
+    const banSlot = getPicksArrayIndex(12, ref.firstPick);
+
+    it("a later final ban replaces the earlier one", () => {
+      const r = run((d) => { d.choices[id0].push(changed(d, 12, unused, 30)); });
+      expect(r.failed).toEqual([]);
+      const expected = [...ref.picks];
+      expected[banSlot] = aliasOf(unused);
+      expect(game0(r).picks).toEqual(expected);
+    });
+    it("the time decides, not where the row sits in the reply", () => {
+      const r = run((d) => { d.choices[id0].unshift(changed(d, 12, unused, 30)); });
+      expect(game0(r).picks[banSlot]).toBe(aliasOf(unused));
+    });
+    it("an earlier final row loses even when it comes later in the reply", () => {
+      const r = run((d) => { d.choices[id0].push(changed(d, 12, unused, -30)); });
+      expect(r.failed).toEqual([]);
+      expect(game0(r).picks).toEqual(ref.picks);
+    });
+    it("a late ban after an automatic Placeholder ban is the ban", () => {
+      const placeholder = resources.find((r) => r.type_resource === "Character" && r.id_external === "-1");
+      const r = run((d) => {
+        const real = finalRow(d, 12);
+        const auto = { ...clone(real), id_game_resource: placeholder.id_game_resource, is_automatic: true, id_draft_choice: "fake-auto" };
+        real.time_start += 7;
+        d.choices[id0].push(auto);
+      });
+      expect(r.failed).toEqual([]);
+      expect(game0(r).picks).toEqual(ref.picks);
+    });
+    it("a pick changed to the champion played needs no substitution", () => {
+      const xin = group.choices[id0].find((c) => c.is_final && c.type_choice === "PickCharacter" &&
+        championAliasForKey(byRes.get(c.id_game_resource).id_external) === "XinZhao");
+      const r = run((d) => { d.choices[id0].push(changed(d, xin.number, resourceFor("Vi"), 20)); });
+      expect(r.failed).toEqual([]);
+      expect(game0(r).substitutions).toEqual([]);
+      expect(game0(r).picks).toEqual(ref.picks);
+    });
+    it("two different final rows at the same time fail only that game", () => {
+      const r = run((d) => { d.choices[id0].push(changed(d, 12, unused, 0)); });
+      expect(r.failed).toHaveLength(1);
+      expect(r.failed[0].error).toBeInstanceOf(EsclubDraftMismatch);
+      expect(r.failed[0].reason).toContain("two final choices numbered 12");
+      expect(r.series.games.map((g) => g.number)).toEqual([1]);
+    });
   });
   it("a final choice numbered above 19 -> EsclubProtocolChanged", () => {
     expect(() => run((d) => {

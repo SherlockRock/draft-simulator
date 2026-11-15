@@ -308,6 +308,46 @@ function buildParticipants(finals, sideOf, participants, byResource, matchId, pl
 }
 
 /**
+ * The final choice of each draft slot (PickSide rows excluded). A slot can have
+ * more than one final row: esclub's "request change" (and a late lock after an
+ * automatic Placeholder ban) adds another final row for a slot that was already
+ * final. The latest row by `time_start` is the choice (Rourke, 2026-11-15).
+ * Rows that name the same champion are the same choice.
+ * @returns {Map<number, object>} choice number -> its final row, in first-seen order
+ * @throws {EsclubProtocolChanged} for a final choice number outside 0..19
+ * @throws {EsclubDraftMismatch} when two final rows of one slot differ and their times do not say which came last
+ */
+function finalChoices(choices, matchId) {
+  const byNumber = new Map();
+  const timeOf = (c) => (typeof c.time_start === "number" && Number.isFinite(c.time_start) ? c.time_start : null);
+  const same = (a, b) =>
+    a.type_choice === b.type_choice &&
+    a.id_game_resource === b.id_game_resource &&
+    a.id_team_roster_source === b.id_team_roster_source;
+  for (const c of choices) {
+    if (!c.is_final || c.type_choice === "PickSide") continue;
+    if (!Number.isInteger(c.number) || c.number < 0 || c.number > 19) {
+      throw new EsclubProtocolChanged(`esclub: match ${matchId}: final choice number ${c.number} out of range`);
+    }
+    const prev = byNumber.get(c.number);
+    if (!prev) {
+      byNumber.set(c.number, c);
+      continue;
+    }
+    if (same(prev, c)) continue;
+    const before = timeOf(prev);
+    const after = timeOf(c);
+    if (before === null || after === null || before === after) {
+      throw new EsclubDraftMismatch(
+        `esclub: match ${matchId}: two final choices numbered ${c.number} and no time says which came last`
+      );
+    }
+    if (after > before) byNumber.set(c.number, c);
+  }
+  return byNumber;
+}
+
+/**
  * Normalise one match. Returns {note} for skipped/pending, {game} for a game.
  * Throws EsclubProtocolChanged for contradictions and EsclubUnknownChampion
  * for a pick/ban whose resource is not a catalog champion. The one exception
@@ -322,16 +362,8 @@ function normalizeGame(match, draft, choices, teams, byResource) {
   if (draft && draft.is_blind) return note("skipped", "blind draft");
   if (!draft) return note("pending", "no draft yet");
 
-  const finals = choices.filter((c) => c.is_final && c.type_choice !== "PickSide");
-  const byNumber = new Map();
-  for (const c of finals) {
-    if (!Number.isInteger(c.number) || c.number < 0 || c.number > 19) throw fail(`final choice number ${c.number} out of range`);
-    if (byNumber.has(c.number)) {
-      // Multiple final rows leave the slot ambiguous; never choose one by order.
-      throw new EsclubDraftMismatch(`esclub: match ${id}: two final choices numbered ${c.number}`);
-    }
-    byNumber.set(c.number, c);
-  }
+  const byNumber = finalChoices(choices, id);
+  const finals = [...byNumber.values()];
   if (byNumber.size < 20) return note("pending", "draft incomplete");
 
   const lol = ((match.config && match.config.integrations) || []).map((i) => i && i.LeagueOfLegends).find(Boolean);
