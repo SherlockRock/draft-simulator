@@ -287,9 +287,15 @@ async function clearCanvasContents(canvasId, transaction) {
   });
 }
 
+// A JSON import never matches a series imported from esclub (S3): it is named
+// "<team1> vs <team2>" and owned by its sender, and an "overwrite" would
+// rewrite esclub's data in place and destroy its games. Such a name gets a new
+// manual series instead.
+const NOT_IMPORTED_FROM_LEAGUE = { league_series_id: null };
+
 async function findOwnedVersusSeriesByName(userId, name, transaction) {
   return VersusDraft.findOne({
-    where: { owner_id: userId, name },
+    where: { owner_id: userId, name, ...NOT_IMPORTED_FROM_LEAGUE },
     include: [{ model: Draft, as: "Drafts" }],
     transaction,
   });
@@ -987,6 +993,7 @@ router.post("/me/import", protect, async (req, res) => {
           name:
             importedSeries.name ||
             `${importedSeries.blueTeamName} vs ${importedSeries.redTeamName}`,
+          ...NOT_IMPORTED_FROM_LEAGUE,
         },
         include: [{ model: Draft, as: "Drafts" }],
         transaction,
@@ -1008,7 +1015,11 @@ router.post("/me/import", protect, async (req, res) => {
           let counter = 1;
           while (
             await VersusDraft.findOne({
-              where: { owner_id: req.user.id, name: seriesName },
+              where: {
+                owner_id: req.user.id,
+                name: seriesName,
+                ...NOT_IMPORTED_FROM_LEAGUE,
+              },
               transaction,
             })
           ) {

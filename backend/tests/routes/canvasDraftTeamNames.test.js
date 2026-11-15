@@ -57,6 +57,8 @@ beforeEach(() => {
   vi.spyOn(CanvasAnnotation, "findAll").mockResolvedValue([]);
   vi.spyOn(CanvasPoolPlacement, "findAll").mockResolvedValue([]);
   vi.spyOn(Draft, "update").mockResolvedValue([1]);
+  // Names are esclub's on an imported game (S3 Q3 A); this card's series is not.
+  vi.spyOn(Draft, "findOne").mockResolvedValue(null);
   vi.spyOn(socketService, "emitToRoom").mockImplementation(() => {});
 });
 

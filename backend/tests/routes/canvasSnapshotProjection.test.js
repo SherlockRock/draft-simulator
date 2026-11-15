@@ -239,14 +239,25 @@ function collectEmitToRoomCalls(program) {
 }
 
 // True if `node` is `await buildCanvasSnapshot(...)`.
+// `buildCanvasSnapshot(...)` or `<module>.buildCanvasSnapshot(...)` (S3's
+// canvasLeague.js calls it through the module object so tests can spy on it).
+function isBuilderCallee(callee) {
+  if (callee.type === "Identifier") return callee.name === "buildCanvasSnapshot";
+  return (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.property.type === "Identifier" &&
+    callee.property.name === "buildCanvasSnapshot"
+  );
+}
+
 function isBuilderCall(node) {
   return (
     isAstNode(node) &&
     node.type === "AwaitExpression" &&
     isAstNode(node.argument) &&
     node.argument.type === "CallExpression" &&
-    node.argument.callee.type === "Identifier" &&
-    node.argument.callee.name === "buildCanvasSnapshot"
+    isBuilderCallee(node.argument.callee)
   );
 }
 
@@ -373,5 +384,34 @@ describe("no route hand-builds a canvasUpdate payload", () => {
     );
 
     expect(violations, violations.join("\n")).toEqual([]);
+  });
+});
+
+describe("canvasUpdate guard: accepted builder call shapes", () => {
+  const wrap = (body) => `async function handler(){ ${body} }`;
+
+  it("accepts the bare and the module-member builder call", () => {
+    expect(
+      findCanvasUpdateViolations(
+        wrap(`const snapshot = await buildCanvasSnapshot(id); s.emitToRoom(id, "canvasUpdate", snapshot);`),
+        "bare",
+      ),
+    ).toEqual([]);
+    expect(
+      findCanvasUpdateViolations(
+        wrap(`const snapshot = await canvasProjections.buildCanvasSnapshot(id); s.emitToRoom(id, "canvasUpdate", snapshot);`),
+        "member",
+      ),
+    ).toEqual([]);
+  });
+
+  it("still rejects a hand-built payload, a computed member and another function", () => {
+    for (const body of [
+      `const snapshot = { groups: [] }; s.emitToRoom(id, "canvasUpdate", snapshot);`,
+      `const snapshot = await m["buildCanvasSnapshot"](id); s.emitToRoom(id, "canvasUpdate", snapshot);`,
+      `const snapshot = await m.buildCanvasSnapshotLite(id); s.emitToRoom(id, "canvasUpdate", snapshot);`,
+    ]) {
+      expect(findCanvasUpdateViolations(wrap(body), "x")).toHaveLength(1);
+    }
   });
 });

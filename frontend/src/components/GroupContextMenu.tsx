@@ -12,6 +12,8 @@ type GroupContextMenuProps = {
     onSetTeamNames?: () => void;
     onViewSeries?: () => void;
     onMoveToTopLevel?: () => void;
+    /** Imported series, edit access only (S3 D7); absent hides the item. */
+    onRefreshFromLeague?: () => void;
     onGoTo: () => void;
     onDelete: () => void;
     onClose: () => void;
@@ -66,6 +68,17 @@ export const GroupContextMenu: Component<GroupContextMenuProps> = (props) => {
             menuActions.push({
                 label: "View series",
                 action: () => props.onViewSeries?.()
+            });
+        }
+
+        if (
+            props.group.type === "series" &&
+            props.group.LeagueImport &&
+            props.onRefreshFromLeague
+        ) {
+            menuActions.push({
+                label: "Refresh from league",
+                action: () => props.onRefreshFromLeague?.()
             });
         }
 

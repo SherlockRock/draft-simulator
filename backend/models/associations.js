@@ -150,6 +150,18 @@ const setupAssociations = () => {
     onDelete: "CASCADE",
   });
 
+  // Canvas series sent from the mirror (S3 D1). SET NULL: purging the mirror
+  // keeps the canvas series and its cards; the series becomes plain manual.
+  LeagueSeries.hasMany(VersusDraft, {
+    foreignKey: "league_series_id",
+    onDelete: "SET NULL",
+  });
+  VersusDraft.belongsTo(LeagueSeries, {
+    as: "LeagueSeries",
+    foreignKey: "league_series_id",
+    onDelete: "SET NULL",
+  });
+
   CanvasGroup.hasMany(CanvasDraft, { foreignKey: "group_id", onDelete: "SET NULL" });
   CanvasDraft.belongsTo(CanvasGroup, { foreignKey: "group_id", onDelete: "SET NULL" });
 

@@ -14,8 +14,11 @@ import {
     EsclubInvalidResponseSchema,
     EsclubOffResponseSchema,
     EsclubRetryAfterResponseSchema,
+    EsclubSeriesListResponseSchema,
     EsclubSyncResponseSchema,
-    EsclubTournamentViewSchema
+    EsclubTournamentViewSchema,
+    LeagueRefreshResponseSchema,
+    LeagueSendResponseSchema
 } from "@draft-sim/shared-types";
 import type { EsclubActionResult } from "./esclubSync";
 import {
@@ -955,6 +958,22 @@ export const setTournamentArchived = async (id: string, archived: boolean) =>
         TournamentArchiveResponseSchema
     );
 
+// After a 401 on a POST that must not be replayed: refresh the session for the
+// next press (and mark auth expired when that fails), but don't resend.
+async function refreshSessionAfter401(): Promise<boolean> {
+    let sessionRefreshed = false;
+    try {
+        const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
+            credentials: "include"
+        });
+        sessionRefreshed = refresh.ok;
+    } catch {
+        sessionRefreshed = false;
+    }
+    if (!sessionRefreshed) markAuthExpired();
+    return sessionRefreshed;
+}
+
 // Retain D4 bodies and headers, but send each costly POST only once. In
 // particular, fetchWithRefresh would replay a POST after a successful refresh.
 async function postEsclubAction(
@@ -969,16 +988,7 @@ async function postEsclubAction(
     });
     switch (response.status) {
         case 401: {
-            let sessionRefreshed = false;
-            try {
-                const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
-                    credentials: "include"
-                });
-                sessionRefreshed = refresh.ok;
-            } catch {
-                sessionRefreshed = false;
-            }
-            if (!sessionRefreshed) markAuthExpired();
+            const sessionRefreshed = await refreshSessionAfter401();
             return { status: 401, sessionRefreshed };
         }
         case 200:
@@ -1023,3 +1033,62 @@ export const fetchEsclubTournament = (id: string) =>
 
 export const fetchEsclubSync = (id: string) =>
     apiGet(`/esclub/syncs/${encodeURIComponent(id)}`, EsclubSyncResponseSchema);
+
+/** A league's series, optionally one team's (`?team=`), date order. */
+export const fetchEsclubTournamentSeries = (
+    tournamentId: string,
+    teamId: string | null
+) =>
+    apiGet(
+        `/esclub/tournaments/${encodeURIComponent(tournamentId)}/series${
+            teamId ? `?team=${encodeURIComponent(teamId)}` : ""
+        }`,
+        EsclubSeriesListResponseSchema
+    );
+
+// A canvas POST sent once: on a 401 the session is refreshed for the next
+// press but the request is not replayed (unlike apiPost). Throws ApiError on
+// any non-2xx status.
+async function postCanvasLeague<T>(path: string, body: object, schema: z.ZodType<T>) {
+    const response = await fetch(`${BASE_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body)
+    });
+    if (response.status === 401) {
+        await refreshSessionAfter401();
+        throw new ApiError(401);
+    }
+    if (!response.ok) throw new ApiError(response.status);
+    return schema.parse(await response.json());
+}
+
+/** Send league series to a canvas as series groups, in a column (S3 D5). */
+export const sendLeagueSeriesToCanvas = (data: {
+    canvasId: string;
+    leagueSeriesIds: string[];
+    positionX: number;
+    positionY: number;
+    rowStep: number;
+}) =>
+    postCanvasLeague(
+        `/canvas/${encodeURIComponent(data.canvasId)}/import/league-series`,
+        {
+            leagueSeriesIds: data.leagueSeriesIds,
+            positionX: data.positionX,
+            positionY: data.positionY,
+            rowStep: data.rowStep
+        },
+        LeagueSendResponseSchema
+    );
+
+/** Step 2 of "Refresh from league": apply the mirror to the group (S3 D6). */
+export const applyLeagueRefresh = (data: { canvasId: string; groupId: string }) =>
+    postCanvasLeague(
+        `/canvas/${encodeURIComponent(data.canvasId)}/group/${encodeURIComponent(
+            data.groupId
+        )}/league-refresh`,
+        {},
+        LeagueRefreshResponseSchema
+    );

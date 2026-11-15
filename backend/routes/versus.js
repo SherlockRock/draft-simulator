@@ -12,7 +12,9 @@ const { Op } = require("sequelize");
 router.get("/", authenticate, async (req, res) => {
   try {
     const versusDrafts = await VersusDraft.findAll({
-      where: { owner_id: req.user.id },
+      // S3 D10: imported league series stay out of this list (it feeds the
+      // canvas's Import Versus Series tab), so none gets a second group.
+      where: { owner_id: req.user.id, league_series_id: null },
       include: [
         {
           model: Draft,

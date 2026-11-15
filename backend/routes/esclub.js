@@ -21,11 +21,11 @@ const EsclubSync = require("../models/EsclubSync");
 const syncState = require("../services/esclub/syncState");
 const syncEngine = require("../services/esclub/sync");
 const addLeagueService = require("../services/esclub/addLeague");
+const { esclubSerieUrl } = require("../utils/esclubLinks");
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SERIES_STATUSES = new Set(["upcoming", "in_progress", "finished"]);
-const SERIE_PAGE = "https://esclub.gg/multimedia/serie/";
 
 const isUuid = (value) => typeof value === "string" && UUID.test(value);
 
@@ -524,7 +524,7 @@ router.get(
     return res.json({
       series: {
         ...seriesItem(row, games),
-        esclubUrl: `${SERIE_PAGE}${row.external_id}`,
+        esclubUrl: esclubSerieUrl(row.external_id),
         games: games.map(gameView),
       },
     });
