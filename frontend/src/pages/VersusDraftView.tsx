@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { Title } from "@solidjs/meta";
 import { useParams, useNavigate } from "@solidjs/router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useVersusSocket } from "../providers/VersusSocketProvider";
 import {
     useVersusContext,
@@ -34,13 +34,12 @@ import {
     WinnerUpdateSchema
 } from "../utils/schemas";
 import { getEffectiveSide } from "@draft-sim/shared-types";
-import { fetchVersusDraft, fetchDraft, completeDraft } from "../utils/actions";
+import { fetchVersusDraft, fetchDraft } from "../utils/actions";
 import { Socket } from "socket.io-client";
 import { validateSocketEvent } from "../utils/socketValidation";
 import { getEffectivePickOrder, getPicksArrayIndex } from "../utils/versusPickOrder";
 import { VersusTimer } from "../components/VersusTimer";
 import { ReadyButton } from "../components/ReadyButton";
-import { WinnerDeclarationModal } from "../components/WinnerDeclarationModal";
 import { PauseRequestModal } from "../components/PauseRequestModal";
 import { gameTextColors, getSplashUrl, resolveChampion } from "../utils/constants";
 import toast from "solid-toast";
@@ -179,7 +178,6 @@ const VersusDraftView: Component = () => {
         setGameSettings(id, settings);
     };
 
-    const [showWinnerModal, setShowWinnerModal] = createSignal(false);
     const [showPauseRequest, setShowPauseRequest] = createSignal(false);
     const [pauseRequestType, setPauseRequestType] = createSignal<"pause" | "resume">(
         "pause"
@@ -712,24 +710,6 @@ const VersusDraftView: Component = () => {
                 }
             }
         );
-    };
-
-    const declareWinnerMutation = useMutation(() => ({
-        mutationFn: (winner: "blue" | "red" | null) =>
-            completeDraft(params.draftId, { winner }),
-        onSuccess: () => {
-            toast.success("Winner declared!");
-            setShowWinnerModal(false);
-            setTimeout(() => navigate(`/versus/${params.id}`), 1000);
-        },
-        onError: (error: Error) => {
-            console.error("Error declaring winner:", error);
-            toast.error("Failed to declare winner");
-        }
-    }));
-
-    const handleDeclareWinner = (winner: "blue" | "red" | null) => {
-        declareWinnerMutation.mutate(winner);
     };
 
     const handlePause = () => {
@@ -1399,15 +1379,6 @@ const VersusDraftView: Component = () => {
                         </div>
 
                         {/* Modals */}
-                        <WinnerDeclarationModal
-                            isOpen={showWinnerModal()}
-                            blueTeamName={blueSideTeamName()}
-                            redTeamName={redSideTeamName()}
-                            onDeclareWinner={handleDeclareWinner}
-                            isSpectator={isSpectator()}
-                            onClose={() => setShowWinnerModal(false)}
-                        />
-
                         <PauseRequestModal
                             isOpen={showPauseRequest()}
                             requestType={pauseRequestType()}

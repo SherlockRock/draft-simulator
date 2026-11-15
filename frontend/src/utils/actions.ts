@@ -96,13 +96,6 @@ export const fetchDraft = async (id: string) => {
     return apiGet(`/drafts/${id}`, DraftSchema);
 };
 
-export const completeDraft = async (
-    draftId: string,
-    data: { winner: "blue" | "red" | null }
-) => {
-    return apiPost(`/drafts/${draftId}/complete`, data, DraftSchema);
-};
-
 export const fetchDefaultDraft = async (id: string | null, canvasId?: string | null) => {
     if (!id || id === "oauth2callback") return null;
     const params = canvasId ? `?canvas_id=${canvasId}` : "";
