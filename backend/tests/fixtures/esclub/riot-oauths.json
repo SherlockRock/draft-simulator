@@ -1,4 +1,9 @@
 {
+  "request": "fetch-oauths-by-user",
+  "context": {
+    "id_user": "synthetic-user-1"
+  },
+  "synthetic": "Hand-made S2b fixture; no live data.",
   "reply": {
     "oauths": [
       {

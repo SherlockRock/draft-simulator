@@ -1,4 +1,9 @@
 {
+  "request": "fetch-members-by-serie",
+  "context": {
+    "id_serie": "synthetic-series"
+  },
+  "synthetic": "Hand-made S2b fixture; no live data.",
   "reply": {
     "members": [
       {

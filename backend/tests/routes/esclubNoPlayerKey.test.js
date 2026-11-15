@@ -42,6 +42,12 @@ const TEAM_B = "99999999-9999-4999-8999-999999999999";
 const FORBIDDEN_KEYS = [
   "playerKey",
   "player_key",
+  "game_name",
+  "tag_line",
+  "checked_at",
+  "id_oauth_external",
+  "accountKey",
+  "LeaguePlayerNames",
   "id_oauth_riot",
   "gameName",
   "tagLine",
@@ -68,9 +74,14 @@ const FORBIDDEN_VALUES = [
   "requester-7",
   "sub-player-text",
   "MEMBER-ROLE-SENTINEL",
+  "SYNTHETIC-LINKED-NAME",
+  "SYNTHETIC-LINKED-TAG",
+  "synthetic-discord-id",
+  "synthetic-discord-name",
 ];
 
-const dirtyMember = { id_user: "esclub-user-9", type_member: "MEMBER-ROLE-SENTINEL" };
+const dirtyLinked = { player_key: "PLAYERKEY-ALPHA", game_name: "SYNTHETIC-LINKED-NAME", tag_line: "SYNTHETIC-LINKED-TAG", checked_at: "2026-11-15T12:00:00Z" };
+const dirtyMember = { id_user: "esclub-user-9", type_member: "MEMBER-ROLE-SENTINEL", ...dirtyLinked, LeaguePlayerNames: [dirtyLinked] };
 
 // Rows as Sequelize would hand them back if every column had been loaded:
 // the route must not forward any of the player data on them.
@@ -104,7 +115,7 @@ const dirtyGame = {
   participants: dirtyParticipants,
   substitutions: [{ gameName: "sub-player-text", playerKey: "PLAYERKEY-ALPHA" }],
   unmatched_participants: 1,
-  id_user: "esclub-user-9",
+  ...dirtyMember,
 };
 
 const team = (id, name) => ({
@@ -117,6 +128,7 @@ const team = (id, name) => ({
     private: { playerKey: "PLAYERKEY-ALPHA", ...dirtyMember },
   },
   owner_id: "requester-7",
+  ...dirtyMember,
 });
 
 const dirtySeries = {
@@ -207,9 +219,10 @@ beforeEach(() => {
     source: "esclub",
     last_synced_at: null,
     created_by: "requester-7",
+    ...dirtyMember,
   });
   vi.spyOn(LeagueStage, "findAll").mockResolvedValue([
-    { id: STAGE, name: "Season", last_synced_at: null, added_by: "requester-7" },
+    { id: STAGE, name: "Season", last_synced_at: null, added_by: "requester-7", ...dirtyMember },
   ]);
   vi.spyOn(EsclubSync, "findOne").mockResolvedValue(dirtySync);
   vi.spyOn(syncState, "getSync").mockResolvedValue(dirtySync);
@@ -350,4 +363,43 @@ describe.each(POST_ROUTES)("%s responses carry no private data", (_label, url, k
       expectClean(res);
     });
   }
+});
+
+
+it("projects new name summary counts and fixed skip reasons without private columns", async () => {
+  const summary = { ...dirtySync.summary, nameMemberLists: 2, nameLookups: 9, namesResolved: 4, namesUnmatched: 1,
+    ...dirtyLinked, skipped: { "names: request cap": 1, "names: daily budget": 2, "names: lookup limit": 3, "names: EsclubProtocolChanged": 4,
+      "synthetic-discord-name": 1, private: dirtyLinked } };
+  syncState.getSync.mockResolvedValue({ ...dirtySync, summary });
+  const res = await request(buildApp()).get(`/api/esclub/syncs/${YID}`);
+  expectClean(res);
+  expect(res.body.sync.summary).toMatchObject({ nameMemberLists: 2, nameLookups: 9, namesResolved: 4, namesUnmatched: 1,
+    skipped: { "names: request cap": 1, "names: daily budget": 2, "names: lookup limit": 3, "names: EsclubProtocolChanged": 4, other: 1 } });
+  expect(EsclubSyncSummarySchema.parse(res.body.sync.summary)).toEqual(res.body.sync.summary);
+});
+
+it("a stubbed name step and sync console carry counts only, even on a private protocol error", async () => {
+  syncEngine.runSync.mockRestore();
+  const { fillPlayerNames } = require("../../services/esclub/playerNames");
+  const { EsclubProtocolChanged } = require("../../services/esclub/errors");
+  const spies = ["log", "error", "warn", "info", "debug"].map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
+  const t = { id: TEAM_A, external_id: "synthetic-roster", entries: [{ teamNumber: 1, seriesId: "synthetic-series",
+    game: { blueSideTeam: 1, playedAt: null, participants: { Ahri: { playerKey: "PLAYERKEY-ALPHA", side: "blue", gameName: null, tagLine: null } } } }] };
+  const store = { inTransaction: async (work) => work({}), loadStageTeamPlayers: async () => ({ teams: [t], allTeams: [t], allKeys: new Set(["PLAYERKEY-ALPHA"]) }),
+    loadPlayerNames: async () => [], upsertPlayerNames: vi.fn(), rebuildRoster: vi.fn() };
+  const client = { request: async (name) => name === "fetch-members-by-serie" ? { members: [
+    { id_parent: t.external_id, type_parent: "TeamRoster", id_user: "esclub-user-9", type_member: "Starter", time_start: 1, time_end: null },
+    { id_parent: t.external_id, type_parent: "TeamRoster", id_user: "synthetic-protocol-user", type_member: "Starter", time_start: 0, time_end: null },
+  ] } : { oauths: [{ type_oauth: "Riot", id_oauth_external: "PLAYERKEY-ALPHA", name: "Player01#T01" },
+    { type_oauth: "Discord", id_oauth_external: "synthetic-discord-id", name: "synthetic-discord-name" }] } };
+  const state = { limitsFromEnv: () => ({ cap: 400, budget: 2000 }), finishSync: vi.fn() };
+  const run = (requests) => syncEngine.runSync({ id: YID, kind: "league" }, (c, summary) => fillPlayerNames(c, { tournament: { id: TID }, stage: { id: STAGE }, store, summary, requests }),
+    { session: async (work) => work(client), state });
+  const result = await run();
+  expect(result.summary.namesResolved).toBe(1);
+  const failed = await run({ fetchSerieRosterPlayers: async () => { throw new EsclubProtocolChanged(FORBIDDEN_VALUES.join(" ")); } });
+  expect(failed.status).toBe("succeeded");
+  const text = spies.flatMap((spy) => spy.mock.calls.flat()).join(" ");
+  for (const value of FORBIDDEN_VALUES) expect(text).not.toContain(value);
+  expect(text).toContain("names-resolved 1");
 });

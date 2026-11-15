@@ -331,7 +331,11 @@ async function rebuildRoster(team, tournamentId, transaction) {
       raw: true,
       ...opts(transaction),
     });
-    const keys = [...new Set(games.flatMap((g) => Object.values(g.participants).map((p) => p.playerKey)).filter(Boolean))];
+    const keys = [...new Set(games.flatMap((g) => {
+      const teamNumber = team1Of.get(g.series_id) === team.id ? 1 : 2;
+      const side = g.blue_side_team === teamNumber ? "blue" : "red";
+      return Object.values(g.participants).filter((p) => p.side === side).map((p) => p.playerKey);
+    }).filter(Boolean))];
     const named = keys.length ? await LeaguePlayerName.findAll({
       where: { tournament_id: tournamentId, player_key: { [Op.in]: keys }, game_name: { [Op.ne]: null } },
       attributes: ["player_key", "game_name", "tag_line", "checked_at"],

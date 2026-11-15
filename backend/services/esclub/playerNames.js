@@ -9,7 +9,7 @@ const LOOKUP_LIMIT = 120;
 
 /** Sync-local caches shared across stages, discarded when the sync ends. */
 function newNameState() {
-  return { users: new Set(), lists: new Map(), stopped: false };
+  return { users: new Set(), lists: new Map(), accounts: new Map(), stopped: false };
 }
 
 /** A named row is final in S2b; a no-match is retried only after a newer game. */
@@ -55,6 +55,13 @@ async function fillPlayerNames(client, { tournament, stage, store, summary,
     const wanted = wantedFor(team);
     if (!wanted.length) continue;
     const matches = new Map();
+    const takeAccount = (account) => {
+      if (!inputs.allKeys.has(account.accountKey) || names.get(account.accountKey)?.game_name != null || matches.has(account.accountKey)) return;
+      matches.set(account.accountKey, { game_name: account.gameName, tag_line: account.tagLine });
+    };
+    // Later stages may import games after this user's first lookup. Reuse only
+    // the private Riot projection, so deduplication cannot lose those matches.
+    for (const account of nameState.accounts.values()) takeAccount(account);
     const remaining = () => wanted.filter((key) => !matches.has(key));
     let stopped = false;
     // Latest series with games, using the newest game time and stable entry order.
@@ -75,14 +82,14 @@ async function fillPlayerNames(client, { tournament, stage, store, summary,
         const { accounts } = await requests.fetchRiotAccounts(client, { id_user: member.id_user });
         nameState.users.add(member.id_user);
         for (const account of accounts) {
-          if (!inputs.allKeys.has(account.accountKey) || names.get(account.accountKey)?.game_name != null || matches.has(account.accountKey)) continue;
-          matches.set(account.accountKey, { game_name: account.gameName, tag_line: account.tagLine });
+          nameState.accounts.set(account.accountKey, account);
+          takeAccount(account);
         }
       }
       return true;
     };
     try {
-      if (!await read(latest.seriesId)) stopped = true;
+      if (remaining().length && !await read(latest.seriesId)) stopped = true;
       if (!stopped && remaining().length) {
         const keys = new Set(remaining());
         const extra = team.entries.filter((entry) => {

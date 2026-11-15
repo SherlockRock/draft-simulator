@@ -42,8 +42,8 @@ const byKey = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * A team's roster from the games it played (D10). Players are grouped by
- * playerKey (never returned); the Riot ID is the latest one named by a game
- * (ties on time: the later entry); a player with no usable Riot ID is left
+ * playerKey (never returned); the Riot ID is the latest game or linked name
+ * (game ties: later entry; linked ties: linked name); a player with no usable Riot ID is left
  * off. Starters take the role they played most (one role each, assigned by
  * descending game count); the rest are bench by games played; cap 10.
  * @param {RosterEntry[]} entries one per game of the team in the tournament

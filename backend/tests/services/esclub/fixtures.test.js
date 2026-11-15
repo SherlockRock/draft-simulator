@@ -25,7 +25,7 @@ describe("esclub fixtures are anonymised", () => {
   const all = files(DIR).map((path) => ({ path, fixture: JSON.parse(readFileSync(path, "utf8")) }));
 
   it("every fixture has the recorded shape", () => {
-    expect(all.length).toBe(30);
+    expect(all.length).toBe(32);
     for (const { fixture } of all) {
       expect(typeof fixture.request).toBe("string");
       expect(fixture.context).toBeTypeOf("object");
@@ -65,6 +65,8 @@ describe("esclub fixtures are anonymised", () => {
         return Object.entries(value).forEach(([k, v]) => scan(v, k, `${path}.${k}`));
       }
       if (typeof value !== "string") return;
+      if (key === "id_user" && !/^(fake-user-|synthetic-user-)/.test(value)) offences.push(path);
+      if (key === "id_oauth_external" && !value.startsWith("synthetic-")) offences.push(path);
       if (PLAYER_KEYS.has(key) && !/^(fake-oauth-|fake-key-|Player\d{2}$|T\d{2}$)/.test(value)) {
         offences.push(path);
       }
@@ -140,4 +142,16 @@ describe("esclub member fixtures (S2)", () => {
     expect(group.context).toEqual({ id_group: sibling.id_group });
     expect(Object.keys(group.reply.groups[0]).sort()).toEqual(Object.keys(sibling).sort());
   });
+});
+
+
+it("linked-account fixtures are explicitly synthetic, including all Discord data", () => {
+  const oauths = load("riot-oauths.json");
+  expect(oauths.synthetic).toBeTypeOf("string");
+  expect(oauths.context.id_user).toMatch(/^synthetic-user-/);
+  for (const item of oauths.reply.oauths) {
+    expect(item.id_oauth_external).toMatch(/^synthetic-/);
+    if (item.type_oauth === "Discord") expect(item.name).toMatch(/^synthetic-/);
+  }
+  expect(load("name-members.json").synthetic).toBeTypeOf("string");
 });

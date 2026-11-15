@@ -123,7 +123,8 @@ describe("stage linked name resolution", () => {
     expect(h.names.size).toBe(1);
     expect(result.summary.namesUnmatched).toBe(0);
     expect(h.args.nameState.stopped).toBe(true);
-    expect(Object.keys(result.summary.skipped)).toHaveLength(1);
+    const reason = ErrorClass === E.EsclubRequestCapReached ? "names: request cap" : ErrorClass === E.EsclubBudgetExhausted ? "names: daily budget" : "names: EsclubProtocolChanged";
+    expect(result.summary.skipped).toEqual({ [reason]: 1 });
     expect(JSON.stringify(result.summary)).not.toContain("synthetic-private");
   });
   it("a protocol stop on the extra member list keeps earlier matches and retries absences next sync", async () => {
@@ -156,4 +157,33 @@ describe("stage linked name resolution", () => {
     expect(h.store.upsertPlayerNames).not.toHaveBeenCalled();
     expect(h.store.inTransaction.mock.calls.every((call) => call[1] === "sync-name-test")).toBe(true);
   });
+});
+
+
+it("reuses private Riot projections for games first imported by a later stage", async () => {
+  const h = harness({ oauths: { [user(1)]: [account(1), account(2)] } });
+  await h.run();
+  const laterTeam = team("b", [entry(2)]);
+  h.store.loadStageTeamPlayers.mockResolvedValue({ teams: [laterTeam], allTeams: [laterTeam], allKeys: new Set([key(2)]) });
+  h.calls.length = 0;
+  await h.run();
+  expect(h.calls).toHaveLength(0);
+  expect(h.names.get(key(2)).game_name).toBe("Player2");
+  expect(h.args.summary.nameLookups).toBe(1);
+});
+
+it.each([E.EsclubRequestCapReached, E.EsclubBudgetExhausted, E.EsclubProtocolChanged])("%s on the first member list leaves all wanted players retryable", async (ErrorClass) => {
+  const h = harness({ fail: () => new ErrorClass("private stop text") });
+  await h.run();
+  expect(h.names.size).toBe(0);
+  expect(h.args.summary.namesUnmatched).toBe(0);
+  expect(h.store.upsertPlayerNames).not.toHaveBeenCalled();
+});
+
+it("rolls back names when roster replacement fails and does not count uncommitted resolutions", async () => {
+  const h = harness();
+  h.store.rebuildRoster.mockRejectedValue(new Error("synthetic database failure"));
+  await expect(h.run()).rejects.toThrow("synthetic database failure");
+  expect(h.names.size).toBe(0);
+  expect(h.args.summary.namesResolved).toBe(0);
 });
