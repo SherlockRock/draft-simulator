@@ -227,3 +227,35 @@ describe("draft route canvas access", () => {
     });
   });
 });
+
+describe("removed draft completion route", () => {
+  it.each(["blue", "red", null])(
+    "returns 404 without changing an existing draft for winner %s",
+    async (winner) => {
+      const draft = {
+        ...mockDraft(),
+        completed: false,
+        winner: "blue",
+        update: vi.fn().mockResolvedValue(),
+      };
+      vi.spyOn(Draft, "findByPk").mockResolvedValue(draft);
+      const app = express();
+      app.use(express.json());
+      // Authenticate before routing, including when the endpoint is absent.
+      app.use(auth.protect);
+      app.use("/api/drafts", loadRouter());
+
+      await request(app)
+        .post(`/api/drafts/${draft.id}/complete`)
+        .send({ winner })
+        .expect(404);
+
+      expect(auth.protect).toHaveBeenCalled();
+      expect(Draft.findByPk).not.toHaveBeenCalled();
+      expect(draft.update).not.toHaveBeenCalled();
+      expect(draft.save).not.toHaveBeenCalled();
+      expect(draft.completed).toBe(false);
+      expect(draft.winner).toBe("blue");
+    },
+  );
+});

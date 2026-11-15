@@ -5,7 +5,6 @@ const router = express.Router();
 // Usage: const result = DraftSchema.safeParse(req.body);
 const Draft = require("../models/Draft");
 const { buildCanvasSnapshot } = require("./canvasProjections");
-const VersusDraft = require("../models/VersusDraft");
 const { CanvasDraft, Canvas, UserCanvas } = require("../models/Canvas.js");
 const { protect, getUserFromRequest } = require("../middleware/auth");
 const socketService = require("../middleware/socketService");
@@ -384,38 +383,6 @@ router.get("/:draftId/canvases", async (req, res) => {
   } catch (error) {
     console.error("Failed to fetch user canvases:", error);
     res.status(500).json({ error: "Failed to fetch canvases" });
-  }
-});
-
-// POST /api/drafts/:id/complete - Mark draft as complete with winner (for versus drafts)
-router.post("/:id/complete", protect, async (req, res) => {
-  try {
-    const { winner } = req.body;
-
-    const draft = await Draft.findByPk(req.params.id);
-
-    if (!draft) {
-      return res.status(404).json({ error: "Draft not found" });
-    }
-
-    await draft.update({
-      completed: true,
-      winner: winner || null,
-    });
-
-    // Update parent VersusDraft so it appears in recent activity
-    if (draft.versus_draft_id) {
-      const versusDraft = await VersusDraft.findByPk(draft.versus_draft_id);
-      if (versusDraft) {
-        versusDraft.changed("updatedAt", true);
-        await versusDraft.save();
-      }
-    }
-
-    res.json(draft);
-  } catch (error) {
-    console.error("Error completing draft:", error);
-    res.status(500).json({ error: "Failed to complete draft" });
   }
 });
 
