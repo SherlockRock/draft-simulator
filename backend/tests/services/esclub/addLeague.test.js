@@ -77,7 +77,8 @@ describe("parseEsclubUrl", () => {
 
   it("rejects other paths", () => {
     no(`https://esclub.gg/multimedia/series/${id}`);
-    no(`https://esclub.gg/serie/${id}`);
+    ok(`https://esclub.gg/serie/${id}`);
+    ok(`http://www.esclub.gg/serie/${id}/match/2?x=1#top`);
     no(`https://esclub.gg/multimedia/serie`);
     no(`https://esclub.gg/multimedia/serie/`);
     no(`https://esclub.gg/x/multimedia/serie/${id}`);
@@ -108,7 +109,7 @@ describe("parseEsclubUrl", () => {
   });
 
   it("exports the example used in messages", () => {
-    expect(A.ACCEPTED_LINK_EXAMPLE).toBe("https://esclub.gg/multimedia/serie/<series id>");
+    expect(A.ACCEPTED_LINK_EXAMPLE).toBe("https://esclub.gg/serie/<series id>");
   });
 });
 

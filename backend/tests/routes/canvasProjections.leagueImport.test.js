@@ -173,7 +173,7 @@ describe("projectGroup", () => {
       startsAt: "2026-11-11T18:00:00.000Z",
       status: "in_progress",
       complete: false,
-      esclubUrl: "https://esclub.gg/multimedia/serie/9876",
+      esclubUrl: "https://esclub.gg/serie/9876",
     });
     expect(out).not.toHaveProperty("VersusDraft");
     expect(out.id).toBe("g-1");

@@ -273,3 +273,8 @@ describe("CLI default read queries (SQL capture, no database)", () => {
     for (const sql of log) expect(sql).not.toMatch(/SELECT \*|participants|playerKey|gameName|tagLine|error_message|requested_by/);
   });
 });
+
+
+it("accepts the normal series page with suffixes through the shared parser", () => {
+  expect(parseArgs(["add", `http://www.esclub.gg/serie/${SERIES}/match/2?x=1#top`])).toMatchObject({ command: "add", region: "na1" });
+});
