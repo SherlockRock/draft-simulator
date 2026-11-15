@@ -146,6 +146,7 @@ function makeFakeStore({ stages } = {}) {
     series: new Map(), // external_id -> row
     games: new Map(), // external_match_id -> row
     teams: new Map(), // external_id -> row
+    names: new Map(),
     players: new Map(), // team id -> rows
     ops: [],
     seq: 0,
@@ -153,7 +154,7 @@ function makeFakeStore({ stages } = {}) {
   };
   const id = (p) => `${p}-${++st.seq}`;
   const gamesOf = (seriesId) => [...st.games.values()].filter((g) => g.series_id === seriesId);
-  const snapshot = () => ({ series: new Map([...st.series].map(([k, v]) => [k, { ...v }])), games: new Map([...st.games].map(([k, v]) => [k, { ...v }])), players: new Map(st.players) });
+  const snapshot = () => ({ series: new Map([...st.series].map(([k, v]) => [k, { ...v }])), games: new Map([...st.games].map(([k, v]) => [k, { ...v }])), players: new Map(st.players), names: new Map(st.names) });
 
   const store = {
     state: st,
@@ -166,7 +167,7 @@ function makeFakeStore({ stages } = {}) {
         st.ops.push("tx:commit");
         return out;
       } catch (e) {
-        st.series = snap.series; st.games = snap.games; st.players = snap.players;
+        st.series = snap.series; st.games = snap.games; st.players = snap.players; st.names = snap.names;
         st.ops.push("tx:rollback");
         throw e;
       }
@@ -227,6 +228,20 @@ function makeFakeStore({ stages } = {}) {
       }
       return { series: { ...row }, gamesWritten: create.length + update.length, gamesLeftAlone: untouched.length };
     },
+    async loadPlayerNames() { return [...st.names.values()]; },
+    async upsertPlayerNames(_tid, rows) {
+      for (const row of rows) st.names.set(row.player_key, { ...row });
+    },
+    async loadStageTeamPlayers(tournamentId, stageId) {
+      const allTeams = [...st.teams.values()].map((team) => ({ ...team, entries:
+        [...st.series.values()].filter((s) => s.tournament_id === tournamentId && [s.team1_id, s.team2_id].includes(team.id))
+          .flatMap((s) => gamesOf(s.id).map((g) => ({ teamNumber: s.team1_id === team.id ? 1 : 2, seriesId: s.external_id,
+            game: { blueSideTeam: g.blue_side_team, playedAt: g.played_at ?? null, participants: g.participants } }))),
+      }));
+      const stageTeams = new Set([...st.series.values()].filter((s) => s.stage_id === stageId).flatMap((s) => [s.team1_id, s.team2_id]));
+      const allKeys = new Set([...st.games.values()].flatMap((g) => Object.values(g.participants).map((p) => p.playerKey)).filter(Boolean));
+      return { teams: allTeams.filter((t) => stageTeams.has(t.id)), allTeams, allKeys };
+    },
     async rebuildRoster(team, tournamentId) {
       const mine = [...st.series.values()].filter((s) => s.tournament_id === tournamentId && (s.team1_id === team.id || s.team2_id === team.id));
       const entries = mine.flatMap((s) =>
@@ -235,7 +250,9 @@ function makeFakeStore({ stages } = {}) {
           game: { blueSideTeam: g.blue_side_team, playedAt: g.played_at ?? null, participants: g.participants },
         })),
       );
-      const rows = deriveRoster(entries).map((p) => ({ team_id: team.id, ...p }));
+      const rows = deriveRoster(entries, new Map([...st.names.values()].filter((n) => n.game_name !== null).map((n) => [n.player_key, {
+        gameName: n.game_name, tagLine: n.tag_line, time: new Date(n.checked_at).getTime(),
+      }]))).map((p) => ({ team_id: team.id, ...p }));
       st.players.set(team.id, rows);
       st.ops.push(`roster:${team.external_id}`);
       return rows.length;
