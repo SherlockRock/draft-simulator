@@ -85,6 +85,8 @@ function makeStub({ failOn, membersOf = {}, patch, onRequest } = {}) {
 
   function serve(name, ctx) {
     switch (name) {
+      case "fetch-oauths-by-user":
+        return { oauths: [] };
       case "fetch-game-resources":
         return clone(fx("game-resources.json").reply);
       case "fetch-rounds-by-number-next":
@@ -130,7 +132,7 @@ function makeStub({ failOn, membersOf = {}, patch, onRequest } = {}) {
       }
       default:
     }
-    throw new Error(`stub: unexpected request ${name} ${JSON.stringify(ctx)}`);
+    throw new Error(`stub: unexpected request ${name}`);
   }
   return stub;
 }
@@ -554,7 +556,9 @@ describe("the bracket (series under a round with no groups)", () => {
     ]);
     expect(stub.calls[3].context.id_parent).toBe(BRACKET_ROUND);
     expect(summary.listLengths).toEqual([SERIES_OF_ROUND.length]);
-    expect(stub.count("fetch-members-by-serie")).toBe(SERIES_OF_ROUND.length);
+    expect(stub.count("fetch-members-by-serie")).toBe(SERIES_OF_ROUND.length + summary.nameMemberLists);
+    expect(summary.nameMemberLists).toBe(1);
+    expect(summary.namesUnmatched).toBeGreaterThan(0);
     const row = store.seriesRow(BRACKET_BO3);
     expect(row.parent_type).toBe("Round");
     expect(row.team1_id).toBe(store.state.teams.get(fx("bracket-bo3/members.json").reply.members[0].id_parent).id);
@@ -852,7 +856,10 @@ describe("syncSerie", () => {
     const store = await incompleteBo3Store();
     const stub = makeStub();
     const summary = sync.newSummary();
+    const namesRead = vi.spyOn(store, "loadStageTeamPlayers");
     await sync.syncSerie(stub, { seriesId: store.seriesRow(GROUP_BO3).id, store, summary, now: () => T0 });
+    expect(namesRead).not.toHaveBeenCalled();
+    expect(summary.nameLookups).toBe(0);
     expect(stub.names()).toEqual([
       "fetch-serie",
       "fetch-matches-by-number-next",

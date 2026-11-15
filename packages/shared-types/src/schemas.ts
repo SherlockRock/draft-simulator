@@ -1663,6 +1663,10 @@ export type ScoutPlayersResponse = z.infer<typeof ScoutPlayersResponseSchema>;
 // these fields before serialization, including nested lists and skip counts.
 const EsclubCountSchema = z.number().int().nonnegative();
 export const EsclubSyncSummarySchema = z.object({
+  nameMemberLists: EsclubCountSchema.optional(),
+  nameLookups: EsclubCountSchema.optional(),
+  namesResolved: EsclubCountSchema.optional(),
+  namesUnmatched: EsclubCountSchema.optional(),
   listLengths: z.array(EsclubCountSchema).optional(),
   seriesListed: EsclubCountSchema.optional(),
   seriesSkippedComplete: EsclubCountSchema.optional(),
@@ -1676,6 +1680,10 @@ export const EsclubSyncSummarySchema = z.object({
   teams: EsclubCountSchema.optional(),
   // Unknown reasons can contain upstream text; expose their count only.
   skipped: z.object({
+    "names: request cap": EsclubCountSchema.optional(),
+    "names: daily budget": EsclubCountSchema.optional(),
+    "names: lookup limit": EsclubCountSchema.optional(),
+    "names: EsclubProtocolChanged": EsclubCountSchema.optional(),
     EsclubProtocolChanged: EsclubCountSchema.optional(),
     EsclubNotFound: EsclubCountSchema.optional(),
     "roster not in the stage's roster list": EsclubCountSchema.optional(),
