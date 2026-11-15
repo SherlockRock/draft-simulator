@@ -36,6 +36,30 @@ export type LeagueRefreshRun = {
     applied: LeagueRefreshResponse | null;
 };
 
+export type LeagueRefreshScope = {
+    /** The signal for a run started now. */
+    signal: () => AbortSignal;
+    /** Abort every run started so far; later runs get a fresh signal. */
+    reset: () => void;
+};
+
+/**
+ * The lifetime of the refresh runs of one canvas. Canvas.tsx stays mounted
+ * across canvas-to-canvas navigation, so it resets the scope when the canvas
+ * changes (and on unmount): a run for the canvas left behind stops polling,
+ * skips its apply and patches nothing.
+ */
+export function createLeagueRefreshScope(): LeagueRefreshScope {
+    let controller = new AbortController();
+    return {
+        signal: () => controller.signal,
+        reset: () => {
+            controller.abort();
+            controller = new AbortController();
+        }
+    };
+}
+
 /**
  * Poll a running sync until it ends. At the cap (or once aborted) it returns
  * the last view, still `running`, so the toast says the sync is still

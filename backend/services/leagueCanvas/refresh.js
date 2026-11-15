@@ -238,7 +238,7 @@ function isRetryableTransactionError(error) {
 /**
  * Refresh one imported series group from the mirror (D6). One transaction:
  * lock the group (on this canvas) and its VersusDraft, read the series'
- * Drafts, the group's cards, the mirror games and series, apply planRefresh
+ * Drafts, the group's cards, the mirror series and then its games, apply planRefresh
  * (appends after the rightmost card; updates per Q2 B / Q3 A) and rewrite the
  * team names on the group metadata and VersusDraft when the linked teams'
  * names changed. Access is the caller's job; so are the timestamp, snapshot
@@ -280,9 +280,14 @@ async function refreshOnce({ canvasId, groupId }) {
 
     const drafts = await loadSeriesDrafts(versusDraft.id, transaction);
     const cards = await loadGroupCards(canvasId, groupId, transaction);
-    const games = await loadGames([seriesId], transaction);
+    // The series' status before its games. Each statement here sees its own
+    // READ COMMITTED snapshot, and S2 commits a series' games with its status
+    // in one transaction, so a status read as complete can't come with a games
+    // read that predates the final game. The other way round could report
+    // "complete" without that game. A stale status only costs another press.
     const series = await loadSeriesState(seriesId, transaction);
     if (!series) throw new NotImportedSeriesError();
+    const games = await loadGames([seriesId], transaction);
 
     const { appends, updates } = planRefresh(drafts, games, {
       lastCard: lastCardByX(cards),

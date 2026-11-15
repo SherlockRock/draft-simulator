@@ -522,6 +522,22 @@ describe("sendLeagueSeries", () => {
     expect(calls.indexOf("UserTournament.bulkCreate")).toBeLessThan(calls.indexOf("commit"));
   });
 
+  // S3 final review (Opus MINOR 1): S2's purge locks the Tournament, then
+  // deletes the LeagueSeries and Teams. The UserTournaments insert (KEY SHARE
+  // on the Tournament) comes before the VersusDraft / group inserts (KEY SHARE
+  // on the LeagueSeries and Teams), so the send takes them in the same order.
+  it("R3: writes the UserTournaments rows before any series is written", async () => {
+    seriesRows = [seriesRow(1), seriesRow(2)];
+    gameRows = [gameRow(sid(1), 0), gameRow(sid(2), 0)];
+    await run({ leagueSeriesIds: [sid(1), sid(2)] });
+
+    const tournaments = calls.indexOf("UserTournament.bulkCreate");
+    expect(tournaments).toBeGreaterThan(calls.indexOf("CanvasGroup.findAll(existing)"));
+    expect(tournaments).toBeLessThan(calls.indexOf("VersusDraft.create"));
+    expect(tournaments).toBeLessThan(calls.indexOf("Draft.create"));
+    expect(tournaments).toBeLessThan(calls.indexOf("CanvasGroup.create"));
+  });
+
   it("R3: no UserTournaments write when nothing is sent", async () => {
     seriesRows = [seriesRow(1, { status: "upcoming" })];
     await run();

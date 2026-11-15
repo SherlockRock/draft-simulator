@@ -34,8 +34,9 @@ function associateOnce() {
  * S3 Task 6 (plan D9, D10, Answer Q3 A): an imported series — its VersusDraft
  * has a `league_series_id` — is read-only where esclub is the source: the
  * group's teams, team names, length and draft type, and each game's sides,
- * first pick, winner and per-card team names. Everything lifts once a purge
- * sets `league_series_id` to NULL.
+ * first pick and winner. The per-card team names are canvas display labels and
+ * stay editable (S3 final review). Everything lifts once a purge sets
+ * `league_series_id` to NULL.
  */
 
 function buildApp() {
@@ -467,9 +468,8 @@ describe("PUT draft on an imported game (Answer Q3 A)", () => {
     ["winner cleared", { winner: null }],
     ["blueSideTeam", { blueSideTeam: 2 }],
     ["firstPick", { firstPick: "red" }],
-    ["team1Name", { team1Name: "Other" }],
-    ["team2Name", { team2Name: "" }],
     ["winner with a position", { winner: "red", positionX: 10 }],
+    ["winner with a team name", { winner: "red", team1Name: "Other" }],
   ])("refuses %s", async (_label, body) => {
     const res = await putDraft(body);
 
@@ -478,6 +478,27 @@ describe("PUT draft on an imported game (Answer Q3 A)", () => {
     expect(Draft.update).not.toHaveBeenCalled();
     expect(canvasDraftRow.update).not.toHaveBeenCalled();
     expect(socketService.emitToRoom).not.toHaveBeenCalled();
+  });
+
+  // S3 final review MAJOR 1: the per-card team names are canvas display
+  // labels, not esclub facts, so they stay editable on an imported game.
+  it.each([
+    ["team1Name", { team1Name: "Other" }, { team1Name: "Other" }],
+    ["team2Name cleared", { team2Name: "" }, { team2Name: null }],
+    [
+      "both",
+      { team1Name: "Alpha", team2Name: "Beta" },
+      { team1Name: "Alpha", team2Name: "Beta" },
+    ],
+  ])("saves the card's %s, with no series lookup", async (_label, body, saved) => {
+    const res = await putDraft(body);
+
+    expect(res.body.error).toBeUndefined();
+    expect(res.status).toBe(200);
+    expect(canvasDraftRow.update).toHaveBeenCalledWith(saved);
+    expect(Draft.update).not.toHaveBeenCalled();
+    expect(Draft.findOne).not.toHaveBeenCalled();
+    expect(socketService.emitToRoom).toHaveBeenCalled();
   });
 
   it("looks the series up by the draft id, once", async () => {

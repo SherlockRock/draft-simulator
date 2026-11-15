@@ -491,14 +491,19 @@ router.get("/:canvasId", async (req, res) => {
 });
 
 // The per-game fields esclub owns on an imported game (S3 Answer Q3 A): sides,
-// first pick and winner, plus the card's own team-name overrides, which would
-// relabel the teams esclub names.
-const ESCLUB_OWNED_DRAFT_FIELDS = [
-  "winner",
-  "blueSideTeam",
-  "firstPick",
-  "team1Name",
-  "team2Name",
+// first pick and winner. The card's team1Name/team2Name stay editable: they
+// are canvas display labels on the CanvasDraft, not esclub facts.
+const ESCLUB_OWNED_DRAFT_FIELDS = ["winner", "blueSideTeam", "firstPick"];
+
+// The group metadata keys esclub owns on an imported series (S3 D9): the team
+// names, the length and the draft type. The group PUT refuses or ignores them;
+// the draft-positions batch drops them.
+const ESCLUB_OWNED_GROUP_METADATA_KEYS = [
+  "blueTeamName",
+  "redTeamName",
+  "length",
+  "seriesType",
+  "draftMode",
 ];
 
 /**
@@ -582,6 +587,33 @@ function withoutImportedTeamNames(metadata) {
   delete rest.blueTeamName;
   delete rest.redTeamName;
   return rest;
+}
+
+/**
+ * The batch commit's `group.metadata` with the esclub-owned keys dropped when
+ * the group backs an imported series (S3 D9), unchanged otherwise. Asks only
+ * when the metadata carries such a key and the group has a VersusDraft: one
+ * plain COUNT, no lock, so the batch's lock order is untouched.
+ *
+ * @param {object} metadata - the request's group.metadata
+ * @param {object} groupRow - the locked CanvasGroup
+ * @param {object} transaction
+ * @returns {Promise<object|null>} the metadata to merge, or null when every
+ *   key it carried was dropped
+ */
+async function withoutImportedSeriesMetadata(metadata, groupRow, transaction) {
+  const touchesEsclubKey = ESCLUB_OWNED_GROUP_METADATA_KEYS.some((key) =>
+    hasKey(metadata, key),
+  );
+  if (!touchesEsclubKey || !groupRow.versus_draft_id) return metadata;
+
+  const imported =
+    (await countImportedSeries([groupRow.versus_draft_id], transaction)) > 0;
+  if (!imported) return metadata;
+
+  const rest = { ...metadata };
+  for (const key of ESCLUB_OWNED_GROUP_METADATA_KEYS) delete rest[key];
+  return Object.keys(rest).length > 0 ? rest : null;
 }
 
 /**
@@ -990,6 +1022,18 @@ async function commitDraftPositions({
       }
     }
 
+    // An imported series' names, length and draft type are esclub's (S3 D9),
+    // as in the group PUT: those keys are dropped here, before any write. Read
+    // after every lock above, with no lock of its own.
+    let standaloneMetadata = null;
+    if (standaloneGroupId && group.metadata && typeof group.metadata === "object") {
+      standaloneMetadata = await withoutImportedSeriesMetadata(
+        group.metadata,
+        lockedById.get(standaloneGroupId),
+        t,
+      );
+    }
+
     const groupWrites = new Map();
     let nextTree = null;
     if (groups.length > 0) {
@@ -1076,10 +1120,10 @@ async function commitDraftPositions({
       const groupUpdates = {};
       if (typeof group.width === "number") groupUpdates.width = group.width;
       if (typeof group.height === "number") groupUpdates.height = group.height;
-      if (group.metadata && typeof group.metadata === "object") {
+      if (standaloneMetadata) {
         groupUpdates.metadata = mergeGroupMetadata(
           groupRow.metadata,
-          group.metadata,
+          standaloneMetadata,
         );
       }
       if (Object.keys(groupUpdates).length > 0) {

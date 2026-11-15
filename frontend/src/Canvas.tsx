@@ -49,7 +49,7 @@ import {
     fetchEsclubSync,
     applyLeagueRefresh
 } from "./utils/actions";
-import { runLeagueRefresh } from "./utils/leagueRefreshFlow";
+import { createLeagueRefreshScope, runLeagueRefresh } from "./utils/leagueRefreshFlow";
 import { leagueImportAfterApply } from "./utils/leagueImport";
 import {
     groupSettingsMetadata,
@@ -6006,9 +6006,14 @@ const CanvasComponent = (props: CanvasComponentProps) => {
     );
     const isLeagueRefreshing = (groupId: string) => leagueRefreshing().has(groupId);
     // A run outlives no canvas: leaving it stops the polling, the apply and
-    // the toast (leagueRefreshFlow checks the signal).
-    const leagueRefreshAbort = new AbortController();
-    onCleanup(() => leagueRefreshAbort.abort());
+    // the toast (leagueRefreshFlow checks the signal). Canvas-to-canvas
+    // navigation keeps this component mounted, so the scope is keyed on the
+    // canvas identity; the cleanup fires on the switch and on unmount.
+    const leagueRefreshScope = createLeagueRefreshScope();
+    createEffect(() => {
+        canvasId();
+        onCleanup(() => leagueRefreshScope.reset());
+    });
     // The apply broadcasts only when games changed, so a status-only change
     // (the series just finished) is patched in here, in the store and in the
     // query cache: later presses then skip esclub and the chip updates.
@@ -6044,6 +6049,7 @@ const CanvasComponent = (props: CanvasComponentProps) => {
         const leagueImport = group?.LeagueImport;
         if (!leagueImport) return;
         const forCanvas = canvasId();
+        const signal = leagueRefreshScope.signal();
         setLeagueRefreshing((prev) => new Set(prev).add(groupId));
         void runLeagueRefresh({
             group: { id: groupId, LeagueImport: leagueImport },
@@ -6055,10 +6061,12 @@ const CanvasComponent = (props: CanvasComponentProps) => {
                 sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
                 now: () => Date.now()
             },
-            signal: leagueRefreshAbort.signal
+            signal
         })
             .then((run) => {
-                if (!run) return;
+                // Null once the scope was reset; the canvas check is a guard
+                // for a switch that lands between the run's end and here.
+                if (!run || signal.aborted || canvasId() !== forCanvas) return;
                 if (run.applied) patchLeagueImport(groupId, run.applied.series);
                 if (run.ok) toast.success(run.message);
                 else toast.error(run.message);

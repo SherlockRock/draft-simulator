@@ -255,6 +255,24 @@ describe("refreshLeagueGroup: locking and reads", () => {
     expect(LeagueGame.findAll.mock.calls[0][0].where).toEqual({ series_id: [SERIES] });
     expect(LeagueSeries.findOne.mock.calls[0][0].where).toEqual({ id: SERIES });
   });
+
+  // S3 final review (Codex MAJOR 2): S2 commits a series' games and its status
+  // in one transaction, but under READ COMMITTED each statement here sees its
+  // own snapshot. Reading the status first means a status read as complete
+  // can never come with a games read that predates the final game.
+  it("reads the mirror series' status before its games", async () => {
+    await run();
+    const statusRead = calls.indexOf("LeagueSeries.findOne");
+    const gamesRead = calls.indexOf("LeagueGame.findAll");
+    expect(statusRead).toBeGreaterThan(-1);
+    expect(gamesRead).toBeGreaterThan(statusRead);
+  });
+
+  it("a series row that is gone: no games read", async () => {
+    seriesState = null;
+    await expect(run()).rejects.toBeInstanceOf(NotImportedSeriesError);
+    expect(LeagueGame.findAll).not.toHaveBeenCalled();
+  });
 });
 
 describe("refreshLeagueGroup: one retry on a deadlock or serialization failure", () => {

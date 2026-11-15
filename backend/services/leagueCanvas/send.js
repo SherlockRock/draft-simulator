@@ -266,8 +266,8 @@ async function writeSeries({ plan, canvasId, position, transaction }) {
  * Send mirrored league series to a canvas (D2–D5). One transaction: lock the
  * Canvas row, read the series and games, skip what is already on this canvas
  * (`existing`) or can't be sent (`skipped`, with planSend's reason,
- * "not-found" or "not-linkable"), then write the rest as a column at the drop
- * point, newest first, and the sender's UserTournaments rows. Access is the
+ * "not-found" or "not-linkable"), then write the sender's UserTournaments rows
+ * and the rest as a column at the drop point, newest first. Access is the
  * caller's job; so are the timestamp, snapshot and broadcast.
  * @param {{ canvasId: string, userId: string, leagueSeriesIds: string[], positionX: number, positionY: number, rowStep?: number }} input validated
  * @returns {Promise<{ created: { leagueSeriesId: string, groupId: string }[], existing: { leagueSeriesId: string, groupId: string }[], skipped: { leagueSeriesId: string, reason: string }[] }>}
@@ -343,6 +343,12 @@ async function sendLeagueSeries({
       rowStep,
     );
 
+    // Before the series writes: the insert takes KEY SHARE on the Tournament,
+    // the VersusDraft and group inserts on the LeagueSeries and Teams. S2's
+    // purge locks the Tournament, then deletes those, so this is its order.
+    const tournamentIds = [...new Set(ordered.map((s) => s.tournament_id))];
+    await ensureUserTournaments(userId, tournamentIds, transaction);
+
     const created = [];
     for (const [i, series] of ordered.entries()) {
       const groupId = await writeSeries({
@@ -353,9 +359,6 @@ async function sendLeagueSeries({
       });
       created.push({ leagueSeriesId: series.id, groupId });
     }
-
-    const tournamentIds = [...new Set(ordered.map((s) => s.tournament_id))];
-    await ensureUserTournaments(userId, tournamentIds, transaction);
 
     await transaction.commit();
     return { created, existing, skipped };

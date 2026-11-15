@@ -9,6 +9,7 @@ import type { EsclubActionResult } from "./esclubSync";
 import {
     LEAGUE_REFRESH_POLL_CAP_MS,
     LEAGUE_REFRESH_POLL_MS,
+    createLeagueRefreshScope,
     runLeagueRefresh,
     type LeagueRefreshDeps
 } from "./leagueRefreshFlow";
@@ -397,5 +398,46 @@ describe("runLeagueRefresh", () => {
             message: "Couldn't reach esclub refresh · Couldn't update the series",
             ok: false
         });
+    });
+});
+
+// S3 final review (Codex MINOR 3): canvas-to-canvas navigation keeps Canvas.tsx
+// mounted, so the runs are scoped to the canvas, not to the component.
+describe("createLeagueRefreshScope", () => {
+    it("hands out one live signal until reset", () => {
+        const scope = createLeagueRefreshScope();
+        const first = scope.signal();
+        expect(first.aborted).toBe(false);
+        expect(scope.signal()).toBe(first);
+    });
+
+    it("reset aborts the runs started so far; later runs get a fresh signal", () => {
+        const scope = createLeagueRefreshScope();
+        const before = scope.signal();
+        scope.reset();
+        expect(before.aborted).toBe(true);
+        const after = scope.signal();
+        expect(after).not.toBe(before);
+        expect(after.aborted).toBe(false);
+    });
+
+    it("a run on the old canvas skips the apply and returns nothing to patch after a reset", async () => {
+        const scope = createLeagueRefreshScope();
+        let resetDuringPoll: (() => void) | null = () => scope.reset();
+        const deps = fakeDeps({ polls: ["running", "running", "succeeded"] });
+        const sleep = deps.sleep;
+        deps.sleep = async (ms) => {
+            await sleep(ms);
+            resetDuringPoll?.();
+            resetDuringPoll = null;
+        };
+        const result = await runLeagueRefresh({
+            group: group(),
+            deps,
+            signal: scope.signal()
+        });
+        expect(result).toBeNull();
+        expect(deps.applyLeagueRefresh).not.toHaveBeenCalled();
+        expect(scope.signal().aborted).toBe(false);
     });
 });

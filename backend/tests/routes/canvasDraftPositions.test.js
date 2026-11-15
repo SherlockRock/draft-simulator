@@ -16,6 +16,8 @@ const {
   CanvasPoolPlacement,
 } = require("../../models/Canvas");
 const Draft = require("../../models/Draft.js");
+const VersusDraft = require("../../models/VersusDraft.js");
+const sequelize = require("../../config/database");
 
 function loadRouter() {
   const routePath = require.resolve("../../routes/canvas");
@@ -789,6 +791,131 @@ describe("PUT /:canvasId/draft-positions — groups[]", () => {
       expect(res.status).toBe(200);
       expect(findAll).not.toHaveBeenCalled();
     });
+  });
+});
+
+// S3 final review (Codex MAJOR 1 / Opus MINOR 4): an imported series' teams,
+// names, length and draft type are esclub's (plan D9). The group PUT guards
+// them; this batch route merges `group.metadata` too, so it drops those keys
+// for a group whose VersusDraft has a league_series_id. The drag UI never
+// sends them; layout keys still save.
+describe("PUT /:canvasId/draft-positions — group.metadata of an imported series", () => {
+  const ESCLUB_KEYS = {
+    blueTeamName: "Changed by editor",
+    redTeamName: "Other",
+    length: 7,
+    draftMode: "ironman",
+    seriesType: "ironman",
+  };
+  const STORED = {
+    blueTeamName: "Alpha",
+    redTeamName: "Beta",
+    length: 3,
+    seriesType: "fearless",
+    draftMode: "fearless",
+    layout: "free",
+  };
+
+  let t;
+  let row;
+  beforeEach(() => {
+    vi.spyOn(UserCanvas, "findOne").mockResolvedValue({ permissions: "edit" });
+    t = mockTransaction();
+    row = {
+      ...groupRow("g1", { type: "series", metadata: { ...STORED } }),
+      versus_draft_id: "vd-1",
+    };
+    vi.spyOn(CanvasGroup, "findAll").mockResolvedValue([row]);
+  });
+
+  const putMetadata = (metadata) =>
+    putGroups({ positions: [], group: { id: "g1", metadata } });
+
+  it("drops the esclub-owned keys and keeps the layout keys", async () => {
+    vi.spyOn(VersusDraft, "count").mockResolvedValue(1);
+
+    const res = await putMetadata({ ...ESCLUB_KEYS, layout: "grid", gridCols: 3 });
+
+    expect(res.status).toBe(200);
+    expect(row.update).toHaveBeenCalledWith(
+      { metadata: { ...STORED, layout: "grid", gridCols: 3 } },
+      expect.objectContaining({ transaction: t }),
+    );
+    expect(t.commit).toHaveBeenCalled();
+  });
+
+  it("writes nothing when only esclub-owned keys were sent", async () => {
+    vi.spyOn(VersusDraft, "count").mockResolvedValue(1);
+
+    const res = await putMetadata(ESCLUB_KEYS);
+
+    expect(res.status).toBe(200);
+    expect(row.update).not.toHaveBeenCalled();
+  });
+
+  it("asks about the group's VersusDraft once, in the transaction, after the group lock", async () => {
+    vi.spyOn(VersusDraft, "count").mockResolvedValue(1);
+
+    await putMetadata({ length: 7 });
+
+    expect(VersusDraft.count).toHaveBeenCalledTimes(1);
+    const [opts] = VersusDraft.count.mock.calls[0];
+    expect(opts.where.id).toEqual(["vd-1"]);
+    expect(opts.transaction).toBe(t);
+    expect(VersusDraft.count.mock.invocationCallOrder[0]).toBeGreaterThan(
+      CanvasGroup.findAll.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("renders one COUNT of the group's VersusDraft with league_series_id set (sequelize.query stubbed)", async () => {
+    // A plain aggregate: Sequelize asks for one row, and pg returns the count
+    // as a string.
+    const query = vi.spyOn(sequelize, "query").mockResolvedValue({ count: "1" });
+
+    const res = await putMetadata({ length: 7, layout: "grid" });
+
+    expect(res.status).toBe(200);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toBe(
+      'SELECT count(*) AS "count" FROM "VersusDrafts" AS "VersusDraft" WHERE "VersusDraft"."id" IN (\'vd-1\') AND "VersusDraft"."league_series_id" IS NOT NULL;',
+    );
+    expect(row.update.mock.calls[0][0].metadata.length).toBe(3);
+  });
+
+  it("keeps every key after a purge (league_series_id NULL)", async () => {
+    vi.spyOn(VersusDraft, "count").mockResolvedValue(0);
+
+    const res = await putMetadata({ ...ESCLUB_KEYS, layout: "grid" });
+
+    expect(res.status).toBe(200);
+    expect(row.update).toHaveBeenCalledWith(
+      { metadata: { ...STORED, ...ESCLUB_KEYS, layout: "grid" } },
+      expect.anything(),
+    );
+  });
+
+  it("makes no query for layout-only metadata", async () => {
+    const count = vi.spyOn(VersusDraft, "count");
+
+    const res = await putMetadata({ layout: "grid", gridCols: 2 });
+
+    expect(res.status).toBe(200);
+    expect(count).not.toHaveBeenCalled();
+    expect(row.update).toHaveBeenCalledWith(
+      { metadata: { ...STORED, layout: "grid", gridCols: 2 } },
+      expect.anything(),
+    );
+  });
+
+  it("makes no query for a group with no VersusDraft", async () => {
+    row.versus_draft_id = null;
+    const count = vi.spyOn(VersusDraft, "count");
+
+    const res = await putMetadata({ blueTeamName: "Custom" });
+
+    expect(res.status).toBe(200);
+    expect(count).not.toHaveBeenCalled();
+    expect(row.update.mock.calls[0][0].metadata.blueTeamName).toBe("Custom");
   });
 });
 
