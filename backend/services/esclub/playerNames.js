@@ -79,7 +79,14 @@ async function fillPlayerNames(client, { tournament, stage, store, summary,
         if (member.id_parent !== team.external_id || nameState.users.has(member.id_user)) continue;
         if (summary.nameLookups >= LOOKUP_LIMIT) return false;
         summary.nameLookups++;
-        const { accounts } = await requests.fetchRiotAccounts(client, { id_user: member.id_user });
+        let accounts;
+        try {
+          ({ accounts } = await requests.fetchRiotAccounts(client, { id_user: member.id_user }));
+        } catch (error) {
+          // A cap or budget refusal happens before the request is sent: don't count it.
+          if (error instanceof EsclubRequestCapReached || error instanceof EsclubBudgetExhausted) summary.nameLookups--;
+          throw error;
+        }
         nameState.users.add(member.id_user);
         for (const account of accounts) {
           nameState.accounts.set(account.accountKey, account);

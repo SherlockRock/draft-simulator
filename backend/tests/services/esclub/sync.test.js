@@ -826,6 +826,54 @@ describe("syncTournament", () => {
     expect(store.state.ops.filter((o) => o.startsWith("touch:"))).toEqual(["touch:stage-1", "touch:stage-2"]);
   });
 
+  const twoStageStore = () => {
+    const store = makeFakeStore({
+      stages: [
+        { id: "stage-1", external_id: GROUP_STAGE, name: "Regular Season" },
+        { id: "stage-2", external_id: BRACKET_STAGE, name: "Playoffs" },
+      ],
+    });
+    const load = store.loadStageTeamPlayers.bind(store);
+    store.loadStageTeamPlayers = async (tournamentId, stageId) => {
+      store.state.ops.push(`names:${stageId}`);
+      return load(tournamentId, stageId);
+    };
+    return store;
+  };
+  // In the name phase, every member is a distinct Starter, so the name step looks users up.
+  const namePhaseStub = (store, failOn) => makeStub({
+    failOn: (name, ctx, n) => (store.state.ops.some((o) => o.startsWith("names:")) ? failOn(name, ctx, n) : undefined),
+    patch: (name, _ctx, reply) => (name === "fetch-members-by-serie" && store.state.ops.some((o) => o.startsWith("names:"))
+      ? { members: reply.members.map((m, i) => ({ ...m, type_member: "Starter", id_user: `fake-user-name-${i}` })) }
+      : reply),
+  });
+
+  it("runs the name step only after every stage is synced and stamped", async () => {
+    const store = twoStageStore();
+    await sync.syncTournament(makeStub(), { tournamentId: "t1", store, summary: sync.newSummary(), now: () => T0 });
+    const order = store.state.ops.filter((o) => o.startsWith("touch:") || o.startsWith("names:"));
+    expect(order).toEqual(["touch:stage-1", "touch:stage-2", "names:stage-1", "names:stage-2"]);
+  });
+
+  it.each([
+    ["request cap", () => new EsclubRequestCapReached("sync reached its cap")],
+    ["daily budget", () => new EsclubBudgetExhausted("daily budget spent")],
+    ["EsclubProtocolChanged", () => new EsclubProtocolChanged("malformed frame")],
+  ])("a name-step stop (%s) leaves a two-stage refresh succeeded with both stages synced", async (reason, makeError) => {
+    const store = twoStageStore();
+    const stub = namePhaseStub(store, (name) => (name === "fetch-oauths-by-user" ? makeError() : undefined));
+    const state = { limitsFromEnv: () => ({ cap: 400, budget: 2000 }), finishSync: vi.fn() };
+    const result = await sync.runSync({ id: "sync-two-stage" }, (client, summary) =>
+      sync.syncTournament(client, { tournamentId: "t1", store, summary, now: () => T0 }), { session: async (work) => work(stub), state });
+    expect(result.status).toBe("succeeded");
+    expect(store.state.ops.filter((o) => o.startsWith("touch:"))).toEqual(["touch:stage-1", "touch:stage-2"]);
+    expect(result.summary.skipped).toEqual({ [`names: ${reason}`]: 1 });
+    // The step stopped for the whole sync: no request follows the refused lookup.
+    expect(stub.names().at(-1)).toBe("fetch-oauths-by-user");
+    expect(stub.count("fetch-oauths-by-user")).toBe(1);
+    expect(result.summary.namesUnmatched).toBe(0);
+  });
+
   it("fails for a tournament that is not there, before any request", async () => {
     const stub = makeStub();
     await expect(sync.syncTournament(stub, { tournamentId: "nope", store: makeFakeStore(), summary: sync.newSummary() })).rejects.toThrow(/not found/);

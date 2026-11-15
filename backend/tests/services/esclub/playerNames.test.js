@@ -125,6 +125,8 @@ describe("stage linked name resolution", () => {
     expect(h.args.nameState.stopped).toBe(true);
     const reason = ErrorClass === E.EsclubRequestCapReached ? "names: request cap" : ErrorClass === E.EsclubBudgetExhausted ? "names: daily budget" : "names: EsclubProtocolChanged";
     expect(result.summary.skipped).toEqual({ [reason]: 1 });
+    // A cap or budget refusal is never sent, so it is not counted as a lookup.
+    expect(result.summary.nameLookups).toBe(ErrorClass === E.EsclubProtocolChanged ? 2 : 1);
     expect(JSON.stringify(result.summary)).not.toContain("synthetic-private");
   });
   it("a protocol stop on the extra member list keeps earlier matches and retries absences next sync", async () => {
