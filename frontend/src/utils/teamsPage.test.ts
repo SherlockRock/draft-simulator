@@ -26,7 +26,7 @@ import {
     teamDisplayName,
     toggleGroupSelected,
     toggleSelected,
-    useCountLabel
+    teamRecordLabel
 } from "./teamsPage";
 
 const counts = (official = 0, scrim = 0, scratch = 0): TeamUseCounts => ({
@@ -63,6 +63,7 @@ function team(
         Tournament: null,
         canEditRoster: true,
         TeamPlayers: [],
+        leagueRecord: null,
         useCounts: counts(),
         canArchive: true,
         canDelete: true,
@@ -247,10 +248,30 @@ describe("buildTeamsPageGroups", () => {
 });
 
 describe("row text", () => {
-    it("useCountLabel always shows official and scrim, never scratch", () => {
-        expect(useCountLabel(counts(4, 12, 1))).toBe("4 official · 12 scrim");
-        expect(useCountLabel(counts())).toBe("0 official · 0 scrim");
-        expect(useCountLabel(counts(0, 0, 9))).toBe("0 official · 0 scrim");
+    it("shows canvas totals only when positive", () => {
+        expect(teamRecordLabel(team("a", "A"))).toBe("");
+        expect(teamRecordLabel(team("a", "A", { useCounts: counts(0, 0, 1) }))).toBe(
+            "1 series on your canvases"
+        );
+        expect(teamRecordLabel(team("a", "A", { useCounts: counts(4, 12, 1) }))).toBe(
+            "17 series on your canvases"
+        );
+    });
+
+    it("shows league records instead of canvas uses, including undecided series", () => {
+        const label = (won: number, lost: number, gamesWon: number, gamesLost: number) =>
+            teamRecordLabel(
+                team("a", "A", {
+                    useCounts: counts(4, 12, 1),
+                    leagueRecord: {
+                        series: { won, lost },
+                        games: { won: gamesWon, lost: gamesLost }
+                    }
+                })
+            );
+        expect(label(5, 1, 11, 4)).toBe("5–1 series · 11–4 games");
+        expect(label(0, 0, 0, 0)).toBe("No games yet");
+        expect(label(0, 0, 1, 1)).toBe("0–0 series · 1–1 games");
     });
 
     it("playersLabel handles none, one and many", () => {

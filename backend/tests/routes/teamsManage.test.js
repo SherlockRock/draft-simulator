@@ -11,6 +11,7 @@ const Tournament = require("../../models/Tournament");
 const sequelize = require("../../config/database");
 const setupAssociations = require("../../models/associations");
 const teamUsage = require("../../services/teamUsage");
+const leagueRecord = require("../../services/leagueRecord");
 const { Op } = require("sequelize");
 const { visibleTeamsWhere } = require("../../services/teamAccess");
 
@@ -64,6 +65,7 @@ beforeEach(() => {
     req.user = { id: "u1" };
     next();
   });
+  vi.spyOn(leagueRecord, "teamLeagueRecords").mockResolvedValue({});
   counts = vi.spyOn(teamUsage, "teamUseCounts").mockResolvedValue({});
 });
 
@@ -180,6 +182,7 @@ describe("GET /manage response", () => {
 
     await request(buildApp()).get("/api/teams/manage?ids=zzz&teamIds[]=evil");
 
+    expect(leagueRecord.teamLeagueRecords).toHaveBeenCalledExactlyOnceWith(["a", "b", "c"]);
     expect(counts).toHaveBeenCalledTimes(1);
     expect(counts.mock.calls[0][0]).toEqual(["a", "b", "c"]);
     expect(counts.mock.calls[0][1]).toBe("u1");
@@ -192,6 +195,7 @@ describe("GET /manage response", () => {
       pickup({ id: "p2", archived_at: "2026-10-02T00:00:00.000Z" }),
       imported({ id: "i1" }),
     ]);
+    vi.mocked(leagueRecord.teamLeagueRecords).mockResolvedValue({ i1: { series: { won: 5, lost: 1 }, games: { won: 11, lost: 4 } } });
     counts.mockResolvedValue({
       p1: { official: 4, scrim: 12, scratch: 1, total: 17 },
       i1: { official: 2, scrim: 0, scratch: 0, total: 2 },
@@ -203,6 +207,7 @@ describe("GET /manage response", () => {
     const [p1, p2, i1] = res.body.teams;
     expect(p1).toMatchObject({
       id: "p1",
+      leagueRecord: null,
       useCounts: { official: 4, scrim: 12, scratch: 1, total: 17 },
       canArchive: true,
       canDelete: true,
@@ -219,6 +224,7 @@ describe("GET /manage response", () => {
     });
     expect(i1).toMatchObject({
       id: "i1",
+      leagueRecord: { series: { won: 5, lost: 1 }, games: { won: 11, lost: 4 } },
       useCounts: { official: 2, scrim: 0, scratch: 0, total: 2 },
       canArchive: false,
       canDelete: false,

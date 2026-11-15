@@ -119,9 +119,17 @@ export function buildTeamsPageGroups(data: TeamsManageResponse): TeamsPageGroup[
 
 // ---- Row text --------------------------------------------------------
 
-// Scratch is counted but shown only in the delete dialog (Q6).
-export function useCountLabel(counts: TeamUseCounts): string {
-    return `${counts.official} official · ${counts.scrim} scrim`;
+export function teamRecordLabel(team: ManagedTeamRow): string {
+    const record = team.leagueRecord;
+    if (record) {
+        const { series, games } = record;
+        if (series.won + series.lost + games.won + games.lost === 0)
+            return "No games yet";
+        return `${series.won}–${series.lost} series · ${games.won}–${games.lost} games`;
+    }
+    return team.useCounts.total > 0
+        ? `${team.useCounts.total} series on your canvases`
+        : "";
 }
 
 export function playersLabel(team: ManagedTeamRow): string {
@@ -320,7 +328,7 @@ export function selectedRows(
 }
 
 export function selectionBarLabel(summary: SelectionSummary): string {
-    return `${summary.count} selected · ${useCountLabel(summary.uses)}`;
+    return `${summary.count} selected · ${summary.uses.official} official · ${summary.uses.scrim} scrim`;
 }
 
 // The row's title: the name, with the league's acronym when it has one.

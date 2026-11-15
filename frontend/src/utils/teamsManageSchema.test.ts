@@ -21,6 +21,7 @@ const pickup = {
     TeamPlayers: [],
     Tournament: null,
     canEditRoster: true,
+    leagueRecord: null,
     useCounts: { official: 4, scrim: 12, scratch: 1, total: 17 },
     canArchive: true,
     canDelete: true
@@ -31,6 +32,7 @@ const archivedPickup = {
     id: "t2",
     name: "OLD",
     archived_at: "2026-10-02T00:00:00.000Z",
+    leagueRecord: null,
     useCounts: zeroCounts
 };
 
@@ -44,6 +46,7 @@ const imported = {
     archived_at: null,
     Tournament: { id: "tour1", name: "Spring Cup", source: "esclub" },
     canEditRoster: false,
+    leagueRecord: null,
     useCounts: { official: 2, scrim: 0, scratch: 0, total: 2 },
     canArchive: false,
     canDelete: false
@@ -91,6 +94,28 @@ describe("ManagedTeamRowSchema", () => {
         expect(row.canDelete).toBe(false);
         expect(row.canEditRoster).toBe(false);
         expect(row.Tournament?.name).toBe("Spring Cup");
+    });
+
+    it("requires a nullable record with nonnegative integer counters", () => {
+        expect(
+            ManagedTeamRowSchema.safeParse(without(pickup, "leagueRecord")).success
+        ).toBe(false);
+        const leagueRecord = { series: { won: 5, lost: 1 }, games: { won: 11, lost: 4 } };
+        expect(
+            ManagedTeamRowSchema.parse({ ...imported, leagueRecord }).leagueRecord
+        ).toEqual(leagueRecord);
+        expect(
+            ManagedTeamRowSchema.safeParse({
+                ...imported,
+                leagueRecord: { ...leagueRecord, games: { won: -1, lost: 0 } }
+            }).success
+        ).toBe(false);
+        expect(
+            ManagedTeamRowSchema.safeParse({
+                ...imported,
+                leagueRecord: { ...leagueRecord, series: { won: 1.5, lost: 0 } }
+            }).success
+        ).toBe(false);
     });
 
     it("rejects a row without useCounts", () => {
