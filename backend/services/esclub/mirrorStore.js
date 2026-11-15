@@ -17,6 +17,7 @@ const sequelize = require("../../config/database");
 const Tournament = require("../../models/Tournament");
 const Team = require("../../models/Team");
 const TeamPlayer = require("../../models/TeamPlayer");
+const LeaguePlayerName = require("../../models/LeaguePlayerName");
 const LeagueStage = require("../../models/LeagueStage");
 const LeagueSeries = require("../../models/LeagueSeries");
 const LeagueGame = require("../../models/LeagueGame");
@@ -330,6 +331,19 @@ async function rebuildRoster(team, tournamentId, transaction) {
       raw: true,
       ...opts(transaction),
     });
+    const keys = [...new Set(games.flatMap((g) => {
+      const teamNumber = team1Of.get(g.series_id) === team.id ? 1 : 2;
+      const side = g.blue_side_team === teamNumber ? "blue" : "red";
+      return Object.values(g.participants).filter((p) => p.side === side).map((p) => p.playerKey);
+    }).filter(Boolean))];
+    const named = keys.length ? await LeaguePlayerName.findAll({
+      where: { tournament_id: tournamentId, player_key: { [Op.in]: keys }, game_name: { [Op.ne]: null } },
+      attributes: ["player_key", "game_name", "tag_line", "checked_at"],
+      raw: true, ...opts(transaction), logging: false,
+    }) : [];
+    const names = new Map(named.map((n) => [n.player_key, {
+      gameName: n.game_name, tagLine: n.tag_line, time: new Date(n.checked_at).getTime(),
+    }]));
     players = deriveRoster(
       games.map((g) => ({
         teamNumber: team1Of.get(g.series_id) === team.id ? 1 : 2,
@@ -339,6 +353,7 @@ async function rebuildRoster(team, tournamentId, transaction) {
           participants: g.participants,
         },
       })),
+      names,
     );
   }
   await TeamPlayer.destroy({ where: { team_id: team.id }, ...opts(transaction), logging: false });
@@ -349,6 +364,82 @@ async function rebuildRoster(team, tournamentId, transaction) {
     );
   }
   return players.length;
+}
+
+/**
+ * Private inputs: stage teams' tournament-wide game entries, and all tournament
+ * teams for moved-player matching/rebuilds. No member data is stored or read.
+ * @param {string} tournamentId
+ * @param {string} stageId
+ * @param {object} [transaction]
+ * @returns {Promise<{teams: object[], allTeams: object[], allKeys: Set<string>}>}
+ */
+async function loadStageTeamPlayers(tournamentId, stageId, transaction) {
+  const series = await LeagueSeries.findAll({
+    where: { tournament_id: tournamentId },
+    attributes: ["id", "external_id", "stage_id", "team1_id", "team2_id"],
+    order: [["starts_at", "ASC"], ["external_id", "ASC"]], raw: true, ...opts(transaction),
+  });
+  const teams = await Team.findAll({
+    where: { tournament_id: tournamentId, source: "esclub" },
+    attributes: ["id", "external_id"], order: [["id", "ASC"]], raw: true, ...opts(transaction),
+  });
+  const games = series.length ? await LeagueGame.findAll({
+    where: { series_id: { [Op.in]: series.map((s) => s.id) } },
+    attributes: ["series_id", "blue_side_team", "played_at", "participants"],
+    order: [["played_at", "ASC"], ["external_match_id", "ASC"]], raw: true, ...opts(transaction), logging: false,
+  }) : [];
+  const bySeries = new Map(series.map((s) => [s.id, s]));
+  const byTeam = new Map(teams.map((team) => [team.id, { ...team, entries: [] }]));
+  const stageTeams = new Set();
+  for (const s of series) {
+    if (s.stage_id === stageId) { stageTeams.add(s.team1_id); stageTeams.add(s.team2_id); }
+  }
+  const allKeys = new Set();
+  for (const g of games) {
+    const serie = bySeries.get(g.series_id);
+    for (const p of Object.values(g.participants)) if (p.playerKey) allKeys.add(p.playerKey);
+    for (const [index, id] of [serie.team1_id, serie.team2_id].entries()) {
+      byTeam.get(id)?.entries.push({
+        teamNumber: index + 1, seriesId: serie.external_id,
+        game: { blueSideTeam: g.blue_side_team, playedAt: g.played_at ? new Date(g.played_at).toISOString() : null, participants: g.participants },
+      });
+    }
+  }
+  const allTeams = [...byTeam.values()];
+  return { teams: allTeams.filter((t) => stageTeams.has(t.id)), allTeams, allKeys };
+}
+
+/**
+ * Private tournament-scoped name and no-match rows. Call inside the sync fence.
+ * @param {string} tournamentId
+ * @param {object} [transaction]
+ * @returns {Promise<object[]>}
+ */
+function loadPlayerNames(tournamentId, transaction) {
+  return LeaguePlayerName.findAll({
+    where: { tournament_id: tournamentId },
+    attributes: ["player_key", "game_name", "tag_line", "checked_at"],
+    raw: true, ...opts(transaction), logging: false,
+  });
+}
+
+/**
+ * Only permitted name columns are persisted; callers own the fenced transaction.
+ * @param {string} tournamentId
+ * @param {{player_key: string, game_name: string|null, tag_line: string|null, checked_at: Date}[]} rows
+ * @param {object} transaction
+ * @returns {Promise<void>}
+ */
+async function upsertPlayerNames(tournamentId, rows, transaction) {
+  if (!rows.length) return;
+  await LeaguePlayerName.bulkCreate(rows.map((row) => ({
+    tournament_id: tournamentId, player_key: row.player_key,
+    game_name: row.game_name, tag_line: row.tag_line, checked_at: row.checked_at,
+  })), { transaction, logging: false, validate: true,
+    updateOnDuplicate: ["game_name", "tag_line", "checked_at", "updatedAt"],
+    conflictAttributes: ["tournament_id", "player_key"],
+  });
 }
 
 /**
@@ -366,6 +457,9 @@ async function touchSynced(stage, tournament, now, transaction) {
 
 module.exports = {
   inTransaction,
+  loadStageTeamPlayers,
+  loadPlayerNames,
+  upsertPlayerNames,
   loadTournamentWithStages,
   loadSeriesByExternalIds,
   loadSeriesForRefresh,

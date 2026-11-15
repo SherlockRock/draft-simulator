@@ -42,14 +42,15 @@ const byKey = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * A team's roster from the games it played (D10). Players are grouped by
- * playerKey (never returned); the Riot ID is the latest one named by a game
- * (ties on time: the later entry); a player with no usable Riot ID is left
+ * playerKey (never returned); the Riot ID is the latest game or linked name
+ * (game ties: later entry; linked ties: linked name); a player with no usable Riot ID is left
  * off. Starters take the role they played most (one role each, assigned by
  * descending game count); the rest are bench by games played; cap 10.
  * @param {RosterEntry[]} entries one per game of the team in the tournament
+ * @param {Map<string, {gameName: string, tagLine: string, time: number}>} [names] private linked names dated at their check
  * @returns {RosterPlayer[]} ordinals 0..n-1, starters in role order first
  */
-function deriveRoster(entries) {
+function deriveRoster(entries, names = new Map()) {
   const players = new Map();
   entries.forEach((entry, index) => {
     const { game, teamNumber } = entry;
@@ -79,6 +80,8 @@ function deriveRoster(entries) {
 
   const eligible = [];
   for (const rec of players.values()) {
+    const linked = names.get(rec.key);
+    if (linked && (!rec.id || linked.time >= rec.id.time)) rec.id = linked;
     if (!rec.id) continue;
     const gameName = String(rec.id.gameName).trim();
     const tagLine = String(rec.id.tagLine).trim();
@@ -108,6 +111,31 @@ function deriveRoster(entries) {
   ].slice(0, ROSTER_CAP);
 
   return ordered.map(({ role, rec }, ordinal) => ({ role, gameName: rec.gameName, tagLine: rec.tagLine, ordinal }));
+}
+
+/**
+ * Private player facts for the name step, using the same team-side rule as
+ * deriveRoster. Null game dates sort oldest; later entries break ties.
+ * @param {(RosterEntry & {seriesId: string})[]} entries
+ * @returns {Map<string, {latest: number, latestSeries: string, named: boolean}>}
+ */
+function derivePlayedPlayers(entries) {
+  const players = new Map();
+  for (const { teamNumber, game, seriesId } of entries) {
+    const side = game.blueSideTeam === teamNumber ? "blue" : "red";
+    const time = timeOf(game.playedAt);
+    for (const p of Object.values(game.participants)) {
+      if (p.side !== side || !p.playerKey) continue;
+      const previous = players.get(p.playerKey);
+      const named = p.gameName != null && p.tagLine != null;
+      players.set(p.playerKey, {
+        latest: Math.max(previous?.latest ?? -Infinity, time),
+        latestSeries: !previous || time >= previous.latest ? seriesId : previous.latestSeries,
+        named: Boolean(previous?.named || named),
+      });
+    }
+  }
+  return players;
 }
 
 /**
@@ -180,4 +208,4 @@ function planSeries(listed, mirrored) {
   return { action: "fetch", needsMembers };
 }
 
-module.exports = { deriveRoster, teamRowFromRoster, gameIsComplete, seriesCompleteness, planSeries };
+module.exports = { timeOf, derivePlayedPlayers, deriveRoster, teamRowFromRoster, gameIsComplete, seriesCompleteness, planSeries };

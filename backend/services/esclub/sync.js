@@ -18,6 +18,7 @@
  */
 
 const defaultStore = require("./mirrorStore");
+const { fillPlayerNames, newNameState } = require("./playerNames");
 const defaultRequests = require("./requests");
 const defaultState = require("./syncState");
 const { withEsclubSession } = require("./client");
@@ -44,7 +45,8 @@ function resetResourcesCache() {
  * The counts a sync keeps (stored in EsclubSyncs.summary: counts only).
  * @returns {{ listLengths: number[], seriesListed: number, seriesSkippedComplete: number,
  *   seriesWritten: number, seriesFailed: number, seriesNoTeams: number, gamesWritten: number, pending: number,
- *   failed: number, unmatched: number, teams: number, skipped: Record<string, number> }}
+ *   failed: number, unmatched: number, teams: number, nameMemberLists: number, nameLookups: number,
+ *   namesResolved: number, namesUnmatched: number, skipped: Record<string, number> }}
  */
 function newSummary() {
   return {
@@ -59,6 +61,10 @@ function newSummary() {
     failed: 0,
     unmatched: 0,
     teams: 0,
+    nameMemberLists: 0,
+    nameLookups: 0,
+    namesResolved: 0,
+    namesUnmatched: 0,
     skipped: {},
   };
 }
@@ -296,9 +302,11 @@ const mapBy = (rows, key) => new Map(rows.map((r) => [r[key], r]));
  * @param {object} [args.summary]
  * @param {typeof defaultRequests} [args.requests]
  * @param {() => Date} [args.now]
+ * @param {ReturnType<typeof newNameState>} [args.nameState]
+ * @param {boolean} [args.names] run the name step at the end of the stage (false: the caller runs it later)
  * @returns {Promise<object>} the summary
  */
-async function syncStage(client, { tournament, stage, store = defaultStore, summary = newSummary(), requests = defaultRequests, now = () => new Date() }) {
+async function syncStage(client, { tournament, stage, store = defaultStore, summary = newSummary(), requests = defaultRequests, now = () => new Date(), nameState = newNameState(), names = true }) {
   const resources = await getResources(client, requests);
   const listed = await walkStage(client, stage, requests, summary);
   const { items: rosterRows } = await requests.fetchTeamRosters(client, { id_event_stage: stage.external_id });
@@ -338,11 +346,15 @@ async function syncStage(client, { tournament, stage, store = defaultStore, summ
   if (listed.length > 0 && summary.seriesFailed - failedBefore === listed.length) {
     throw new EsclubProtocolChanged("all listed series failed");
   }
+  if (names) await fillPlayerNames(client, { tournament, stage, store, summary, requests, now, nameState });
   return summary;
 }
 
 /**
- * Sync every stage of a tournament, in creation order, stamping each when done.
+ * Sync every stage of a tournament, in creation order, stamping each when done,
+ * then run the name step for each stage. The name step comes last so its
+ * lookups never spend the cap or budget a later stage needs, and a stop inside
+ * it (which may leave the client failed) is followed by no further request.
  * @param {import("./client").EsclubClient} client
  * @param {object} args
  * @param {string} args.tournamentId
@@ -357,8 +369,12 @@ async function syncTournament(client, { tournamentId, store = defaultStore, summ
   if (!found) throw new Error(`tournament ${tournamentId} not found`);
   const { stages, ...tournament } = found;
   for (const stage of stages) {
-    await syncStage(client, { tournament, stage, store, summary, requests, now });
+    await syncStage(client, { tournament, stage, store, summary, requests, now, names: false });
     await store.inTransaction((transaction) => store.touchSynced(stage, tournament, now(), transaction), summary.syncId);
+  }
+  const nameState = newNameState();
+  for (const stage of stages) {
+    await fillPlayerNames(client, { tournament, stage, store, summary, requests, now, nameState });
   }
   return summary;
 }
@@ -464,6 +480,10 @@ async function runSync(syncRow, work, { env = process.env, session = withEsclubS
     `pending ${summary.pending}`,
     `failed ${summary.failed}`,
     `unmatched ${summary.unmatched}`,
+    `name-lists ${summary.nameMemberLists}`,
+    `name-lookups ${summary.nameLookups}`,
+    `names-resolved ${summary.namesResolved}`,
+    `names-unmatched ${summary.namesUnmatched}`,
     `skipped ${Object.values(summary.skipped).reduce((a, b) => a + b, 0)}`,
   ].join(" ");
   console.log(

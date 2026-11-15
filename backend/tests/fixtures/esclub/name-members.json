@@ -1,0 +1,67 @@
+{
+  "request": "fetch-members-by-serie",
+  "context": {
+    "id_serie": "synthetic-series"
+  },
+  "synthetic": "Hand-made S2b fixture; no live data.",
+  "reply": {
+    "members": [
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-1",
+        "type_member": "Owner",
+        "time_start": 0,
+        "time_end": null
+      },
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-1",
+        "type_member": "Starter",
+        "time_start": 3,
+        "time_end": null
+      },
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-1",
+        "type_member": "Starter",
+        "time_start": 1,
+        "time_end": null
+      },
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-2",
+        "type_member": "Substitute",
+        "time_start": 2,
+        "time_end": null
+      },
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-3",
+        "type_member": "Starter",
+        "time_start": 9,
+        "time_end": 10
+      },
+      {
+        "id_parent": "synthetic-roster-a",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-4",
+        "type_member": "Coach",
+        "time_start": 4,
+        "time_end": null
+      },
+      {
+        "id_parent": "synthetic-roster-b",
+        "type_parent": "TeamRoster",
+        "id_user": "synthetic-user-5",
+        "type_member": "Starter",
+        "time_start": null,
+        "time_end": null
+      }
+    ]
+  }
+}

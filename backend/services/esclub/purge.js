@@ -31,6 +31,7 @@ async function preview(tournamentId, transaction) {
        (SELECT COUNT(*)::int FROM "LeagueStages" WHERE tournament_id = :tournamentId) AS stages,
        (SELECT COUNT(*)::int FROM "TeamPlayers" p
          WHERE p.team_id IN (SELECT id FROM "Teams" WHERE tournament_id = :tournamentId)) AS "teamPlayers",
+       (SELECT COUNT(*)::int FROM "LeaguePlayerNames" WHERE tournament_id = :tournamentId) AS "leaguePlayerNames",
        (SELECT COUNT(*)::int FROM "Teams" WHERE tournament_id = :tournamentId) AS teams,
        (SELECT COUNT(*)::int FROM "UserTournaments" WHERE tournament_id = :tournamentId) AS "userTournaments"
      FROM "Tournaments" t WHERE t.id = :tournamentId AND t.source = 'esclub'`,
@@ -61,6 +62,7 @@ async function preview(tournamentId, transaction) {
       stages: row.stages,
       teamPlayers: row.teamPlayers,
       teams: row.teams,
+      leaguePlayerNames: row.leaguePlayerNames,
       userTournaments: row.userTournaments,
       tournaments: 1,
     },
@@ -129,6 +131,7 @@ async function purgeTournament(tournamentId) {
       `DELETE FROM "LeagueStages" WHERE tournament_id = :tournamentId`,
       `DELETE FROM "TeamPlayers" WHERE team_id IN
          (SELECT id FROM "Teams" WHERE tournament_id = :tournamentId)`,
+      `DELETE FROM "LeaguePlayerNames" WHERE tournament_id = :tournamentId`,
       `DELETE FROM "Teams" WHERE tournament_id = :tournamentId`,
       `DELETE FROM "Tournaments" WHERE id = :tournamentId AND source = 'esclub'`,
     ];

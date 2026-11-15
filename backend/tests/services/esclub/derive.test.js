@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const N = require("../../../services/esclub/normalize");
 const D = require("../../../services/esclub/derive");
+const { deriveRoster } = D;
 const { TeamInvariantError } = require("../../../services/teamAccess");
 const { EsclubProtocolChanged } = require("../../../services/esclub/errors");
 
@@ -409,5 +410,25 @@ describe("planSeries", () => {
     for (const s of ["InitiatePending", "TerminateDefault", "Finished"]) {
       expect(D.planSeries(listed(s), mirrored({ complete: true })).needsMembers).toBe(false);
     }
+  });
+});
+
+
+describe("linked roster names", () => {
+  const entry = (playedAt, gameName = "GameName", tagLine = "GAME") => ({ teamNumber: 1, seriesId: "synthetic-series",
+    game: { blueSideTeam: 1, playedAt, participants: { Ahri: { side: "blue", lane: "mid", playerKey: "synthetic-name-key", gameName, tagLine } } } });
+  const linked = (time) => new Map([["synthetic-name-key", { gameName: "LinkedName", tagLine: "LINK", time: Date.parse(time) }]]);
+  it("uses the newest name, giving linked names equal-time ties", () => {
+    const entries = [entry("2026-11-15T10:00:00Z")];
+    expect(deriveRoster(entries, linked("2026-11-15T09:00:00Z"))[0].gameName).toBe("GameName");
+    expect(deriveRoster(entries, linked("2026-11-15T10:00:00Z"))[0].gameName).toBe("LinkedName");
+    expect(deriveRoster(entries, linked("2026-11-15T11:00:00Z"))[0].gameName).toBe("LinkedName");
+    expect(deriveRoster([entry(null)], linked("2026-11-15T09:00:00Z"))[0].gameName).toBe("LinkedName");
+  });
+  it("fills an unnamed player without changing roles or returning the key", () => {
+    const entries = [entry(null, null, null)];
+    expect(deriveRoster(entries)).toEqual([]);
+    expect(deriveRoster(entries, linked("2026-11-15T09:00:00Z"))).toEqual([{ role: "mid", ordinal: 0, gameName: "LinkedName", tagLine: "LINK" }]);
+    expect(deriveRoster([entry(null)], new Map())).toEqual(deriveRoster([entry(null)]));
   });
 });

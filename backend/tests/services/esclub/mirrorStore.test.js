@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -502,7 +502,7 @@ describe("inTransaction", () => {
     expect(write).not.toHaveBeenCalled();
     expect(cap.calls).toHaveLength(1);
     expect(cap.calls[0].sql).toBe('SELECT status FROM "EsclubSyncs" WHERE id = :syncId FOR UPDATE');
-    expect(cap.calls[0].options.transaction).toBe(TX);
+    expect(cap.calls[0].options.transaction).toEqual(TX);
   });
 
   it("locks the running sync row before the write callback, capturing rendered SQL", async () => {
@@ -520,5 +520,40 @@ describe("inTransaction", () => {
   it("hands the callback a transaction from sequelize", async () => {
     vi.spyOn(sequelize, "transaction").mockImplementation(async (cb) => cb(TX));
     expect(await store.inTransaction(async (t) => t)).toBe(TX);
+  });
+});
+
+
+describe("private linked name storage", () => {
+  it("upserts only allowed columns on the composite key with SQL logging disabled", async () => {
+    const cap = captureSql();
+    await store.upsertPlayerNames(TOUR.id, [{ player_key: "synthetic-key", game_name: "Linked", tag_line: "TEST", checked_at: T0,
+      id_user: "synthetic-private-user", discord: "synthetic-private-discord" }], TX);
+    const insert = cap.calls.find((c) => c.sql.startsWith('INSERT INTO "LeaguePlayerNames"'));
+    expect(insert.sql).toContain('ON CONFLICT ("tournament_id","player_key") DO UPDATE');
+    expect(insert.sql).not.toMatch(/id_user|discord|synthetic-private/);
+    expect(insert.options.logging).toBe(false);
+    expect(insert.options.transaction).toEqual(TX);
+  });
+  it("loads names scoped to the tournament, without logging", async () => {
+    const cap = captureSql();
+    await store.loadPlayerNames(TOUR.id, TX);
+    expect(cap.sqls()[0]).toContain(`"tournament_id" = '${TOUR.id}'`);
+    expect(cap.calls[0].options.logging).toBe(false);
+    expect(cap.calls[0].options.transaction).toEqual(TX);
+  });
+  it("rebuilds a roster using a linked name, suppressing the key-bearing read", async () => {
+    const cap = captureSql((sql) => {
+      if (sql.includes('FROM "LeagueSeries"')) return [{ id: "ser-1", team1_id: TEAM_A }];
+      if (sql.includes('FROM "LeagueGames"')) return [{ series_id: "ser-1", blue_side_team: 1, played_at: null,
+        participants: { Ahri: { lane: "mid", playerKey: "synthetic-key", gameName: null, tagLine: null, side: "blue" } } }];
+      if (sql.includes('FROM "LeaguePlayerNames"')) return [{ player_key: "synthetic-key", game_name: "Linked", tag_line: "TEST", checked_at: T0 }];
+      return [];
+    });
+    expect(await store.rebuildRoster({ id: TEAM_A }, TOUR.id, TX)).toBe(1);
+    const read = cap.calls.find((c) => c.sql.includes('FROM "LeaguePlayerNames"'));
+    expect(read.sql).toContain(`"tournament_id" = '${TOUR.id}'`);
+    expect(read.options.logging).toBe(false);
+    expect(cap.sqls().find((sql) => sql.startsWith('INSERT INTO "TeamPlayers"'))).toContain("'Linked'");
   });
 });

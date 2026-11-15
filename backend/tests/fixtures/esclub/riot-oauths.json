@@ -1,0 +1,24 @@
+{
+  "request": "fetch-oauths-by-user",
+  "context": {
+    "id_user": "synthetic-user-1"
+  },
+  "synthetic": "Hand-made S2b fixture; no live data.",
+  "reply": {
+    "oauths": [
+      {
+        "type_oauth": "Riot",
+        "id_oauth_external": "synthetic-account-a",
+        "name": " Player # One # TAG ",
+        "id_oauth": "synthetic-row",
+        "type_parent": "User",
+        "id_parent": "synthetic-user-1"
+      },
+      {
+        "type_oauth": "Discord",
+        "id_oauth_external": "synthetic-discord-id",
+        "name": "synthetic-discord-name"
+      }
+    ]
+  }
+}

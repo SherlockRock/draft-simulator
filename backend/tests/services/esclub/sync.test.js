@@ -85,6 +85,8 @@ function makeStub({ failOn, membersOf = {}, patch, onRequest } = {}) {
 
   function serve(name, ctx) {
     switch (name) {
+      case "fetch-oauths-by-user":
+        return { oauths: [] };
       case "fetch-game-resources":
         return clone(fx("game-resources.json").reply);
       case "fetch-rounds-by-number-next":
@@ -130,7 +132,7 @@ function makeStub({ failOn, membersOf = {}, patch, onRequest } = {}) {
       }
       default:
     }
-    throw new Error(`stub: unexpected request ${name} ${JSON.stringify(ctx)}`);
+    throw new Error(`stub: unexpected request ${name}`);
   }
   return stub;
 }
@@ -146,6 +148,7 @@ function makeFakeStore({ stages } = {}) {
     series: new Map(), // external_id -> row
     games: new Map(), // external_match_id -> row
     teams: new Map(), // external_id -> row
+    names: new Map(),
     players: new Map(), // team id -> rows
     ops: [],
     seq: 0,
@@ -153,7 +156,7 @@ function makeFakeStore({ stages } = {}) {
   };
   const id = (p) => `${p}-${++st.seq}`;
   const gamesOf = (seriesId) => [...st.games.values()].filter((g) => g.series_id === seriesId);
-  const snapshot = () => ({ series: new Map([...st.series].map(([k, v]) => [k, { ...v }])), games: new Map([...st.games].map(([k, v]) => [k, { ...v }])), players: new Map(st.players) });
+  const snapshot = () => ({ series: new Map([...st.series].map(([k, v]) => [k, { ...v }])), games: new Map([...st.games].map(([k, v]) => [k, { ...v }])), players: new Map(st.players), names: new Map(st.names) });
 
   const store = {
     state: st,
@@ -166,7 +169,7 @@ function makeFakeStore({ stages } = {}) {
         st.ops.push("tx:commit");
         return out;
       } catch (e) {
-        st.series = snap.series; st.games = snap.games; st.players = snap.players;
+        st.series = snap.series; st.games = snap.games; st.players = snap.players; st.names = snap.names;
         st.ops.push("tx:rollback");
         throw e;
       }
@@ -227,6 +230,20 @@ function makeFakeStore({ stages } = {}) {
       }
       return { series: { ...row }, gamesWritten: create.length + update.length, gamesLeftAlone: untouched.length };
     },
+    async loadPlayerNames() { return [...st.names.values()]; },
+    async upsertPlayerNames(_tid, rows) {
+      for (const row of rows) st.names.set(row.player_key, { ...row });
+    },
+    async loadStageTeamPlayers(tournamentId, stageId) {
+      const allTeams = [...st.teams.values()].map((team) => ({ ...team, entries:
+        [...st.series.values()].filter((s) => s.tournament_id === tournamentId && [s.team1_id, s.team2_id].includes(team.id))
+          .flatMap((s) => gamesOf(s.id).map((g) => ({ teamNumber: s.team1_id === team.id ? 1 : 2, seriesId: s.external_id,
+            game: { blueSideTeam: g.blue_side_team, playedAt: g.played_at ?? null, participants: g.participants } }))),
+      }));
+      const stageTeams = new Set([...st.series.values()].filter((s) => s.stage_id === stageId).flatMap((s) => [s.team1_id, s.team2_id]));
+      const allKeys = new Set([...st.games.values()].flatMap((g) => Object.values(g.participants).map((p) => p.playerKey)).filter(Boolean));
+      return { teams: allTeams.filter((t) => stageTeams.has(t.id)), allTeams, allKeys };
+    },
     async rebuildRoster(team, tournamentId) {
       const mine = [...st.series.values()].filter((s) => s.tournament_id === tournamentId && (s.team1_id === team.id || s.team2_id === team.id));
       const entries = mine.flatMap((s) =>
@@ -235,7 +252,9 @@ function makeFakeStore({ stages } = {}) {
           game: { blueSideTeam: g.blue_side_team, playedAt: g.played_at ?? null, participants: g.participants },
         })),
       );
-      const rows = deriveRoster(entries).map((p) => ({ team_id: team.id, ...p }));
+      const rows = deriveRoster(entries, new Map([...st.names.values()].filter((n) => n.game_name !== null).map((n) => [n.player_key, {
+        gameName: n.game_name, tagLine: n.tag_line, time: new Date(n.checked_at).getTime(),
+      }]))).map((p) => ({ team_id: team.id, ...p }));
       st.players.set(team.id, rows);
       st.ops.push(`roster:${team.external_id}`);
       return rows.length;
@@ -537,7 +556,9 @@ describe("the bracket (series under a round with no groups)", () => {
     ]);
     expect(stub.calls[3].context.id_parent).toBe(BRACKET_ROUND);
     expect(summary.listLengths).toEqual([SERIES_OF_ROUND.length]);
-    expect(stub.count("fetch-members-by-serie")).toBe(SERIES_OF_ROUND.length);
+    expect(stub.count("fetch-members-by-serie")).toBe(SERIES_OF_ROUND.length + summary.nameMemberLists);
+    expect(summary.nameMemberLists).toBe(1);
+    expect(summary.namesUnmatched).toBeGreaterThan(0);
     const row = store.seriesRow(BRACKET_BO3);
     expect(row.parent_type).toBe("Round");
     expect(row.team1_id).toBe(store.state.teams.get(fx("bracket-bo3/members.json").reply.members[0].id_parent).id);
@@ -805,6 +826,54 @@ describe("syncTournament", () => {
     expect(store.state.ops.filter((o) => o.startsWith("touch:"))).toEqual(["touch:stage-1", "touch:stage-2"]);
   });
 
+  const twoStageStore = () => {
+    const store = makeFakeStore({
+      stages: [
+        { id: "stage-1", external_id: GROUP_STAGE, name: "Regular Season" },
+        { id: "stage-2", external_id: BRACKET_STAGE, name: "Playoffs" },
+      ],
+    });
+    const load = store.loadStageTeamPlayers.bind(store);
+    store.loadStageTeamPlayers = async (tournamentId, stageId) => {
+      store.state.ops.push(`names:${stageId}`);
+      return load(tournamentId, stageId);
+    };
+    return store;
+  };
+  // In the name phase, every member is a distinct Starter, so the name step looks users up.
+  const namePhaseStub = (store, failOn) => makeStub({
+    failOn: (name, ctx, n) => (store.state.ops.some((o) => o.startsWith("names:")) ? failOn(name, ctx, n) : undefined),
+    patch: (name, _ctx, reply) => (name === "fetch-members-by-serie" && store.state.ops.some((o) => o.startsWith("names:"))
+      ? { members: reply.members.map((m, i) => ({ ...m, type_member: "Starter", id_user: `fake-user-name-${i}` })) }
+      : reply),
+  });
+
+  it("runs the name step only after every stage is synced and stamped", async () => {
+    const store = twoStageStore();
+    await sync.syncTournament(makeStub(), { tournamentId: "t1", store, summary: sync.newSummary(), now: () => T0 });
+    const order = store.state.ops.filter((o) => o.startsWith("touch:") || o.startsWith("names:"));
+    expect(order).toEqual(["touch:stage-1", "touch:stage-2", "names:stage-1", "names:stage-2"]);
+  });
+
+  it.each([
+    ["request cap", () => new EsclubRequestCapReached("sync reached its cap")],
+    ["daily budget", () => new EsclubBudgetExhausted("daily budget spent")],
+    ["EsclubProtocolChanged", () => new EsclubProtocolChanged("malformed frame")],
+  ])("a name-step stop (%s) leaves a two-stage refresh succeeded with both stages synced", async (reason, makeError) => {
+    const store = twoStageStore();
+    const stub = namePhaseStub(store, (name) => (name === "fetch-oauths-by-user" ? makeError() : undefined));
+    const state = { limitsFromEnv: () => ({ cap: 400, budget: 2000 }), finishSync: vi.fn() };
+    const result = await sync.runSync({ id: "sync-two-stage" }, (client, summary) =>
+      sync.syncTournament(client, { tournamentId: "t1", store, summary, now: () => T0 }), { session: async (work) => work(stub), state });
+    expect(result.status).toBe("succeeded");
+    expect(store.state.ops.filter((o) => o.startsWith("touch:"))).toEqual(["touch:stage-1", "touch:stage-2"]);
+    expect(result.summary.skipped).toEqual({ [`names: ${reason}`]: 1 });
+    // The step stopped for the whole sync: no request follows the refused lookup.
+    expect(stub.names().at(-1)).toBe("fetch-oauths-by-user");
+    expect(stub.count("fetch-oauths-by-user")).toBe(1);
+    expect(result.summary.namesUnmatched).toBe(0);
+  });
+
   it("fails for a tournament that is not there, before any request", async () => {
     const stub = makeStub();
     await expect(sync.syncTournament(stub, { tournamentId: "nope", store: makeFakeStore(), summary: sync.newSummary() })).rejects.toThrow(/not found/);
@@ -835,7 +904,10 @@ describe("syncSerie", () => {
     const store = await incompleteBo3Store();
     const stub = makeStub();
     const summary = sync.newSummary();
+    const namesRead = vi.spyOn(store, "loadStageTeamPlayers");
     await sync.syncSerie(stub, { seriesId: store.seriesRow(GROUP_BO3).id, store, summary, now: () => T0 });
+    expect(namesRead).not.toHaveBeenCalled();
+    expect(summary.nameLookups).toBe(0);
     expect(stub.names()).toEqual([
       "fetch-serie",
       "fetch-matches-by-number-next",

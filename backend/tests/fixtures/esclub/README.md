@@ -43,3 +43,5 @@ Also kept: the stage's Riot tournament id (`id_tournament`, the league's
 tournament-provider id; not player data).
 
 Tests never open a connection; they replay these through a fake socket.
+
+S2b: `name-members.json` and `riot-oauths.json` are entirely hand-made (no live replies or identifiers). They cover current/ended Starter and Substitute rows, duplicate Owner/Starter membership, Coach exclusion, two rosters, last-`#` Riot parsing and immediate Discord exclusion.
