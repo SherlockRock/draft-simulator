@@ -10,6 +10,15 @@ import {
 } from "./apiClient";
 import { track } from "./analytics";
 import {
+    EsclubActionResponseSchema,
+    EsclubInvalidResponseSchema,
+    EsclubOffResponseSchema,
+    EsclubRetryAfterResponseSchema,
+    EsclubSyncResponseSchema,
+    EsclubTournamentViewSchema
+} from "@draft-sim/shared-types";
+import type { EsclubActionResult } from "./esclubSync";
+import {
     DraftSchema,
     CanvasDraftSchema,
     CanvasGroupSchema,
@@ -945,3 +954,72 @@ export const setTournamentArchived = async (id: string, archived: boolean) =>
         { archived },
         TournamentArchiveResponseSchema
     );
+
+// Retain D4 bodies and headers, but send each costly POST only once. In
+// particular, fetchWithRefresh would replay a POST after a successful refresh.
+async function postEsclubAction(
+    path: string,
+    body: { url: string; region: string } | Record<string, never>
+): Promise<EsclubActionResult> {
+    const response = await fetch(`${BASE_URL}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body)
+    });
+    switch (response.status) {
+        case 401: {
+            let sessionRefreshed = false;
+            try {
+                const refresh = await fetch(`${BASE_URL}/auth/refresh-token`, {
+                    credentials: "include"
+                });
+                sessionRefreshed = refresh.ok;
+            } catch {
+                sessionRefreshed = false;
+            }
+            if (!sessionRefreshed) markAuthExpired();
+            return { status: 401, sessionRefreshed };
+        }
+        case 200:
+        case 202:
+            return {
+                status: response.status,
+                body: EsclubActionResponseSchema.parse(await response.json())
+            };
+        case 409:
+        case 429:
+            return {
+                status: response.status,
+                body: EsclubRetryAfterResponseSchema.parse(await response.json()),
+                retryAfter: response.headers.get("Retry-After")
+            };
+        case 503:
+            return {
+                status: 503,
+                body: EsclubOffResponseSchema.parse(await response.json())
+            };
+        case 400:
+            return {
+                status: 400,
+                body: EsclubInvalidResponseSchema.parse(await response.json())
+            };
+        default:
+            throw new ApiError(response.status);
+    }
+}
+
+export const addEsclubLeague = (data: { url: string; region: string }) =>
+    postEsclubAction("/esclub/leagues", data);
+
+export const refreshEsclubLeague = (id: string) =>
+    postEsclubAction(`/esclub/tournaments/${encodeURIComponent(id)}/refresh`, {});
+
+export const refreshEsclubSeries = (id: string) =>
+    postEsclubAction(`/esclub/series/${encodeURIComponent(id)}/refresh`, {});
+
+export const fetchEsclubTournament = (id: string) =>
+    apiGet(`/esclub/tournaments/${encodeURIComponent(id)}`, EsclubTournamentViewSchema);
+
+export const fetchEsclubSync = (id: string) =>
+    apiGet(`/esclub/syncs/${encodeURIComponent(id)}`, EsclubSyncResponseSchema);

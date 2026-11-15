@@ -20,6 +20,21 @@ and the reply payload's `context`.
   selection, no PickSide rows, Riot IDs null), with its round and the round's
   series.
 
+Added for S2 (2026-11-14):
+
+- `group-bo3/members.json`: `fetch-members-by-serie` for the group Bo3,
+  recorded on 2026-11-11 by the spike (17 members in two roster blocks; the
+  roster listed first made choice 0 of game 0). Anonymised with the
+  anonymiser's `--one` form; each `id_user` is a `fake-user-NN`. The spike's
+  capture held no request context; `{id_serie}` is the context its request
+  table gives. S2 reads only the two roster ids and their order.
+- `group.json`: `fetch-group` for the stage's group, recorded on
+  2026-11-14 on Rourke's go (two requests: the handshake and this one,
+  logged in the S2 reports). No player data in it.
+- `bracket-bo3/members.json`: **synthetic** (marked `synthetic` in the file):
+  the bracket Bo3's two roster ids and four made-up members, for tests. Not
+  a recorded reply.
+
 Replaced, consistently across files: `id_oauth_riot` (same player → same
 fake), `name_riot_game` / `tag_riot` (`PlayerNN` / `TNN`, null kept),
 `key_encryption`, the Riot match `id_game`, and `code_tournament` when set.

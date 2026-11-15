@@ -4,6 +4,34 @@ import { createEffect, JSX, onCleanup, Show } from "solid-js";
 const DEFAULT_CONTENT_CLASS =
     "relative max-h-[90vh] overflow-y-auto rounded-lg bg-darius-card p-6 pr-14 shadow-lg";
 
+export function shouldDialogConfirmOnEnter(
+    target: EventTarget | null,
+    confirmOnInput = false,
+    shouldConfirmOnTarget?: (target: EventTarget | null) => boolean,
+    targetInsideDialog = true
+): boolean {
+    if (!targetInsideDialog) return true;
+
+    if (
+        target instanceof Element &&
+        target.closest(
+            "button, a[href], select, summary, [role='button'], [role='link'], " +
+                "input[type='button'], input[type='submit'], input[type='reset'], " +
+                "input[type='checkbox'], input[type='radio'], input[type='range'], " +
+                "input[type='file'], input[type='color']"
+        )
+    ) {
+        return false;
+    }
+
+    const isTextEntry =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+
+    return !isTextEntry || confirmOnInput || Boolean(shouldConfirmOnTarget?.(target));
+}
+
 export const Dialog = (props: {
     body: JSX.Element;
     isOpen: () => boolean;
@@ -27,6 +55,7 @@ export const Dialog = (props: {
     // the common ancestor of press+release and can't tell where the pointer was
     // actually released.
     let pointerDownOnBackdrop = false;
+    let panel: HTMLDivElement | undefined;
 
     createEffect(() => {
         if (!props.isOpen()) return;
@@ -42,17 +71,13 @@ export const Dialog = (props: {
 
             if (e.key !== "Enter" || !props.onConfirm) return;
 
-            const target = e.target;
-            const isTextEntry =
-                target instanceof HTMLInputElement ||
-                target instanceof HTMLTextAreaElement ||
-                target instanceof HTMLSelectElement ||
-                (target instanceof HTMLElement && target.isContentEditable);
-
             if (
-                isTextEntry &&
-                !props.confirmOnInput &&
-                !props.shouldConfirmOnTarget?.(target)
+                !shouldDialogConfirmOnEnter(
+                    e.target,
+                    props.confirmOnInput,
+                    props.shouldConfirmOnTarget,
+                    e.target instanceof Node && panel?.contains(e.target) === true
+                )
             ) {
                 return;
             }
@@ -86,6 +111,7 @@ export const Dialog = (props: {
                 }}
             >
                 <div
+                    ref={panel}
                     class={props.contentClass ?? DEFAULT_CONTENT_CLASS}
                     onContextMenu={(e: MouseEvent) => {
                         e.stopPropagation();

@@ -1,0 +1,146 @@
+{
+  "request": "fetch-members-by-serie",
+  "context": {
+    "id_serie": "11f1c28a-af6b-071b-93aa-058d0cf4fd47"
+  },
+  "reply": {
+    "members": [
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-01",
+        "time_end": null,
+        "time_start": 1781491453,
+        "type_member": "Owner",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-02",
+        "time_end": null,
+        "time_start": 1792351012,
+        "type_member": "Substitute",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-03",
+        "time_end": null,
+        "time_start": 1790809602,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-04",
+        "time_end": null,
+        "time_start": 1790813488,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-05",
+        "time_end": null,
+        "time_start": 1790976969,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f16864-17ea-4845-9a35-0e1c754afa6f",
+        "id_user": "fake-user-06",
+        "time_end": null,
+        "time_start": 1790984470,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-07",
+        "time_end": null,
+        "time_start": 1790877454,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-08",
+        "time_end": null,
+        "time_start": 1791225464,
+        "type_member": "Manager",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-08",
+        "time_end": null,
+        "time_start": 1790787606,
+        "type_member": "Owner",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-09",
+        "time_end": null,
+        "time_start": 1790788439,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-10",
+        "time_end": null,
+        "time_start": 1790789654,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-11",
+        "time_end": null,
+        "time_start": 1790813294,
+        "type_member": "Coach",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-11",
+        "time_end": null,
+        "time_start": 1791849436,
+        "type_member": "Manager",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-12",
+        "time_end": null,
+        "time_start": 1791152925,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-13",
+        "time_end": null,
+        "time_start": 1791155510,
+        "type_member": "Starter",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-14",
+        "time_end": 1794433378,
+        "time_start": 1791849252,
+        "type_member": "Substitute",
+        "type_parent": "TeamRoster"
+      },
+      {
+        "id_parent": "11f1bcf0-62af-b84b-a3cc-8122503406e5",
+        "id_user": "fake-user-15",
+        "time_end": null,
+        "time_start": 1792399800,
+        "type_member": "Substitute",
+        "type_parent": "TeamRoster"
+      }
+    ]
+  }
+}

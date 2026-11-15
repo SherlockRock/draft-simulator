@@ -49,9 +49,18 @@ const MANIFEST = {
   "bracket-bo3/scores-1.json": "c06-scores-b1.json",
 };
 
-const [rawDir, outDir] = process.argv.slice(2);
-if (!rawDir || !outDir) {
-  console.error("usage: anonymize-fixtures.mjs <rawDir> <outDir>");
+// Second form, for one raw file recorded later (S2, 2026-11-14):
+//   node scripts/esclub/anonymize-fixtures.mjs --one <rawFile> <outFile> [<contextJson>]
+// <rawFile> is JSON (or the first line of a JSONL) holding { request,
+// context?, reply | response }, where reply/response is already the reply
+// payload's `context`. <contextJson> supplies the context sent when the raw
+// file lacks it. Also replaced, in both forms:
+//   id_user (an esclub member's user id) -> "fake-user-NN", same user same fake
+const argv = process.argv.slice(2);
+const one = argv[0] === "--one";
+const [rawDir, outDir] = one ? [] : argv;
+if (one ? argv.length < 3 : !rawDir || !outDir) {
+  console.error("usage: anonymize-fixtures.mjs <rawDir> <outDir> | --one <rawFile> <outFile> [<contextJson>]");
   process.exit(2);
 }
 
@@ -60,6 +69,12 @@ const players = new Map(); // real id_oauth_riot -> index (1-based)
 const keyIndex = { n: 0 };
 const gameIds = new Map(); // real Riot match id -> fake
 const codes = new Map();
+const users = new Map(); // real esclub id_user -> fake
+
+function fakeUser(real) {
+  if (!users.has(real)) users.set(real, `fake-user-${String(users.size + 1).padStart(2, "0")}`);
+  return users.get(real);
+}
 
 function playerIndex(realKey) {
   if (!players.has(realKey)) players.set(realKey, players.size + 1);
@@ -112,11 +127,30 @@ function walk(value, key) {
       if (["id_oauth_riot", "name_riot_game", "tag_riot", "key_encryption"].includes(k) && v != null) {
         throw new Error(`player field ${k} outside a LeagueOfLegends match block`);
       }
+      if (k === "id_user" && v != null) {
+        out[k] = fakeUser(v);
+        continue;
+      }
       out[k] = walk(v, k);
     }
     return out;
   }
   return value;
+}
+
+if (one) {
+  const [, rawFile, outFile, contextJson] = argv;
+  const raw = JSON.parse(readFileSync(rawFile, "utf8").split("\n")[0]);
+  const reply = raw.reply ?? raw.response;
+  const context = raw.context ?? (contextJson ? JSON.parse(contextJson) : null);
+  if (!raw.request || !reply || !context) {
+    console.error("raw file needs request and reply/response, and a context (in the file or as an argument)");
+    process.exit(2);
+  }
+  mkdirSync(dirname(outFile), { recursive: true });
+  writeFileSync(outFile, JSON.stringify({ request: raw.request, context: walk(context, null), reply: walk(reply, null) }, null, 2) + "\n");
+  console.log(`wrote ${outFile}; ${users.size} member user ids replaced`);
+  process.exit(0);
 }
 
 // Sorted so the fake indices do not depend on the manifest's object order.

@@ -25,7 +25,7 @@ describe("esclub fixtures are anonymised", () => {
   const all = files(DIR).map((path) => ({ path, fixture: JSON.parse(readFileSync(path, "utf8")) }));
 
   it("every fixture has the recorded shape", () => {
-    expect(all.length).toBe(27);
+    expect(all.length).toBe(30);
     for (const { fixture } of all) {
       expect(typeof fixture.request).toBe("string");
       expect(fixture.context).toBeTypeOf("object");
@@ -93,5 +93,51 @@ describe("esclub fixtures are anonymised", () => {
     const ps = participantsOf(load("bracket-bo3/matches.json"));
     expect(ps).toHaveLength(20);
     expect(ps.every((p) => p.name_riot_game === null && p.tag_riot === null)).toBe(true);
+  });
+});
+
+describe("esclub member fixtures (S2)", () => {
+  const rostersOf = (fixture) => [...new Set(fixture.reply.members.map((m) => m.id_parent))];
+
+  it("every member user id is a fake, recorded or synthetic", () => {
+    for (const rel of ["group-bo3/members.json", "bracket-bo3/members.json"]) {
+      const members = load(rel).reply.members;
+      expect(members.length).toBeGreaterThan(0);
+      for (const m of members) expect(m.id_user).toMatch(/^fake-user-\d{2}$/);
+    }
+  });
+
+  it("the recorded reply names the group Bo3's two rosters, the one that made choice 0 first", () => {
+    const members = load("group-bo3/members.json");
+    expect(members.request).toBe("fetch-members-by-serie");
+    expect(members.context).toEqual({ id_serie: load("group-bo3/serie.json").context.id_serie });
+    expect(members.synthetic).toBeUndefined();
+    const finals = load("group-bo3/choices-0.json").reply.choices.filter((c) => c.is_final);
+    const sources = new Set(finals.map((c) => c.id_team_roster_source));
+    const rosters = rostersOf(members);
+    expect(rosters).toHaveLength(2);
+    expect(rosters.every((r) => sources.has(r))).toBe(true);
+    const choice0 = finals.find((c) => c.number === 0);
+    expect(rosters[0]).toBe(choice0?.id_team_roster_source);
+  });
+
+  it("member records carry only the six recorded keys", () => {
+    for (const rel of ["group-bo3/members.json", "bracket-bo3/members.json"]) {
+      for (const m of load(rel).reply.members) {
+        expect(Object.keys(m).sort()).toEqual(["id_parent", "id_user", "time_end", "time_start", "type_member", "type_parent"]);
+      }
+    }
+  });
+
+  it("the bracket's members file is marked synthetic", () => {
+    expect(typeof load("bracket-bo3/members.json").synthetic).toBe("string");
+  });
+
+  it("the recorded fetch-group reply has the sibling list's item shape", () => {
+    const group = load("group.json");
+    const sibling = load("groups-of-round.json").reply.groups[0];
+    expect(group.request).toBe("fetch-group");
+    expect(group.context).toEqual({ id_group: sibling.id_group });
+    expect(Object.keys(group.reply.groups[0]).sort()).toEqual(Object.keys(sibling).sort());
   });
 });

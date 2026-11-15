@@ -509,3 +509,70 @@ describe("a failed client", () => {
   });
 });
 
+
+describe("an async onRequest", () => {
+  async function connected(opts) {
+    const s = setup(opts);
+    const ws = await s.connect();
+    return { ...s, ws };
+  }
+
+  it("a rejecting onRequest fails the request with that error and sends nothing", async () => {
+    const { client, ws } = await connected();
+    const boom = new Error("budget spent");
+    client.onRequest = async () => { throw boom; };
+    const sent = ws.sent.length;
+    await expect(client.request("x", {})).rejects.toBe(boom);
+    expect(ws.sent).toHaveLength(sent);
+    expect(client.pending.size).toBe(0);
+  });
+
+  it("a slow onRequest delays the send until it resolves", async () => {
+    const { client, ws } = await connected();
+    let release;
+    client.onRequest = () => new Promise((resolve) => { release = resolve; });
+    const sent = ws.sent.length;
+    const p = client.request("slow", {});
+    await flush();
+    await flush();
+    expect(ws.sent).toHaveLength(sent);
+    release();
+    await p;
+    expect(ws.sent).toHaveLength(sent + 1);
+    expect(ws.frames().at(-1).payload.request).toBe("slow");
+  });
+
+  it("a client that fails while onRequest is pending sends nothing after it (Task 1 review)", async () => {
+    const { client, ws } = await connected();
+    let release;
+    client.onRequest = () => new Promise((resolve) => { release = resolve; });
+    const sent = ws.sent.length;
+    const p = client.request("late", {});
+    await flush();
+    await flush();
+    client._fail(new EsclubUnavailable("socket error while the budget was checked"));
+    release();
+    await expect(p).rejects.toBeInstanceOf(EsclubUnavailable);
+    expect(ws.sent).toHaveLength(sent);
+    expect(client.pending.size).toBe(0);
+  });
+
+  it("the handshake awaits onRequest and counts 1", async () => {
+    const calls = [];
+    let release;
+    const { client, instances } = setup({
+      onRequest: (name, count) => new Promise((resolve) => { calls.push([name, count]); release = resolve; }),
+    });
+    const p = client.connect();
+    await flush();
+    const ws = instances[0];
+    ws.onSend = (i) => ws.reply(ws.frames()[i].payload_id, { ok: true });
+    ws.open();
+    await flush();
+    expect(calls).toEqual([["fetch-client", 1]]);
+    expect(ws.sent).toHaveLength(0);
+    release();
+    await p;
+    expect(ws.sent).toHaveLength(1);
+  });
+});

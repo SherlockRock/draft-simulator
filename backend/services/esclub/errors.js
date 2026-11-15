@@ -26,6 +26,12 @@ class EsclubUnsupported extends EsclubError {}
 class EsclubUnknownChampion extends EsclubError {}
 /** The game played differs from its draft in a way we will not guess at. */
 class EsclubDraftMismatch extends EsclubError {}
+/** The day's request budget is spent; the request was not sent. */
+class EsclubBudgetExhausted extends EsclubError {}
+/** One sync reached its per-sync request cap; the request was not sent. */
+class EsclubRequestCapReached extends EsclubError {}
+/** The sync is no longer running (taken over as stale); it must send nothing more. */
+class EsclubSyncAbandoned extends EsclubError {}
 
 module.exports = {
   EsclubError,
@@ -36,4 +42,7 @@ module.exports = {
   EsclubUnsupported,
   EsclubUnknownChampion,
   EsclubDraftMismatch,
+  EsclubBudgetExhausted,
+  EsclubRequestCapReached,
+  EsclubSyncAbandoned,
 };

@@ -249,3 +249,97 @@ describe("list cursors", () => {
     expect(result.cursor).toEqual(expected(f));
   });
 });
+
+describe("fetchGroup", () => {
+  it("sends fetch-group with the group id and parses the recorded reply", async () => {
+    const f = fx("group.json");
+    const { result, sent } = await replay("group.json", (c) => R.fetchGroup(c, { id_group: f.context.id_group }));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].request).toBe("fetch-group");
+    expect(sent[0].context).toEqual({ id_group: f.context.id_group });
+    expect(result).toEqual(f.reply.groups[0]);
+    expect(typeof result.id_round).toBe("string");
+  });
+
+  it("an empty reply is EsclubNotFound", async () => {
+    const { client } = await session(() => ({ groups: [] }));
+    await expect(R.fetchGroup(client, { id_group: "g" })).rejects.toBeInstanceOf(EsclubNotFound);
+  });
+
+  it("a group without id_round is EsclubProtocolChanged", async () => {
+    const { id_round, ...rest } = fx("group.json").reply.groups[0];
+    const { client } = await session(() => ({ groups: [rest] }));
+    await expect(R.fetchGroup(client, { id_group: "g" })).rejects.toBeInstanceOf(EsclubProtocolChanged);
+  });
+});
+
+describe("fetchSerieTeamOrder", () => {
+  const member = (id_parent, extra = {}) => ({
+    id_parent, type_parent: "TeamRoster", id_user: "fake-user-99", type_member: "Owner", time_start: 1, time_end: null, ...extra,
+  });
+  const run = async (members) => {
+    const { client, sent } = await session(() => ({ members }));
+    return { call: () => R.fetchSerieTeamOrder(client, { id_serie: "s1" }), sent };
+  };
+
+  it("sends fetch-members-by-serie with exactly {id_serie}", async () => {
+    const { call, sent } = await run([]);
+    await call();
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0].request).toBe("fetch-members-by-serie");
+    expect(sent()[0].context).toEqual({ id_serie: "s1" });
+  });
+
+  it("the group Bo3 gives its two rosters, the choice-0 roster first", async () => {
+    const f = fx("group-bo3/members.json");
+    const choice0 = fx("group-bo3/choices-0.json").reply.choices.find((c) => c.id_team_roster_source).id_team_roster_source;
+    const { result, sent } = await replay("group-bo3/members.json", (c) =>
+      R.fetchSerieTeamOrder(c, { id_serie: f.context.id_serie }));
+    expect(sent[0].context).toEqual({ id_serie: f.context.id_serie });
+    expect(result.rosterIds).toHaveLength(2);
+    expect(result.rosterIds[0]).toBe(choice0);
+    expect(new Set(result.rosterIds).size).toBe(2);
+  });
+
+  it("returns nothing but rosterIds: no member records, no user ids", async () => {
+    const { result } = await replay("group-bo3/members.json", (c) =>
+      R.fetchSerieTeamOrder(c, { id_serie: fx("group-bo3/members.json").context.id_serie }));
+    expect(Object.keys(result)).toEqual(["rosterIds"]);
+    const text = JSON.stringify(result);
+    expect(text).not.toContain("fake-user");
+    expect(text).not.toContain("id_user");
+    expect(text).not.toContain("type_member");
+  });
+
+  it("orders by first appearance, ignoring repeats", async () => {
+    const { call } = await run([member("b"), member("a"), member("b"), member("a")]);
+    expect(await call()).toEqual({ rosterIds: ["b", "a"] });
+  });
+
+  it("three rosters is EsclubProtocolChanged", async () => {
+    const { call } = await run([member("a"), member("b"), member("c")]);
+    await expect(call()).rejects.toBeInstanceOf(EsclubProtocolChanged);
+  });
+
+  it("one roster gives one id, an empty list gives none", async () => {
+    expect((await (await run([member("a"), member("a")])).call()).rosterIds).toEqual(["a"]);
+    expect((await (await run([])).call()).rosterIds).toEqual([]);
+  });
+
+  it("a member without id_parent is EsclubProtocolChanged", async () => {
+    const m = member("a");
+    delete m.id_parent;
+    const { call } = await run([m]);
+    await expect(call()).rejects.toBeInstanceOf(EsclubProtocolChanged);
+  });
+
+  it("a type_parent other than TeamRoster is EsclubProtocolChanged", async () => {
+    const { call } = await run([member("a", { type_parent: "Organisation" })]);
+    await expect(call()).rejects.toBeInstanceOf(EsclubProtocolChanged);
+  });
+
+  it("a reply without a members array is EsclubProtocolChanged", async () => {
+    const { client } = await session(() => ({}));
+    await expect(R.fetchSerieTeamOrder(client, { id_serie: "s" })).rejects.toBeInstanceOf(EsclubProtocolChanged);
+  });
+});

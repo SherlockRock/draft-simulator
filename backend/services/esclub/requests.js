@@ -108,6 +108,8 @@ const ROSTER = {
   id_team_roster: S, id_team_organisation: S, name: S,
   extra: mk("an object", (v) => !!v && typeof v === "object"),
 };
+// Only the two fields fetchSerieTeamOrder reads; nothing else of a member is checked or returned.
+const MEMBER = { id_parent: S, type_parent: S };
 const RESOURCE = { id_game_resource: S, id_external: S, type_resource: S, name: S };
 
 /** Validates the LeagueOfLegends block (and its participants) of each match, when a match has one. */
@@ -185,6 +187,17 @@ function fetchRounds(client, { id_event_stage }) {
  */
 function fetchRound(client, { id_round }) {
   return one(client, "fetch-round", { id_round }, "rounds", ROUND, "round");
+}
+
+/**
+ * One group.
+ * @param {import("./client").EsclubClient} client
+ * @param {{ id_group: string }} ids
+ * @returns {Promise<object>}
+ * @throws {EsclubNotFound}
+ */
+function fetchGroup(client, { id_group }) {
+  return one(client, "fetch-group", { id_group }, "groups", GROUP, "group");
 }
 
 /**
@@ -325,12 +338,39 @@ function fetchGameResources(client, { id_game }) {
   );
 }
 
+/**
+ * The team rosters of a series, in esclub's order (the first is the first
+ * roster in the series' members reply). Only roster ids leave this function:
+ * the members themselves (user ids, roles, dates) are checked for shape and
+ * dropped. Zero or one roster is returned as is (the series has no teams yet).
+ * @param {import("./client").EsclubClient} client
+ * @param {{ id_serie: string }} ids
+ * @returns {Promise<{ rosterIds: string[] }>} distinct roster ids, first appearance first.
+ * @throws {EsclubProtocolChanged} for a member of another parent type or more than two rosters.
+ */
+async function fetchSerieTeamOrder(client, { id_serie }) {
+  const request = "fetch-members-by-serie";
+  const members = arrayOf(request, await client.request(request, { id_serie }), "members", MEMBER);
+  const rosterIds = [];
+  members.forEach((m, i) => {
+    if (m.type_parent !== "TeamRoster") {
+      throw new EsclubProtocolChanged(`esclub ${request}: members[${i}].type_parent is not "TeamRoster"`);
+    }
+    if (!rosterIds.includes(m.id_parent)) rosterIds.push(m.id_parent);
+  });
+  if (rosterIds.length > 2) {
+    throw new EsclubProtocolChanged(`esclub ${request}: members belong to ${rosterIds.length} rosters, expected at most 2`);
+  }
+  return { rosterIds };
+}
+
 module.exports = {
   fetchEventActive,
   fetchEventStages,
   fetchEventStage,
   fetchRounds,
   fetchRound,
+  fetchGroup,
   fetchGroups,
   fetchSeriesInParent,
   fetchSerie,
@@ -341,4 +381,5 @@ module.exports = {
   fetchScores,
   fetchTeamRosters,
   fetchGameResources,
+  fetchSerieTeamOrder,
 };

@@ -43,7 +43,8 @@ class EsclubClient {
    * @param {object} [options.env] where `ESCLUB_SYNC_ENABLED` is read.
    * @param {() => number} [options.now]
    * @param {(ms: number) => Promise<void>} [options.sleep]
-   * @param {(name: string, count: number) => void} [options.onRequest] called BEFORE each send, the handshake included.
+   * @param {(name: string, count: number) => void | Promise<void>} [options.onRequest] called and AWAITED
+   *   BEFORE each send, the handshake included; may be async. A throw or rejection fails that request and sends nothing.
    */
   constructor({
     WebSocketImpl = globalThis.WebSocket,
@@ -150,9 +151,11 @@ class EsclubClient {
       if (wait > 0) await this.sleep(wait);
     }
     if (this.failure) throw this.failure;
-    // onRequest may throw (a budget, a failing log): run it before any pending
-    // entry or timer exists, so a throw leaves nothing behind and sends nothing.
-    if (this.onRequest) this.onRequest(name, this.count + 1);
+    // onRequest may throw or reject (a budget, a failing log): await it before any
+    // pending entry or timer exists, so a failure leaves nothing behind and sends nothing.
+    if (this.onRequest) await this.onRequest(name, this.count + 1);
+    // The client may have failed while onRequest was pending: send nothing then.
+    if (this.failure) throw this.failure;
     this.count += 1;
     const id = this.nextId++;
     const reply = new Promise((resolve, reject) => {
